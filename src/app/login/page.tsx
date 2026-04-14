@@ -87,6 +87,7 @@ export default function LoginPage() {
           <p className="font-medium">Demo:</p>
           <p>Admin: admin@mallorcair.com / admin123</p>
           <p>Handler: handler@mallorcair.com / handler123</p>
+          <p>Viewer: viewer@mallorcair.com / viewer123</p>
         </div>
       </div>
     </div>

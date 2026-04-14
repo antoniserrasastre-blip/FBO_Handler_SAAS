@@ -111,6 +111,20 @@ export function DaySummary({ flights, date, connected, isToday = true, onDateCha
             >
               Historico
             </button>
+            <button
+              onClick={() => router.push("/metrics")}
+              className="hidden rounded-md bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-200 sm:block"
+            >
+              Metricas
+            </button>
+            {session?.user?.role === "ADMIN" && (
+              <button
+                onClick={() => router.push("/admin")}
+                className="hidden rounded-md bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-200 sm:block"
+              >
+                Admin
+              </button>
+            )}
             <span className="hidden text-sm text-gray-600 md:inline">
               {session?.user?.name}{" "}
               <span className="text-xs text-gray-400">({session?.user?.role?.toLowerCase()})</span>

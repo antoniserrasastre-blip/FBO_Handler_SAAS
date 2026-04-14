@@ -96,6 +96,16 @@ export const PAX_STATE_LABELS: Record<PaxState, string> = {
   BOARDED: "Embarcados",
 };
 
+// Roles
+export const ROLES = ["ADMIN", "HANDLER", "VIEWER"] as const;
+export type Role = (typeof ROLES)[number];
+
+export const ROLE_LABELS: Record<Role, string> = {
+  ADMIN: "Administrador",
+  HANDLER: "Handler",
+  VIEWER: "Viewer (solo lectura)",
+};
+
 // Extend next-auth types
 declare module "next-auth" {
   interface User {

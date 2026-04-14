@@ -30,6 +30,18 @@ async function main() {
     },
   });
 
+  const viewerPassword = await bcrypt.hash("viewer123", 10);
+  await prisma.user.upsert({
+    where: { email: "viewer@mallorcair.com" },
+    update: {},
+    create: {
+      email: "viewer@mallorcair.com",
+      name: "Director",
+      password: viewerPassword,
+      role: "VIEWER",
+    },
+  });
+
   // Create today's day sheet
   const today = new Date();
   today.setHours(0, 0, 0, 0);

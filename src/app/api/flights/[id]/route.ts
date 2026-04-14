@@ -1,21 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { eventBus } from "@/lib/events";
+import { requireWriter, requireAdmin } from "@/lib/roles";
 
 // PATCH /api/flights/[id] — update a flight
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { session, error } = await requireWriter();
+  if (error) return error;
 
   const { id } = await params;
   const body = await req.json();
 
-  // Build log entries for significant changes
   const existing = await prisma.flight.findUnique({ where: { id } });
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
@@ -32,7 +30,6 @@ export async function PATCH(
     },
   });
 
-  // Build a human-readable description of what changed
   const changes: string[] = [];
   if (body.state && body.state !== existing.state) changes.push(`Estado → ${body.state}`);
   if (body.fuelState && body.fuelState !== existing.fuelState) changes.push(`Fuel → ${body.fuelState}`);
@@ -46,7 +43,6 @@ export async function PATCH(
   if (body.crewArrLocation && body.crewArrLocation !== existing.crewArrLocation) changes.push(`Crew lleg. → ${body.crewArrLocation}`);
   if (body.crewDepLocation && body.crewDepLocation !== existing.crewDepLocation) changes.push(`Crew sal. → ${body.crewDepLocation}`);
 
-  // Log all changes in a single event
   if (changes.length > 0) {
     await prisma.eventLog.create({
       data: {
@@ -74,11 +70,8 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (session.user.role !== "ADMIN") {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  const { session, error } = await requireAdmin();
+  if (error) return error;
 
   const { id } = await params;
   const flight = await prisma.flight.findUnique({ where: { id } });
