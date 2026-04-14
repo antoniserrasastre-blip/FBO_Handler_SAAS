@@ -187,12 +187,20 @@ export default function HomePage() {
           <h2 className="text-sm font-medium text-gray-500">
             {flights.length} vuelo{flights.length !== 1 ? "s" : ""} hoy
           </h2>
-          <button
-            onClick={() => router.push("/flights/new")}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-500"
-          >
-            + Nuevo vuelo
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => router.push("/import")}
+              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              📄 Importar PDF
+            </button>
+            <button
+              onClick={() => router.push("/flights/new")}
+              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-500"
+            >
+              + Nuevo vuelo
+            </button>
+          </div>
         </div>
 
         {/* Flight list */}
