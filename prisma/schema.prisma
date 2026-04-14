@@ -1,0 +1,120 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String     @id @default(cuid())
+  email     String     @unique
+  name      String
+  password  String
+  role      String     @default("HANDLER") // ADMIN | HANDLER
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  eventLogs EventLog[]
+}
+
+model DaySheet {
+  id        String   @id @default(cuid())
+  date      DateTime @unique
+  flights   Flight[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Flight {
+  id             String         @id @default(cuid())
+  daySheetId     String
+  daySheet       DaySheet       @relation(fields: [daySheetId], references: [id], onDelete: Cascade)
+  callsign       String
+  registration   String
+  aircraftType   String
+  origin         String?
+  eta            String?
+  destination    String?
+  etd            String?
+  parking        String?
+  tobt           String?
+  state          String         @default("EXPECTED") // EXPECTED | ON_GROUND | BOARDING | DISPATCHED
+
+  // Arrival counts
+  crewArrival    Int            @default(0)
+  paxArrival     Int            @default(0)
+
+  // Departure counts
+  crewDeparture  Int            @default(0)
+  paxDeparture   Int            @default(0)
+
+  // Arrival passenger details
+  paxArrBagsChecked    Int      @default(0)
+  paxArrBagsCabin      Int      @default(0)
+  paxArrBagsState      String   @default("PENDING") // PENDING | SENT_TO_AIRCRAFT
+  paxArrTransportType  String   @default("UNDEFINED") // RENTAL_CAR | PREPARED_CAR | TAXI | UNDEFINED
+  paxArrTransportState String   @default("PENDING") // PENDING | CONFIRMED
+  paxArrState          String   @default("NOT_ARRIVED") // NOT_ARRIVED | IN_LOUNGE | BOARDED
+
+  // Departure passenger details
+  paxDepBagsChecked    Int      @default(0)
+  paxDepBagsCabin      Int      @default(0)
+  paxDepBagsState      String   @default("PENDING")
+  paxDepTransportType  String   @default("UNDEFINED")
+  paxDepTransportState String   @default("PENDING")
+  paxDepState          String   @default("NOT_ARRIVED")
+
+  // Crew details
+  crewArrLocation      String   @default("IN_AIRCRAFT") // IN_AIRCRAFT | IN_LOUNGE
+  crewArrFilterCrossings Int    @default(0)
+  crewDepLocation      String   @default("IN_AIRCRAFT")
+  crewDepFilterCrossings Int    @default(0)
+
+  // Fuel
+  fuelState      String         @default("NOT_REQUESTED") // NOT_REQUESTED | REQUESTED | SERVED
+  fuelRequestedAt String?
+  fuelServedAt   String?
+
+  // Toilet
+  toiletState    String         @default("PENDING") // PENDING | COMPLETED
+  toiletCompletedAt String?
+
+  services       Service[]
+  eventLogs      EventLog[]
+
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([daySheetId])
+}
+
+model Service {
+  id          String   @id @default(cuid())
+  flightId    String
+  flight      Flight   @relation(fields: [flightId], references: [id], onDelete: Cascade)
+  type        String   // CATERING | DISHES | COOLER_BAG | STORAGE_BAG | LAUNDRY | THERMOS | NEWSPAPERS | CUSTOM
+  customName  String?
+  state       String   @default("PENDING") // PENDING | DELIVERED
+  origin      String?  // Crossroads | Catering Aire | Otro
+  deliveredAt String?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([flightId])
+}
+
+model EventLog {
+  id        String   @id @default(cuid())
+  flightId  String
+  flight    Flight   @relation(fields: [flightId], references: [id], onDelete: Cascade)
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  action    String
+  details   String?
+  timestamp DateTime @default(now())
+
+  @@index([flightId])
+  @@index([userId])
+}
