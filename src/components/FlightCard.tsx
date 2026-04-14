@@ -33,6 +33,7 @@ interface FlightCardProps {
   onServiceToggle: (serviceId: string, newState: "PENDING" | "DELIVERED") => void;
   onAddService: (flightId: string, type: string, customName?: string) => void;
   onDeleteService: (serviceId: string) => void;
+  readOnly?: boolean;
 }
 
 export function FlightCard({
@@ -41,6 +42,7 @@ export function FlightCard({
   onServiceToggle,
   onAddService,
   onDeleteService,
+  readOnly = false,
 }: FlightCardProps) {
   const [expanded, setExpanded] = useState(false);
   const stateConfig = FLIGHT_STATE_CONFIG[flight.state as FlightState] || FLIGHT_STATE_CONFIG.EXPECTED;
@@ -113,7 +115,7 @@ export function FlightCard({
         {/* Services row + last modified in collapsed view */}
         {!expanded && (
           <div className="mt-2 flex items-center justify-between gap-4">
-            <div onClick={(e) => e.stopPropagation()}>
+            <div onClick={(e) => e.stopPropagation()} className={readOnly ? "pointer-events-none" : ""}>
               {flight.services.length > 0 && (
                 <ServiceBadges services={flight.services} onToggle={onServiceToggle} />
               )}
@@ -128,7 +130,7 @@ export function FlightCard({
       {/* Expanded view */}
       {expanded && (
         <div className="border-t border-gray-100 px-4 pb-4 pt-3" onClick={(e) => e.stopPropagation()}>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className={`grid gap-4 md:grid-cols-2 lg:grid-cols-3 ${readOnly ? "pointer-events-none opacity-75" : ""}`}>
             {/* Flight State */}
             <Section title="Estado del vuelo">
               <div className="flex flex-wrap gap-1">
@@ -370,7 +372,7 @@ export function FlightCard({
           </div>
 
           {/* Services section */}
-          <div className="mt-4">
+          <div className={`mt-4 ${readOnly ? "pointer-events-none opacity-75" : ""}`}>
             <Section title="Servicios / Extras">
               <div className="space-y-2">
                 <ServiceBadges services={flight.services} onToggle={onServiceToggle} />

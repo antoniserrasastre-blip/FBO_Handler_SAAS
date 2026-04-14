@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Flight, Service, EventLog } from "@prisma/client";
@@ -16,6 +16,12 @@ type FlightWithRelations = Flight & {
   eventLogs: (EventLog & { user: { name: string } | null })[];
 };
 
+function getToday() {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
 export default function HomePage() {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -23,11 +29,24 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const toastIdRef = useRef(0);
-  const [date] = useState(() => {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    return d;
+  const [date, setDate] = useState(() => {
+    // Check if history page set a specific date
+    if (typeof window !== "undefined") {
+      const viewDate = sessionStorage.getItem("viewDate");
+      if (viewDate) {
+        sessionStorage.removeItem("viewDate");
+        const d = new Date(viewDate);
+        d.setHours(0, 0, 0, 0);
+        return d;
+      }
+    }
+    return getToday();
   });
+
+  const isToday = useMemo(() => {
+    const today = getToday();
+    return date.getTime() === today.getTime();
+  }, [date]);
 
   const fetchFlights = useCallback(async () => {
     try {
@@ -43,7 +62,6 @@ export default function HomePage() {
     }
   }, [date]);
 
-  // Add a toast notification
   const addToast = useCallback((text: string, userName?: string, type?: ToastMessage["type"]) => {
     const id = String(++toastIdRef.current);
     setToasts((prev) => [...prev.slice(-4), { id, text, userName, type }]);
@@ -53,12 +71,9 @@ export default function HomePage() {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  // Handle SSE events — refetch the affected flight data
   const handleEvent = useCallback(
     (event: FlightEvent) => {
-      // Only show toasts for other users' changes
       const isOwnChange = session?.user?.id === event.userId;
-
       if (!isOwnChange && event.userName) {
         const typeLabels: Record<string, string> = {
           flight_updated: "actualizo",
@@ -71,11 +86,9 @@ export default function HomePage() {
         const action = typeLabels[event.type] || event.type;
         addToast(`${action}${event.detail ? `: ${event.detail}` : ""}`, event.userName, "info");
       }
-
-      // Refetch all flights to get consistent state
-      fetchFlights();
+      if (isToday) fetchFlights();
     },
-    [fetchFlights, addToast, session?.user?.id]
+    [fetchFlights, addToast, session?.user?.id, isToday]
   );
 
   const { connected } = useEventStream({
@@ -83,41 +96,44 @@ export default function HomePage() {
     enabled: status === "authenticated",
   });
 
-  // Initial fetch
   useEffect(() => {
     if (status === "authenticated") {
+      setLoading(true);
       fetchFlights();
     }
   }, [status, fetchFlights]);
 
-  // Fallback polling every 60s (in case SSE drops and doesn't reconnect)
+  // Fallback polling only for today
   useEffect(() => {
-    if (status !== "authenticated") return;
+    if (status !== "authenticated" || !isToday) return;
     const interval = setInterval(fetchFlights, 60000);
     return () => clearInterval(interval);
-  }, [status, fetchFlights]);
+  }, [status, fetchFlights, isToday]);
 
-  // Turnaround alert check every minute
+  // Turnaround alert refresh
   useEffect(() => {
-    // Force re-render for time-dependent turnaround alerts
+    if (!isToday) return;
     const interval = setInterval(() => {
       setFlights((prev) => [...prev]);
     }, 60000);
     return () => clearInterval(interval);
+  }, [isToday]);
+
+  const handleDateChange = useCallback((newDate: Date) => {
+    setDate(newDate);
+    setFlights([]);
+    setLoading(true);
   }, []);
 
+  // --- Mutation handlers (disabled for past days) ---
   const handleFlightUpdate = async (id: string, data: Partial<Flight>) => {
-    // Optimistic update
-    setFlights((prev) =>
-      prev.map((f) => (f.id === id ? { ...f, ...data } : f))
-    );
-
+    if (!isToday) return;
+    setFlights((prev) => prev.map((f) => (f.id === id ? { ...f, ...data } : f)));
     const res = await fetch(`/api/flights/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     });
-
     if (res.ok) {
       const updated = await res.json();
       setFlights((prev) => prev.map((f) => (f.id === id ? updated : f)));
@@ -127,6 +143,7 @@ export default function HomePage() {
   };
 
   const handleServiceToggle = async (serviceId: string, newState: "PENDING" | "DELIVERED") => {
+    if (!isToday) return;
     setFlights((prev) =>
       prev.map((f) => ({
         ...f,
@@ -135,35 +152,33 @@ export default function HomePage() {
         ),
       }))
     );
-
     const res = await fetch(`/api/services/${serviceId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ state: newState }),
     });
-
-    if (!res.ok) {
-      fetchFlights();
-    }
+    if (!res.ok) fetchFlights();
   };
 
   const handleAddService = async (flightId: string, type: string, customName?: string) => {
+    if (!isToday) return;
     const res = await fetch(`/api/flights/${flightId}/services`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ type, customName }),
     });
-
-    if (res.ok) {
-      fetchFlights();
-    }
+    if (res.ok) fetchFlights();
   };
 
   const handleDeleteService = async (serviceId: string) => {
+    if (!isToday) return;
     const res = await fetch(`/api/services/${serviceId}`, { method: "DELETE" });
-    if (res.ok) {
-      fetchFlights();
-    }
+    if (res.ok) fetchFlights();
+  };
+
+  const handleExport = (type: "flights" | "services") => {
+    const dateStr = date.toISOString().slice(0, 10);
+    window.open(`/api/export?date=${dateStr}&type=${type}`, "_blank");
   };
 
   if (status === "loading" || loading) {
@@ -176,43 +191,85 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <DaySummary flights={flights} date={date} connected={connected} />
+      <DaySummary
+        flights={flights}
+        date={date}
+        connected={connected}
+        isToday={isToday}
+        onDateChange={handleDateChange}
+      />
 
-      {/* Turnaround alerts */}
-      <TurnaroundAlerts flights={flights} />
+      {isToday && <TurnaroundAlerts flights={flights} />}
 
       <main className="mx-auto max-w-7xl px-4 py-4">
         {/* Action bar */}
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-sm font-medium text-gray-500">
-            {flights.length} vuelo{flights.length !== 1 ? "s" : ""} hoy
+            {flights.length} vuelo{flights.length !== 1 ? "s" : ""}
+            {isToday ? " hoy" : ""}
           </h2>
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => router.push("/import")}
-              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-            >
-              📄 Importar PDF
-            </button>
-            <button
-              onClick={() => router.push("/flights/new")}
-              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-500"
-            >
-              + Nuevo vuelo
-            </button>
+            {flights.length > 0 && (
+              <div className="relative group">
+                <button className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+                  Exportar ▾
+                </button>
+                <div className="absolute right-0 top-full z-10 mt-1 hidden rounded-lg border bg-white py-1 shadow-lg group-hover:block">
+                  <button
+                    onClick={() => handleExport("flights")}
+                    className="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    Vuelos (CSV)
+                  </button>
+                  <button
+                    onClick={() => handleExport("services")}
+                    className="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    Servicios (CSV)
+                  </button>
+                </div>
+              </div>
+            )}
+            {isToday && (
+              <>
+                <button
+                  onClick={() => router.push("/import")}
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Importar PDF
+                </button>
+                <button
+                  onClick={() => router.push("/flights/new")}
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-500"
+                >
+                  + Nuevo vuelo
+                </button>
+              </>
+            )}
           </div>
         </div>
+
+        {/* Read-only banner for past days */}
+        {!isToday && flights.length > 0 && (
+          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-700">
+            Vista historica — los datos de dias anteriores son de solo lectura.
+          </div>
+        )}
 
         {/* Flight list */}
         {flights.length === 0 ? (
           <div className="rounded-lg border-2 border-dashed border-gray-200 p-12 text-center">
-            <p className="text-gray-500">No hay vuelos para hoy.</p>
-            <button
-              onClick={() => router.push("/flights/new")}
-              className="mt-3 text-sm font-medium text-blue-600 hover:text-blue-500"
-            >
-              Crear primer vuelo
-            </button>
+            <p className="text-gray-500">
+              {isToday ? "No hay vuelos para hoy." : "No hay datos para este dia."}
+            </p>
+            {isToday && (
+              <button
+                onClick={() => router.push("/flights/new")}
+                className="mt-3 text-sm font-medium text-blue-600 hover:text-blue-500"
+              >
+                Crear primer vuelo
+              </button>
+            )}
           </div>
         ) : (
           <div className="space-y-3">
@@ -224,13 +281,13 @@ export default function HomePage() {
                 onServiceToggle={handleServiceToggle}
                 onAddService={handleAddService}
                 onDeleteService={handleDeleteService}
+                readOnly={!isToday}
               />
             ))}
           </div>
         )}
       </main>
 
-      {/* Toast notifications for real-time activity */}
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
