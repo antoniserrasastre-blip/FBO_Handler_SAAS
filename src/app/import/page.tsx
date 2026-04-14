@@ -16,7 +16,7 @@ export default function ImportPage() {
   const [parsing, setParsing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<ParseResult | null>(null);
-  const [saveResult, setSaveResult] = useState<{ created: number; skipped: number } | null>(null);
+  const [saveResult, setSaveResult] = useState<{ created: number; updated: number } | null>(null);
   const [error, setError] = useState("");
   const [selectedFlights, setSelectedFlights] = useState<Set<number>>(new Set());
 
@@ -158,6 +158,9 @@ export default function ImportPage() {
                 <p className="mt-2 text-xs text-gray-400">
                   Formato: &quot;Orden del dia&quot; de Cybermax (.pdf)
                 </p>
+                <p className="mt-1 text-xs text-gray-400">
+                  Puedes subir el PDF actualizado varias veces — los vuelos existentes se actualizan automaticamente.
+                </p>
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -298,10 +301,10 @@ export default function ImportPage() {
                 <span className="font-semibold text-green-600">{saveResult.created}</span> vuelos
                 creados
               </p>
-              {saveResult.skipped > 0 && (
+              {saveResult.updated > 0 && (
                 <p>
-                  <span className="font-semibold text-amber-600">{saveResult.skipped}</span> vuelos
-                  omitidos (ya existian)
+                  <span className="font-semibold text-blue-600">{saveResult.updated}</span> vuelos
+                  actualizados
                 </p>
               )}
             </div>

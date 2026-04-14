@@ -43,22 +43,50 @@ export async function PUT(req: NextRequest) {
     daySheet = await prisma.daySheet.create({ data: { date: targetDate } });
   }
 
-  // Check for duplicates by callsign+registration
+  // Find existing flights to merge (match by registration — aircraft is unique per day)
   const existingFlights = await prisma.flight.findMany({
     where: { daySheetId: daySheet.id },
-    select: { callsign: true, registration: true },
+    select: { id: true, callsign: true, registration: true },
   });
-  const existingSet = new Set(
-    existingFlights.map((f) => `${f.callsign}:${f.registration}`)
+  const existingByReg = new Map(
+    existingFlights.map((f) => [f.registration, f])
   );
 
   let created = 0;
-  let skipped = 0;
+  let updated = 0;
 
   for (const f of flights) {
-    const key = `${f.callsign}:${f.registration}`;
-    if (existingSet.has(key)) {
-      skipped++;
+    const existing = existingByReg.get(f.registration);
+
+    if (existing) {
+      // Update existing flight with new data from PDF
+      await prisma.flight.update({
+        where: { id: existing.id },
+        data: {
+          callsign: f.callsign,
+          aircraftType: f.aircraftType,
+          origin: f.origin,
+          eta: f.eta,
+          destination: f.destination,
+          etd: f.etd,
+          parking: f.parking,
+          crewArrival: f.crewArrival || 0,
+          crewDeparture: f.crewDeparture || 0,
+          paxArrival: f.paxArrival || 0,
+          paxDeparture: f.paxDeparture || 0,
+        },
+      });
+
+      await prisma.eventLog.create({
+        data: {
+          flightId: existing.id,
+          userId: session.user.id,
+          action: "Actualizado desde PDF",
+          details: `${f.callsign} (${f.registration})`,
+        },
+      });
+
+      updated++;
       continue;
     }
 
@@ -92,18 +120,22 @@ export async function PUT(req: NextRequest) {
     created++;
   }
 
+  const parts = [];
+  if (created > 0) parts.push(`${created} nuevos`);
+  if (updated > 0) parts.push(`${updated} actualizados`);
+
   eventBus.emit({
     type: "flight_created",
     flightId: "import",
     userId: session.user.id,
     userName: session.user.name || undefined,
-    detail: `Importados ${created} vuelos desde PDF`,
+    detail: `PDF importado: ${parts.join(", ") || "sin cambios"}`,
     timestamp: new Date().toISOString(),
   });
 
   return NextResponse.json({
     created,
-    skipped,
+    updated,
     total: flights.length,
   });
 }

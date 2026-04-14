@@ -144,6 +144,27 @@ export function FlightCard({
       {expanded && (
         <div className="border-t border-gray-100 px-3 pb-3 pt-2 sm:px-4 sm:pb-4 sm:pt-3" onClick={(e) => e.stopPropagation()}>
           <div className={`grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3 ${readOnly ? "pointer-events-none opacity-75" : ""}`}>
+            {/* Flight details — editable */}
+            <Section title="Datos del vuelo">
+              <div className="space-y-2">
+                <div className="grid grid-cols-3 gap-2">
+                  <TextField label="Indicativo" value={flight.callsign} onChange={(v) => onUpdate(flight.id, { callsign: v })} />
+                  <TextField label="Matricula" value={flight.registration} onChange={(v) => onUpdate(flight.id, { registration: v })} />
+                  <TextField label="Tipo" value={flight.aircraftType} onChange={(v) => onUpdate(flight.id, { aircraftType: v })} />
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <TextField label="Origen" value={flight.origin || ""} onChange={(v) => onUpdate(flight.id, { origin: v })} placeholder="ICAO" />
+                  <TextField label="ETA" value={flight.eta || ""} onChange={(v) => onUpdate(flight.id, { eta: v })} placeholder="HH:MM" />
+                  <TextField label="Parking" value={flight.parking || ""} onChange={(v) => onUpdate(flight.id, { parking: v })} />
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <TextField label="Destino" value={flight.destination || ""} onChange={(v) => onUpdate(flight.id, { destination: v })} placeholder="ICAO" />
+                  <TextField label="ETD" value={flight.etd || ""} onChange={(v) => onUpdate(flight.id, { etd: v })} placeholder="HH:MM" />
+                  <TextField label="TOBT" value={flight.tobt || ""} onChange={(v) => onUpdate(flight.id, { tobt: v })} placeholder="HH:MM" />
+                </div>
+              </div>
+            </Section>
+
             {/* Flight State */}
             <Section title="Estado del vuelo">
               <div className="flex flex-wrap gap-1">
@@ -161,9 +182,6 @@ export function FlightCard({
                   </button>
                 ))}
               </div>
-              {flight.tobt && (
-                <p className="mt-1 text-xs text-gray-500">TOBT: {flight.tobt}</p>
-              )}
             </Section>
 
             {/* Arrival Crew */}
@@ -462,6 +480,48 @@ export function FlightCard({
 }
 
 // --- Helper sub-components ---
+
+function TextField({
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+}) {
+  const [local, setLocal] = useState(value);
+  const [dirty, setDirty] = useState(false);
+
+  // Sync with external updates
+  if (!dirty && local !== value) setLocal(value);
+
+  return (
+    <div>
+      <label className="block text-[10px] text-gray-400">{label}</label>
+      <input
+        type="text"
+        value={local}
+        placeholder={placeholder}
+        onChange={(e) => { setLocal(e.target.value); setDirty(true); }}
+        onBlur={() => {
+          if (dirty && local !== value) {
+            onChange(local);
+          }
+          setDirty(false);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            (e.target as HTMLInputElement).blur();
+          }
+        }}
+        className="mt-0.5 block w-full rounded border border-gray-200 px-2 py-1 text-xs text-gray-700 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+      />
+    </div>
+  );
+}
 
 function Section({ title, children }: { title: React.ReactNode; children: React.ReactNode }) {
   return (
