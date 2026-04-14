@@ -6,9 +6,10 @@ import { Flight } from "@prisma/client";
 interface DaySummaryProps {
   flights: Flight[];
   date: Date;
+  connected?: boolean;
 }
 
-export function DaySummary({ flights, date }: DaySummaryProps) {
+export function DaySummary({ flights, date, connected }: DaySummaryProps) {
   const { data: session } = useSession();
 
   const onGround = flights.filter((f) => f.state === "ON_GROUND").length;
@@ -42,6 +43,15 @@ export function DaySummary({ flights, date }: DaySummaryProps) {
             </span>
           </div>
           <div className="flex items-center gap-4">
+            {connected !== undefined && (
+              <span
+                className={`flex items-center gap-1.5 text-xs ${connected ? "text-green-600" : "text-gray-400"}`}
+                title={connected ? "Tiempo real activo" : "Reconectando..."}
+              >
+                <span className={`inline-block h-2 w-2 rounded-full ${connected ? "bg-green-500 animate-pulse" : "bg-gray-400"}`} />
+                {connected ? "En vivo" : "Offline"}
+              </span>
+            )}
             <span className="text-sm text-gray-600">
               {session?.user?.name}{" "}
               <span className="text-xs text-gray-400">({session?.user?.role?.toLowerCase()})</span>

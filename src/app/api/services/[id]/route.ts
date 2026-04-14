@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { eventBus } from "@/lib/events";
 
 // PATCH /api/services/[id] — update a service (toggle delivered, etc.)
 export async function PATCH(
@@ -36,12 +37,22 @@ export async function PATCH(
   });
 
   if (body.state && body.state !== existing.state) {
+    const actionDesc = `Servicio ${existing.type}: ${body.state === "DELIVERED" ? "entregado" : "pendiente"}`;
     await prisma.eventLog.create({
       data: {
         flightId: existing.flightId,
         userId: session.user.id,
-        action: `Servicio ${existing.type}: ${body.state === "DELIVERED" ? "entregado" : "pendiente"}`,
+        action: actionDesc,
       },
+    });
+
+    eventBus.emit({
+      type: "service_updated",
+      flightId: existing.flightId,
+      userId: session.user.id,
+      userName: session.user.name || undefined,
+      detail: actionDesc,
+      timestamp: new Date().toISOString(),
     });
   }
 
@@ -68,6 +79,15 @@ export async function DELETE(
       userId: session.user.id,
       action: `Servicio eliminado: ${service.type}`,
     },
+  });
+
+  eventBus.emit({
+    type: "service_deleted",
+    flightId: service.flightId,
+    userId: session.user.id,
+    userName: session.user.name || undefined,
+    detail: `Servicio eliminado: ${service.type}`,
+    timestamp: new Date().toISOString(),
   });
 
   return NextResponse.json({ ok: true });

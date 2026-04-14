@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { eventBus } from "@/lib/events";
 
 // GET /api/flights?date=YYYY-MM-DD
 export async function GET(req: NextRequest) {
@@ -79,6 +80,15 @@ export async function POST(req: NextRequest) {
       action: "Vuelo creado",
       details: `${flight.callsign} - ${flight.registration}`,
     },
+  });
+
+  eventBus.emit({
+    type: "flight_created",
+    flightId: flight.id,
+    userId: session.user.id,
+    userName: session.user.name || undefined,
+    detail: `${flight.callsign} (${flight.registration})`,
+    timestamp: new Date().toISOString(),
   });
 
   return NextResponse.json(flight, { status: 201 });

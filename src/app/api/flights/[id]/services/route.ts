@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { eventBus } from "@/lib/events";
 
 // POST /api/flights/[id]/services — add a service to a flight
 export async function POST(
@@ -29,6 +30,15 @@ export async function POST(
       userId: session.user.id,
       action: `Servicio añadido: ${body.type}${body.customName ? ` (${body.customName})` : ""}`,
     },
+  });
+
+  eventBus.emit({
+    type: "service_created",
+    flightId: id,
+    userId: session.user.id,
+    userName: session.user.name || undefined,
+    detail: `Servicio añadido: ${body.type}`,
+    timestamp: new Date().toISOString(),
   });
 
   return NextResponse.json(service, { status: 201 });

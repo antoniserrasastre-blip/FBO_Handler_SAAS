@@ -110,10 +110,17 @@ export function FlightCard({
           </div>
         </div>
 
-        {/* Services row in collapsed view */}
-        {flight.services.length > 0 && !expanded && (
-          <div className="mt-2" onClick={(e) => e.stopPropagation()}>
-            <ServiceBadges services={flight.services} onToggle={onServiceToggle} />
+        {/* Services row + last modified in collapsed view */}
+        {!expanded && (
+          <div className="mt-2 flex items-center justify-between gap-4">
+            <div onClick={(e) => e.stopPropagation()}>
+              {flight.services.length > 0 && (
+                <ServiceBadges services={flight.services} onToggle={onServiceToggle} />
+              )}
+            </div>
+            {flight.eventLogs.length > 0 && (
+              <LastModifiedBadge log={flight.eventLogs[0]} />
+            )}
           </div>
         )}
       </button>
@@ -399,23 +406,36 @@ export function FlightCard({
             </Section>
           </div>
 
-          {/* Event log */}
+          {/* Enhanced Event log timeline */}
           {flight.eventLogs.length > 0 && (
             <div className="mt-4">
               <Section title="Log de eventos">
-                <div className="max-h-32 space-y-1 overflow-y-auto">
-                  {flight.eventLogs.map((log) => (
-                    <div key={log.id} className="flex items-center gap-2 text-xs text-gray-500">
-                      <span className="shrink-0 text-gray-400">
-                        {new Date(log.timestamp).toLocaleTimeString("es-ES", {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </span>
-                      <span>{log.action}</span>
-                      {log.user && <span className="text-gray-400">— {log.user.name}</span>}
-                    </div>
-                  ))}
+                <div className="max-h-48 overflow-y-auto">
+                  <div className="relative border-l-2 border-gray-200 pl-4">
+                    {flight.eventLogs.map((log, i) => (
+                      <div key={log.id} className={`relative pb-3 ${i === 0 ? "" : ""}`}>
+                        {/* Timeline dot */}
+                        <div className={`absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full border-2 border-white ${i === 0 ? "bg-blue-500" : "bg-gray-300"}`} />
+                        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                          <span className={`text-xs font-medium ${i === 0 ? "text-gray-700" : "text-gray-500"}`}>
+                            {log.action}
+                          </span>
+                          {log.user && (
+                            <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500">
+                              {log.user.name}
+                            </span>
+                          )}
+                          <span className="text-[10px] text-gray-400">
+                            {new Date(log.timestamp).toLocaleTimeString("es-ES", {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                              second: "2-digit",
+                            })}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </Section>
             </div>
@@ -496,6 +516,19 @@ function SelectField({
         ))}
       </select>
     </div>
+  );
+}
+
+function LastModifiedBadge({ log }: { log: EventLog & { user: { name: string } | null } }) {
+  const time = new Date(log.timestamp).toLocaleTimeString("es-ES", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  return (
+    <span className="shrink-0 whitespace-nowrap text-[10px] text-gray-400">
+      {log.user?.name || "Sistema"} · {log.action.length > 30 ? log.action.slice(0, 30) + "..." : log.action} · {time}
+    </span>
   );
 }
 

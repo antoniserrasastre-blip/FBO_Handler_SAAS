@@ -1,11 +1,15 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Flight, Service, EventLog } from "@prisma/client";
 import { DaySummary } from "@/components/DaySummary";
 import { FlightCard } from "@/components/FlightCard";
+import { TurnaroundAlerts } from "@/components/TurnaroundAlert";
+import { ToastContainer, ToastMessage } from "@/components/Toast";
+import { useEventStream } from "@/hooks/useEventStream";
+import { FlightEvent } from "@/lib/events";
 
 type FlightWithRelations = Flight & {
   services: Service[];
@@ -13,10 +17,12 @@ type FlightWithRelations = Flight & {
 };
 
 export default function HomePage() {
-  const { status } = useSession();
+  const { data: session, status } = useSession();
   const router = useRouter();
   const [flights, setFlights] = useState<FlightWithRelations[]>([]);
   const [loading, setLoading] = useState(true);
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const toastIdRef = useRef(0);
   const [date] = useState(() => {
     const d = new Date();
     d.setHours(0, 0, 0, 0);
@@ -37,18 +43,68 @@ export default function HomePage() {
     }
   }, [date]);
 
+  // Add a toast notification
+  const addToast = useCallback((text: string, userName?: string, type?: ToastMessage["type"]) => {
+    const id = String(++toastIdRef.current);
+    setToasts((prev) => [...prev.slice(-4), { id, text, userName, type }]);
+  }, []);
+
+  const dismissToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+
+  // Handle SSE events — refetch the affected flight data
+  const handleEvent = useCallback(
+    (event: FlightEvent) => {
+      // Only show toasts for other users' changes
+      const isOwnChange = session?.user?.id === event.userId;
+
+      if (!isOwnChange && event.userName) {
+        const typeLabels: Record<string, string> = {
+          flight_updated: "actualizo",
+          flight_created: "creo vuelo",
+          flight_deleted: "elimino vuelo",
+          service_updated: "cambio servicio",
+          service_created: "añadio servicio",
+          service_deleted: "elimino servicio",
+        };
+        const action = typeLabels[event.type] || event.type;
+        addToast(`${action}${event.detail ? `: ${event.detail}` : ""}`, event.userName, "info");
+      }
+
+      // Refetch all flights to get consistent state
+      fetchFlights();
+    },
+    [fetchFlights, addToast, session?.user?.id]
+  );
+
+  const { connected } = useEventStream({
+    onEvent: handleEvent,
+    enabled: status === "authenticated",
+  });
+
+  // Initial fetch
   useEffect(() => {
     if (status === "authenticated") {
       fetchFlights();
     }
   }, [status, fetchFlights]);
 
-  // Auto-refresh every 30s
+  // Fallback polling every 60s (in case SSE drops and doesn't reconnect)
   useEffect(() => {
     if (status !== "authenticated") return;
-    const interval = setInterval(fetchFlights, 30000);
+    const interval = setInterval(fetchFlights, 60000);
     return () => clearInterval(interval);
   }, [status, fetchFlights]);
+
+  // Turnaround alert check every minute
+  useEffect(() => {
+    // Force re-render for time-dependent turnaround alerts
+    const interval = setInterval(() => {
+      setFlights((prev) => [...prev]);
+    }, 60000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleFlightUpdate = async (id: string, data: Partial<Flight>) => {
     // Optimistic update
@@ -66,13 +122,11 @@ export default function HomePage() {
       const updated = await res.json();
       setFlights((prev) => prev.map((f) => (f.id === id ? updated : f)));
     } else {
-      // Revert on error
       fetchFlights();
     }
   };
 
   const handleServiceToggle = async (serviceId: string, newState: "PENDING" | "DELIVERED") => {
-    // Optimistic update
     setFlights((prev) =>
       prev.map((f) => ({
         ...f,
@@ -88,7 +142,7 @@ export default function HomePage() {
       body: JSON.stringify({ state: newState }),
     });
 
-    if (res.ok) {
+    if (!res.ok) {
       fetchFlights();
     }
   };
@@ -106,10 +160,7 @@ export default function HomePage() {
   };
 
   const handleDeleteService = async (serviceId: string) => {
-    const res = await fetch(`/api/services/${serviceId}`, {
-      method: "DELETE",
-    });
-
+    const res = await fetch(`/api/services/${serviceId}`, { method: "DELETE" });
     if (res.ok) {
       fetchFlights();
     }
@@ -125,7 +176,10 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <DaySummary flights={flights} date={date} />
+      <DaySummary flights={flights} date={date} connected={connected} />
+
+      {/* Turnaround alerts */}
+      <TurnaroundAlerts flights={flights} />
 
       <main className="mx-auto max-w-7xl px-4 py-4">
         {/* Action bar */}
@@ -167,6 +221,9 @@ export default function HomePage() {
           </div>
         )}
       </main>
+
+      {/* Toast notifications for real-time activity */}
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }
