@@ -5,5 +5,17 @@
 @layer base {
   body {
     @apply bg-gray-50 text-gray-900;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Prevent iOS zoom on input focus */
+  input, select, textarea {
+    font-size: 16px;
+  }
+
+  @screen sm {
+    input, select, textarea {
+      font-size: inherit;
+    }
   }
 }

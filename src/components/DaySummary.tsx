@@ -29,7 +29,12 @@ export function DaySummary({ flights, date, connected, isToday = true, onDateCha
 
   const alerts = flights.filter((f) => f.paxDeparture > 5).length;
 
-  const dateStr = date.toLocaleDateString("es-ES", {
+  const dateStrShort = date.toLocaleDateString("es-ES", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
+  });
+  const dateStrLong = date.toLocaleDateString("es-ES", {
     weekday: "short",
     day: "2-digit",
     month: "2-digit",
@@ -53,96 +58,94 @@ export function DaySummary({ flights, date, connected, isToday = true, onDateCha
 
   return (
     <header className="sticky top-0 z-10 border-b border-gray-200 bg-white shadow-sm">
-      <div className="mx-auto max-w-7xl px-4 py-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <h1 className="text-xl font-bold text-gray-900">MALLORCAIR</h1>
-            <span className="text-sm text-gray-500">LEPA</span>
+      <div className="mx-auto max-w-7xl px-3 py-2 sm:px-4 sm:py-3">
+        {/* Top row */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <h1 className="text-lg font-bold text-gray-900 sm:text-xl">MALLORCAIR</h1>
+            <span className="hidden text-sm text-gray-500 sm:inline">LEPA</span>
 
             {/* Date navigation */}
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-0.5 sm:gap-1">
               <button
                 onClick={() => goDay(-1)}
                 className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-                title="Dia anterior"
               >
                 ◀
               </button>
-              <span className="rounded bg-gray-100 px-2 py-0.5 text-sm font-medium text-gray-700">
-                {dateStr}
+              <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-700 sm:px-2 sm:text-sm">
+                <span className="hidden sm:inline">{dateStrLong}</span>
+                <span className="sm:hidden">{dateStrShort}</span>
               </span>
               <button
                 onClick={() => goDay(1)}
                 className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-                title="Dia siguiente"
               >
                 ▶
               </button>
               {!isToday && (
                 <button
                   onClick={goToday}
-                  className="ml-1 rounded bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700 hover:bg-blue-200"
+                  className="ml-0.5 rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium text-blue-700 hover:bg-blue-200 sm:ml-1 sm:text-xs"
                 >
                   Hoy
                 </button>
               )}
             </div>
           </div>
-          <div className="flex items-center gap-4">
+
+          {/* Right side: connection + user + actions */}
+          <div className="flex items-center gap-2 sm:gap-4 shrink-0">
             {connected !== undefined && (
               <span
-                className={`flex items-center gap-1.5 text-xs ${connected ? "text-green-600" : "text-gray-400"}`}
+                className={`flex items-center gap-1 text-[10px] sm:text-xs ${connected ? "text-green-600" : "text-gray-400"}`}
                 title={connected ? "Tiempo real activo" : "Reconectando..."}
               >
-                <span className={`inline-block h-2 w-2 rounded-full ${connected ? "bg-green-500 animate-pulse" : "bg-gray-400"}`} />
-                {connected ? "En vivo" : "Offline"}
+                <span className={`inline-block h-1.5 w-1.5 rounded-full sm:h-2 sm:w-2 ${connected ? "bg-green-500 animate-pulse" : "bg-gray-400"}`} />
+                <span className="hidden sm:inline">{connected ? "En vivo" : "Offline"}</span>
               </span>
             )}
             <button
               onClick={() => router.push("/historico")}
-              className="rounded-md bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600 hover:bg-gray-200"
-              title="Historico"
+              className="hidden rounded-md bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-200 sm:block"
             >
               Historico
             </button>
-            <span className="text-sm text-gray-600">
+            <span className="hidden text-sm text-gray-600 md:inline">
               {session?.user?.name}{" "}
               <span className="text-xs text-gray-400">({session?.user?.role?.toLowerCase()})</span>
             </span>
             <button
               onClick={() => signOut()}
-              className="rounded-md bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600 hover:bg-gray-200"
+              className="rounded-md bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-200"
             >
               Salir
             </button>
           </div>
         </div>
 
-        <div className="mt-2 flex flex-wrap gap-4 text-sm">
+        {/* Stats row */}
+        <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-xs sm:mt-2 sm:gap-x-4 sm:text-sm">
           {!isToday && (
             <>
-              <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+              <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 sm:text-xs">
                 Solo lectura
               </span>
               <span className="text-gray-300">|</span>
             </>
           )}
-          <Stat label="En tierra" value={onGround} color="text-blue-600" />
-          <Stat label="Esperados" value={expected} color="text-gray-600" />
-          <Stat label="Embarque" value={boarding} color="text-yellow-600" />
-          <Stat label="Despachados" value={dispatched} color="text-green-600" />
-          <span className="text-gray-300">|</span>
-          <Stat label="Pax en sala" value={paxInLounge} color="text-purple-600" />
+          <Stat label="Tierra" value={onGround} color="text-blue-600" />
+          <Stat label="Esper." value={expected} color="text-gray-600" />
+          <Stat label="Embar." value={boarding} color="text-yellow-600" />
+          <Stat label="Desp." value={dispatched} color="text-green-600" />
+          <span className="hidden text-gray-300 sm:inline">|</span>
+          <Stat label="Pax sala" value={paxInLounge} color="text-purple-600" />
           {alerts > 0 && (
-            <>
-              <span className="text-gray-300">|</span>
-              <span className="font-medium text-red-600">
-                ⚠ {alerts} {alerts === 1 ? "alerta" : "alertas"}
-              </span>
-            </>
+            <span className="font-medium text-red-600">
+              ⚠ {alerts}
+            </span>
           )}
-          <span className="text-gray-300">|</span>
-          <span className="text-gray-500">Total: {flights.length} vuelos</span>
+          <span className="text-gray-400">{flights.length} vuelos</span>
         </div>
       </div>
     </header>

@@ -201,20 +201,20 @@ export default function HomePage() {
 
       {isToday && <TurnaroundAlerts flights={flights} />}
 
-      <main className="mx-auto max-w-7xl px-4 py-4">
+      <main className="mx-auto max-w-7xl px-3 py-3 sm:px-4 sm:py-4">
         {/* Action bar */}
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-sm font-medium text-gray-500">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 sm:mb-4">
+          <h2 className="text-xs font-medium text-gray-500 sm:text-sm">
             {flights.length} vuelo{flights.length !== 1 ? "s" : ""}
             {isToday ? " hoy" : ""}
           </h2>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
             {flights.length > 0 && (
               <div className="relative group">
-                <button className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+                <button className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 sm:px-3 sm:py-2 sm:text-sm">
                   Exportar ▾
                 </button>
-                <div className="absolute right-0 top-full z-10 mt-1 hidden rounded-lg border bg-white py-1 shadow-lg group-hover:block">
+                <div className="absolute right-0 top-full z-10 mt-1 hidden min-w-[140px] rounded-lg border bg-white py-1 shadow-lg group-hover:block">
                   <button
                     onClick={() => handleExport("flights")}
                     className="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
@@ -234,13 +234,13 @@ export default function HomePage() {
               <>
                 <button
                   onClick={() => router.push("/import")}
-                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 sm:px-4 sm:py-2 sm:text-sm"
                 >
                   Importar PDF
                 </button>
                 <button
                   onClick={() => router.push("/flights/new")}
-                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-500"
+                  className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-blue-500 sm:px-4 sm:py-2 sm:text-sm"
                 >
                   + Nuevo vuelo
                 </button>

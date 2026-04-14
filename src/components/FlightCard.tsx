@@ -56,30 +56,30 @@ export function FlightCard({
       {/* Collapsed view — always visible */}
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full px-4 py-3 text-left"
+        className="w-full px-3 py-2 text-left sm:px-4 sm:py-3"
       >
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex items-start justify-between gap-2 sm:gap-4">
           {/* State badge + flight info */}
-          <div className="flex items-start gap-3">
+          <div className="flex items-start gap-2 min-w-0 sm:gap-3">
             <span
-              className={`mt-0.5 inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-xs font-bold uppercase ${stateConfig.bg} ${stateConfig.text}`}
+              className={`mt-0.5 inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase sm:px-2.5 sm:text-xs ${stateConfig.bg} ${stateConfig.text}`}
             >
               {stateConfig.label}
             </span>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-lg font-bold text-gray-900">{flight.callsign}</span>
-                <span className="text-sm text-gray-500">{flight.aircraftType}</span>
-                <span className="text-sm text-gray-400">{flight.registration}</span>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                <span className="text-base font-bold text-gray-900 sm:text-lg">{flight.callsign}</span>
+                <span className="text-xs text-gray-500 sm:text-sm">{flight.aircraftType}</span>
+                <span className="text-xs text-gray-400 sm:text-sm">{flight.registration}</span>
                 {flight.parking && (
-                  <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-600">
+                  <span className="rounded bg-gray-100 px-1 py-0.5 text-[10px] font-medium text-gray-600 sm:px-1.5 sm:text-xs">
                     {flight.parking}
                   </span>
                 )}
               </div>
 
               {/* Route line */}
-              <div className="mt-1 flex items-center gap-2 text-sm text-gray-600">
+              <div className="mt-0.5 flex items-center gap-1.5 text-xs text-gray-600 sm:mt-1 sm:gap-2 sm:text-sm">
                 <span className="font-medium">{flight.origin || "----"}</span>
                 <span className="text-gray-400">{flight.eta || "--:--"}</span>
                 <span className="text-gray-300">→</span>
@@ -89,8 +89,8 @@ export function FlightCard({
             </div>
           </div>
 
-          {/* Quick stats */}
-          <div className="flex shrink-0 items-center gap-4 text-xs text-gray-500">
+          {/* Quick stats — hidden on mobile, shown as compact row below on small screens */}
+          <div className="hidden shrink-0 items-center gap-4 text-xs text-gray-500 sm:flex">
             <div className="text-center">
               <div className="text-gray-400">LLEG</div>
               <div>C:{flight.crewArrival} P:{flight.paxArrival}</div>
@@ -110,6 +110,19 @@ export function FlightCard({
             </div>
             <span className="text-gray-300">{expanded ? "▲" : "▼"}</span>
           </div>
+
+          {/* Mobile: expand indicator */}
+          <span className="text-gray-300 sm:hidden">{expanded ? "▲" : "▼"}</span>
+        </div>
+
+        {/* Mobile quick stats row */}
+        <div className="mt-1 flex flex-wrap gap-x-3 text-[10px] text-gray-500 sm:hidden">
+          <span>C:{flight.crewArrival}/{flight.crewDeparture}</span>
+          <span>P:{flight.paxArrival}/{flight.paxDeparture}</span>
+          {needsTwoVans && <span className="font-bold text-red-500">⚠2FURG</span>}
+          <span className={flight.fuelState === "SERVED" ? "text-green-600" : flight.fuelState === "REQUESTED" ? "text-yellow-600" : ""}>
+            F:{FUEL_LABELS[flight.fuelState as FuelState] || flight.fuelState}
+          </span>
         </div>
 
         {/* Services row + last modified in collapsed view */}
@@ -129,8 +142,8 @@ export function FlightCard({
 
       {/* Expanded view */}
       {expanded && (
-        <div className="border-t border-gray-100 px-4 pb-4 pt-3" onClick={(e) => e.stopPropagation()}>
-          <div className={`grid gap-4 md:grid-cols-2 lg:grid-cols-3 ${readOnly ? "pointer-events-none opacity-75" : ""}`}>
+        <div className="border-t border-gray-100 px-3 pb-3 pt-2 sm:px-4 sm:pb-4 sm:pt-3" onClick={(e) => e.stopPropagation()}>
+          <div className={`grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3 ${readOnly ? "pointer-events-none opacity-75" : ""}`}>
             {/* Flight State */}
             <Section title="Estado del vuelo">
               <div className="flex flex-wrap gap-1">

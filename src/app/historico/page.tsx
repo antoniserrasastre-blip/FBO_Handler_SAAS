@@ -90,11 +90,10 @@ export default function HistoricoPage() {
                   key={ds.id}
                   className="overflow-hidden rounded-lg bg-white shadow-sm"
                 >
-                  <div className="flex items-center justify-between px-5 py-4">
-                    <div className="flex items-center gap-4">
-                      <div>
+                  <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5 sm:py-4">
+                    <div>
                         <div className="flex items-center gap-2">
-                          <h3 className="text-sm font-semibold text-gray-900 capitalize">
+                          <h3 className="text-xs font-semibold text-gray-900 capitalize sm:text-sm">
                             {dateStr}
                           </h3>
                           {isToday && (
@@ -103,7 +102,7 @@ export default function HistoricoPage() {
                             </span>
                           )}
                         </div>
-                        <div className="mt-1 flex gap-4 text-xs text-gray-500">
+                        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-gray-500 sm:gap-x-4">
                           <span>
                             <span className="font-medium text-gray-700">{ds.totalFlights}</span> vuelos
                           </span>
@@ -120,10 +119,9 @@ export default function HistoricoPage() {
                             servicios
                           </span>
                         </div>
-                      </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                       {ds.totalFlights > 0 && (
                         <>
                           <button
