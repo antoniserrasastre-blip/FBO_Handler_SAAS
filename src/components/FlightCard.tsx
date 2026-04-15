@@ -61,9 +61,9 @@ export function FlightCard({
       style={{ borderLeftColor: stateConfig.color }}
     >
       {/* Collapsed view — always visible */}
-      <button
+      <div
         onClick={() => setExpanded(!expanded)}
-        className="w-full px-3 py-2 text-left sm:px-4 sm:py-3"
+        className="w-full cursor-pointer px-3 py-2 text-left sm:px-4 sm:py-3"
       >
         <div className="flex items-start justify-between gap-2 sm:gap-4">
           {/* Left: aircraft info */}
@@ -157,7 +157,7 @@ export function FlightCard({
             )}
           </div>
         )}
-      </button>
+      </div>
 
       {/* Expanded view */}
       {expanded && (

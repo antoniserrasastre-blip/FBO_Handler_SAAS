@@ -143,8 +143,8 @@ export function DaySummary({ flights, date, connected, isToday = true, onDateCha
         <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-xs sm:mt-2 sm:gap-x-4 sm:text-sm">
           {!isToday && (
             <>
-              <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 sm:text-xs">
-                Solo lectura
+              <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium text-blue-700 sm:text-xs">
+                Dia anterior
               </span>
               <span className="text-gray-300">|</span>
             </>

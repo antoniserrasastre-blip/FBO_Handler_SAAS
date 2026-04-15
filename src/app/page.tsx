@@ -128,7 +128,6 @@ export default function HomePage() {
 
   // --- Mutation handlers (disabled for past days) ---
   const handleFlightUpdate = async (id: string, data: Partial<Flight>) => {
-    if (!isToday) return;
     setFlights((prev) => prev.map((f) => (f.id === id ? { ...f, ...data } : f)));
     const res = await fetch(`/api/flights/${id}`, {
       method: "PATCH",
@@ -144,7 +143,6 @@ export default function HomePage() {
   };
 
   const handleServiceToggle = async (serviceId: string, newState: string) => {
-    if (!isToday) return;
     setFlights((prev) =>
       prev.map((f) => ({
         ...f,
@@ -162,7 +160,6 @@ export default function HomePage() {
   };
 
   const handleAddService = async (flightId: string, type: string, customName?: string, reference?: string) => {
-    if (!isToday) return;
     const res = await fetch(`/api/flights/${flightId}/services`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -172,7 +169,6 @@ export default function HomePage() {
   };
 
   const handleDeleteService = async (serviceId: string) => {
-    if (!isToday) return;
     const res = await fetch(`/api/services/${serviceId}`, { method: "DELETE" });
     if (res.ok) fetchFlights();
   };
@@ -231,31 +227,20 @@ export default function HomePage() {
                 </div>
               </div>
             )}
-            {isToday && (
-              <>
-                <button
-                  onClick={() => router.push("/import")}
-                  className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 sm:px-4 sm:py-2 sm:text-sm"
-                >
-                  Importar PDF
-                </button>
-                <button
-                  onClick={() => router.push("/flights/new")}
-                  className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-blue-500 sm:px-4 sm:py-2 sm:text-sm"
-                >
-                  + Nuevo vuelo
-                </button>
-              </>
-            )}
+            <button
+              onClick={() => router.push("/import")}
+              className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 sm:px-4 sm:py-2 sm:text-sm"
+            >
+              Importar PDF
+            </button>
+            <button
+              onClick={() => router.push("/flights/new")}
+              className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-blue-500 sm:px-4 sm:py-2 sm:text-sm"
+            >
+              + Nuevo vuelo
+            </button>
           </div>
         </div>
-
-        {/* Read-only banner for past days */}
-        {!isToday && flights.length > 0 && (
-          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-700">
-            Vista historica — los datos de dias anteriores son de solo lectura.
-          </div>
-        )}
 
         {/* Flight list */}
         {flights.length === 0 ? (
@@ -282,7 +267,7 @@ export default function HomePage() {
                 onServiceToggle={handleServiceToggle}
                 onAddService={handleAddService}
                 onDeleteService={handleDeleteService}
-                readOnly={!isToday}
+                readOnly={false}
               />
             ))}
           </div>

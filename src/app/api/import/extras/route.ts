@@ -34,13 +34,24 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: "Datos invalidos" }, { status: 400 });
   }
 
-  // Get today's day sheet (or the specified date)
-  const targetDate = date ? new Date(date) : new Date();
+  // Build the target date at local midnight
+  let targetDate: Date;
+  if (date) {
+    // Accept YYYY-MM-DD format from the date picker
+    const parts = date.split("-");
+    if (parts.length === 3) {
+      targetDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+    } else {
+      targetDate = new Date(date);
+    }
+  } else {
+    targetDate = new Date();
+  }
   targetDate.setHours(0, 0, 0, 0);
 
   const daySheet = await prisma.daySheet.findUnique({ where: { date: targetDate } });
   if (!daySheet) {
-    return NextResponse.json({ error: "No hay hoja del dia para esta fecha" }, { status: 404 });
+    return NextResponse.json({ error: `No hay hoja del dia para ${targetDate.toLocaleDateString("es-ES")}` }, { status: 404 });
   }
 
   // Get all flights for this day, indexed by registration

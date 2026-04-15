@@ -213,6 +213,19 @@ function ExtrasImportTab() {
   const [result, setResult] = useState<ExcelParseResult | null>(null);
   const [saveResult, setSaveResult] = useState<{ matched: number; servicesCreated: number; notFound: string[] } | null>(null);
   const [error, setError] = useState("");
+  const [targetDate, setTargetDate] = useState(() => {
+    const d = new Date();
+    return d.toISOString().slice(0, 10); // YYYY-MM-DD
+  });
+  const [daySheets, setDaySheets] = useState<{ date: string; totalFlights: number }[]>([]);
+
+  // Fetch available daysheets on mount
+  useState(() => {
+    fetch("/api/daysheets")
+      .then((r) => r.ok ? r.json() : [])
+      .then((data: { date: string; totalFlights: number }[]) => setDaySheets(Array.isArray(data) ? data : []))
+      .catch(() => {});
+  });
 
   async function handleFileUpload(file: File) {
     setError(""); setResult(null); setSaveResult(null); setParsing(true);
@@ -232,7 +245,7 @@ function ExtrasImportTab() {
       const res = await fetch("/api/import/extras", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ extras: result.extras }),
+        body: JSON.stringify({ extras: result.extras, date: targetDate }),
       });
       if (!res.ok) { setError((await res.json()).error || "Error"); return; }
       setSaveResult(await res.json());
@@ -258,8 +271,27 @@ function ExtrasImportTab() {
 
       {result && result.extras.length > 0 && !saveResult && (
         <div className="mt-6">
+          {/* Date selector */}
+          <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg bg-blue-50 px-4 py-3">
+            <label className="text-sm font-medium text-blue-800">Importar a fecha:</label>
+            <input
+              type="date"
+              value={targetDate}
+              onChange={(e) => setTargetDate(e.target.value)}
+              className="rounded border border-blue-200 bg-white px-3 py-1.5 text-sm text-gray-700"
+            />
+            {daySheets.length > 0 && (
+              <span className="text-xs text-blue-600">
+                Hojas disponibles: {daySheets.map((s) => {
+                  const d = new Date(s.date);
+                  return d.toLocaleDateString("es-ES", { day: "2-digit", month: "2-digit" });
+                }).join(", ")} ({daySheets.length})
+              </span>
+            )}
+          </div>
+
           <h2 className="mb-3 text-sm font-semibold text-gray-700">
-            {result.extras.length} aviones con extras {result.date && `— ${result.date}`}
+            {result.extras.length} aviones con extras {result.date && `— Excel: ${result.date}`}
           </h2>
           <div className="space-y-2">
             {result.extras.map((extra, i) => (
