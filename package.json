@@ -10,6 +10,7 @@
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:push-turso": "tsx scripts/push-turso-schema.ts",
+    "db:setup-turso": "tsx scripts/setup-turso.ts",
     "db:seed": "tsx prisma/seed.ts",
     "db:reset": "prisma db push --force-reset && tsx prisma/seed.ts"
   },
