@@ -142,7 +142,7 @@ export default function HomePage() {
     }
   };
 
-  const handleServiceToggle = async (serviceId: string, newState: "PENDING" | "DELIVERED") => {
+  const handleServiceToggle = async (serviceId: string, newState: string) => {
     if (!isToday) return;
     setFlights((prev) =>
       prev.map((f) => ({
@@ -160,12 +160,12 @@ export default function HomePage() {
     if (!res.ok) fetchFlights();
   };
 
-  const handleAddService = async (flightId: string, type: string, customName?: string) => {
+  const handleAddService = async (flightId: string, type: string, customName?: string, reference?: string) => {
     if (!isToday) return;
     const res = await fetch(`/api/flights/${flightId}/services`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type, customName }),
+      body: JSON.stringify({ type, customName, reference }),
     });
     if (res.ok) fetchFlights();
   };

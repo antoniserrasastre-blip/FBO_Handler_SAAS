@@ -27,7 +27,7 @@ export function DaySummary({ flights, date, connected, isToday = true, onDateCha
     return sum + count;
   }, 0);
 
-  const alerts = flights.filter((f) => f.paxDeparture > 5).length;
+  // Note: flights don't include services in the DaySummary props (Flight type only)
 
   const dateStrShort = date.toLocaleDateString("es-ES", {
     day: "2-digit",
@@ -154,11 +154,6 @@ export function DaySummary({ flights, date, connected, isToday = true, onDateCha
           <Stat label="Desp." value={dispatched} color="text-green-600" />
           <span className="hidden text-gray-300 sm:inline">|</span>
           <Stat label="Pax sala" value={paxInLounge} color="text-purple-600" />
-          {alerts > 0 && (
-            <span className="font-medium text-red-600">
-              ⚠ {alerts}
-            </span>
-          )}
           <span className="text-gray-400">{flights.length} vuelos</span>
         </div>
       </div>

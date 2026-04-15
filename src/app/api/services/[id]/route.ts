@@ -24,10 +24,16 @@ export async function PATCH(
   });
 
   const data: Record<string, unknown> = { ...body };
+  // Auto-set timestamps based on state transitions
+  if (body.state === "ARRIVED" && !existing.arrivedAt) {
+    data.arrivedAt = now;
+  }
   if (body.state === "DELIVERED" && !existing.deliveredAt) {
     data.deliveredAt = now;
+    if (!existing.arrivedAt) data.arrivedAt = now; // Skip arrived if going straight to delivered
   }
   if (body.state === "PENDING") {
+    data.arrivedAt = null;
     data.deliveredAt = null;
   }
 
@@ -37,7 +43,8 @@ export async function PATCH(
   });
 
   if (body.state && body.state !== existing.state) {
-    const actionDesc = `Servicio ${existing.type}: ${body.state === "DELIVERED" ? "entregado" : "pendiente"}`;
+    const stateLabel: Record<string, string> = { PENDING: "pendiente", ARRIVED: "llegado", DELIVERED: "entregado" };
+    const actionDesc = `Servicio ${existing.type}: ${stateLabel[body.state] || body.state}`;
     await prisma.eventLog.create({
       data: {
         flightId: existing.flightId,

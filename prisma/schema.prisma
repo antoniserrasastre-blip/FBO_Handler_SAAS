@@ -34,9 +34,11 @@ model Flight {
   registration   String
   aircraftType   String
   origin         String?
-  eta            String?
+  eta            String?        // HH:MM
+  arrivalDate    String?        // DD/MM (when different from day sheet date)
   destination    String?
-  etd            String?
+  etd            String?        // HH:MM
+  departureDate  String?        // DD/MM (when different from day sheet date)
   parking        String?
   tobt           String?
   state          String         @default("EXPECTED") // EXPECTED | ON_GROUND | BOARDING | DISPATCHED
@@ -95,9 +97,11 @@ model Service {
   flight      Flight   @relation(fields: [flightId], references: [id], onDelete: Cascade)
   type        String   // CATERING | DISHES | COOLER_BAG | STORAGE_BAG | LAUNDRY | THERMOS | NEWSPAPERS | CUSTOM
   customName  String?
-  state       String   @default("PENDING") // PENDING | DELIVERED
-  origin      String?  // Crossroads | Catering Aire | Otro
-  deliveredAt String?
+  reference   String?  // Order/reference number (e.g., NJE catering ref)
+  state       String   @default("PENDING") // PENDING | ARRIVED | DELIVERED
+  origin      String?  // Crossroads / Catering Aire / Otro
+  arrivedAt   String?  // When the item arrived at FBO
+  deliveredAt String?  // When delivered to the aircraft
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

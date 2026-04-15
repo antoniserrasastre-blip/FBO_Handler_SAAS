@@ -30,8 +30,8 @@ type FlightWithRelations = Flight & {
 interface FlightCardProps {
   flight: FlightWithRelations;
   onUpdate: (id: string, data: Partial<Flight>) => void;
-  onServiceToggle: (serviceId: string, newState: "PENDING" | "DELIVERED") => void;
-  onAddService: (flightId: string, type: string, customName?: string) => void;
+  onServiceToggle: (serviceId: string, newState: string) => void;
+  onAddService: (flightId: string, type: string, customName?: string, reference?: string) => void;
   onDeleteService: (serviceId: string) => void;
   readOnly?: boolean;
 }
@@ -46,7 +46,13 @@ export function FlightCard({
 }: FlightCardProps) {
   const [expanded, setExpanded] = useState(false);
   const stateConfig = FLIGHT_STATE_CONFIG[flight.state as FlightState] || FLIGHT_STATE_CONFIG.EXPECTED;
-  const needsTwoVans = flight.paxDeparture > 5;
+
+  // Progress percentage for the state bar
+  const stateProgress: Record<string, number> = { EXPECTED: 0, ON_GROUND: 33, BOARDING: 66, DISPATCHED: 100 };
+  const progress = stateProgress[flight.state] ?? 0;
+
+  // Check if arrival/departure dates differ from each other (overnight stay)
+  const isOvernight = flight.arrivalDate && flight.departureDate && flight.arrivalDate !== flight.departureDate;
 
   return (
     <div
@@ -59,7 +65,7 @@ export function FlightCard({
         className="w-full px-3 py-2 text-left sm:px-4 sm:py-3"
       >
         <div className="flex items-start justify-between gap-2 sm:gap-4">
-          {/* State badge + flight info */}
+          {/* Left: aircraft info */}
           <div className="flex items-start gap-2 min-w-0 sm:gap-3">
             <span
               className={`mt-0.5 inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase sm:px-2.5 sm:text-xs ${stateConfig.bg} ${stateConfig.text}`}
@@ -68,39 +74,45 @@ export function FlightCard({
             </span>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                <span className="text-base font-bold text-gray-900 sm:text-lg">{flight.callsign}</span>
+                <span className="text-base font-bold text-gray-900 sm:text-lg">{flight.registration}</span>
                 <span className="text-xs text-gray-500 sm:text-sm">{flight.aircraftType}</span>
-                <span className="text-xs text-gray-400 sm:text-sm">{flight.registration}</span>
+                <span className="text-xs text-gray-400 sm:text-sm">{flight.callsign}</span>
                 {flight.parking && (
                   <span className="rounded bg-gray-100 px-1 py-0.5 text-[10px] font-medium text-gray-600 sm:px-1.5 sm:text-xs">
                     {flight.parking}
                   </span>
                 )}
+                {isOvernight && (
+                  <span className="rounded bg-purple-100 px-1 py-0.5 text-[10px] font-medium text-purple-600 sm:px-1.5 sm:text-xs">
+                    PERNOCTA
+                  </span>
+                )}
               </div>
 
-              {/* Route line */}
-              <div className="mt-0.5 flex items-center gap-1.5 text-xs text-gray-600 sm:mt-1 sm:gap-2 sm:text-sm">
+              {/* Route with dates */}
+              <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-gray-600 sm:mt-1 sm:gap-x-2 sm:text-sm">
+                <span className="text-gray-400">LLEG</span>
                 <span className="font-medium">{flight.origin || "----"}</span>
+                {flight.arrivalDate && <span className="text-[10px] text-gray-400">{flight.arrivalDate}</span>}
                 <span className="text-gray-400">{flight.eta || "--:--"}</span>
                 <span className="text-gray-300">→</span>
+                <span className="text-gray-400">SAL</span>
                 <span className="font-medium">{flight.destination || "----"}</span>
+                {flight.departureDate && <span className="text-[10px] text-gray-400">{flight.departureDate}</span>}
                 <span className="text-gray-400">{flight.etd || "--:--"}</span>
               </div>
             </div>
           </div>
 
-          {/* Quick stats — hidden on mobile, shown as compact row below on small screens */}
+          {/* Right: quick stats */}
           <div className="hidden shrink-0 items-center gap-4 text-xs text-gray-500 sm:flex">
             <div className="text-center">
-              <div className="text-gray-400">LLEG</div>
-              <div>C:{flight.crewArrival} P:{flight.paxArrival}</div>
+              <div className="text-gray-400">CREW</div>
+              <div>{flight.crewArrival}/{flight.crewDeparture}</div>
             </div>
             <div className="text-center">
-              <div className="text-gray-400">SAL</div>
-              <div>
-                C:{flight.crewDeparture} P:{flight.paxDeparture}
-                {needsTwoVans && <span className="ml-1 font-bold text-red-500">⚠2FURG</span>}
-              </div>
+              <div className="text-gray-400">PAX</div>
+              <div>{flight.paxArrival}/{flight.paxDeparture}</div>
             </div>
             <div className="text-center">
               <div className="text-gray-400">FUEL</div>
@@ -111,15 +123,21 @@ export function FlightCard({
             <span className="text-gray-300">{expanded ? "▲" : "▼"}</span>
           </div>
 
-          {/* Mobile: expand indicator */}
           <span className="text-gray-300 sm:hidden">{expanded ? "▲" : "▼"}</span>
         </div>
 
-        {/* Mobile quick stats row */}
+        {/* State progress bar */}
+        <div className="mt-1.5 h-1.5 w-full rounded-full bg-gray-100 sm:mt-2">
+          <div
+            className="h-full rounded-full transition-all duration-500"
+            style={{ width: `${Math.max(progress, 2)}%`, backgroundColor: stateConfig.color }}
+          />
+        </div>
+
+        {/* Mobile quick stats */}
         <div className="mt-1 flex flex-wrap gap-x-3 text-[10px] text-gray-500 sm:hidden">
           <span>C:{flight.crewArrival}/{flight.crewDeparture}</span>
           <span>P:{flight.paxArrival}/{flight.paxDeparture}</span>
-          {needsTwoVans && <span className="font-bold text-red-500">⚠2FURG</span>}
           <span className={flight.fuelState === "SERVED" ? "text-green-600" : flight.fuelState === "REQUESTED" ? "text-yellow-600" : ""}>
             F:{FUEL_LABELS[flight.fuelState as FuelState] || flight.fuelState}
           </span>
@@ -152,13 +170,15 @@ export function FlightCard({
                   <TextField label="Matricula" value={flight.registration} onChange={(v) => onUpdate(flight.id, { registration: v })} />
                   <TextField label="Tipo" value={flight.aircraftType} onChange={(v) => onUpdate(flight.id, { aircraftType: v })} />
                 </div>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-4 gap-2">
                   <TextField label="Origen" value={flight.origin || ""} onChange={(v) => onUpdate(flight.id, { origin: v })} placeholder="ICAO" />
+                  <TextField label="Fecha lleg." value={flight.arrivalDate || ""} onChange={(v) => onUpdate(flight.id, { arrivalDate: v })} placeholder="DD/MM" />
                   <TextField label="ETA" value={flight.eta || ""} onChange={(v) => onUpdate(flight.id, { eta: v })} placeholder="HH:MM" />
                   <TextField label="Parking" value={flight.parking || ""} onChange={(v) => onUpdate(flight.id, { parking: v })} />
                 </div>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-4 gap-2">
                   <TextField label="Destino" value={flight.destination || ""} onChange={(v) => onUpdate(flight.id, { destination: v })} placeholder="ICAO" />
+                  <TextField label="Fecha sal." value={flight.departureDate || ""} onChange={(v) => onUpdate(flight.id, { departureDate: v })} placeholder="DD/MM" />
                   <TextField label="ETD" value={flight.etd || ""} onChange={(v) => onUpdate(flight.id, { etd: v })} placeholder="HH:MM" />
                   <TextField label="TOBT" value={flight.tobt || ""} onChange={(v) => onUpdate(flight.id, { tobt: v })} placeholder="HH:MM" />
                 </div>
@@ -276,11 +296,6 @@ export function FlightCard({
             <Section title={
               <span>
                 Pasajeros salida
-                {needsTwoVans && (
-                  <span className="ml-2 rounded bg-red-100 px-1.5 py-0.5 text-xs font-bold text-red-600">
-                    ⚠ 2 FURGONETAS
-                  </span>
-                )}
               </span>
             }>
               <div className="space-y-2">
@@ -415,13 +430,15 @@ export function FlightCard({
                 {flight.services.length > 0 && (
                   <div className="mt-2 space-y-1">
                     {flight.services.map((service) => (
-                      <div key={service.id} className="flex items-center justify-between text-xs text-gray-500">
-                        <span>
+                      <div key={service.id} className="flex items-center justify-between gap-2 text-xs text-gray-500">
+                        <span className="min-w-0">
                           {SERVICE_ICONS[service.type as ServiceType] || "🔧"}{" "}
                           {service.type === "CUSTOM" ? service.customName : SERVICE_LABELS[service.type as ServiceType]}{" "}
+                          {service.reference && <span className="text-blue-500">#{service.reference}</span>}
                           {service.origin && <span className="text-gray-400">({service.origin})</span>}
                         </span>
-                        <div className="flex items-center gap-2">
+                        <div className="flex shrink-0 items-center gap-2">
+                          {service.arrivedAt && <span className="text-blue-500">◐ {service.arrivedAt}</span>}
                           {service.deliveredAt && <span className="text-green-600">✓ {service.deliveredAt}</span>}
                           <button
                             onClick={() => onDeleteService(service.id)}
@@ -614,11 +631,12 @@ function AddServiceRow({
 }: {
   flightId: string;
   existingTypes: string[];
-  onAdd: (flightId: string, type: string, customName?: string) => void;
+  onAdd: (flightId: string, type: string, customName?: string, reference?: string) => void;
 }) {
   const [showForm, setShowForm] = useState(false);
   const [selectedType, setSelectedType] = useState("");
   const [customName, setCustomName] = useState("");
+  const [reference, setReference] = useState("");
 
   if (!showForm) {
     return (
@@ -632,7 +650,7 @@ function AddServiceRow({
   }
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       <select
         value={selectedType}
         onChange={(e) => setSelectedType(e.target.value)}
@@ -653,12 +671,17 @@ function AddServiceRow({
           className="rounded border border-gray-200 px-2 py-1 text-xs"
         />
       )}
+      <input
+        value={reference}
+        onChange={(e) => setReference(e.target.value)}
+        placeholder="Ref# (opcional)"
+        className="w-24 rounded border border-gray-200 px-2 py-1 text-xs"
+      />
       <button
         onClick={() => {
           if (selectedType) {
-            onAdd(flightId, selectedType, customName || undefined);
-            setSelectedType("");
-            setCustomName("");
+            onAdd(flightId, selectedType, customName || undefined, reference || undefined);
+            setSelectedType(""); setCustomName(""); setReference("");
             setShowForm(false);
           }
         }}
@@ -668,7 +691,7 @@ function AddServiceRow({
         Añadir
       </button>
       <button
-        onClick={() => { setShowForm(false); setSelectedType(""); setCustomName(""); }}
+        onClick={() => { setShowForm(false); setSelectedType(""); setCustomName(""); setReference(""); }}
         className="text-xs text-gray-400 hover:text-gray-600"
       >
         Cancelar

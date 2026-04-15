@@ -20,6 +20,7 @@ export async function POST(
       flightId: id,
       type: body.type,
       customName: body.customName || null,
+      reference: body.reference || null,
       origin: body.origin || null,
     },
   });
