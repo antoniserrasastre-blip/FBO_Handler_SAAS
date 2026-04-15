@@ -26,16 +26,7 @@ export const SERVICE_LABELS: Record<ServiceType, string> = {
   CUSTOM: "Extra",
 };
 
-export const SERVICE_ICONS: Record<ServiceType, string> = {
-  CATERING: "🍽️",
-  DISHES: "🍽️",
-  COOLER_BAG: "🧊",
-  STORAGE_BAG: "📦",
-  LAUNDRY: "👔",
-  THERMOS: "☕",
-  NEWSPAPERS: "📰",
-  CUSTOM: "🔧",
-};
+// SERVICE_ICONS removed — use ServiceIcon component from @/components/Icons instead
 
 // Flight state colors and labels
 export const FLIGHT_STATE_CONFIG: Record<

@@ -17,9 +17,10 @@ import {
   PAX_STATES,
   SERVICE_TYPES,
   SERVICE_LABELS,
-  SERVICE_ICONS,
   ServiceType,
 } from "@/types";
+import { ServiceIcon, ArrivedIcon, DeliveredIcon, ChevronUp, ChevronDown, CloseIcon } from "./Icons";
+import { ArrowRight } from "lucide-react";
 import { ServiceBadges } from "./ServiceCheckbox";
 
 type FlightWithRelations = Flight & {
@@ -95,7 +96,7 @@ export function FlightCard({
                 <span className="font-medium">{flight.origin || "----"}</span>
                 {flight.arrivalDate && <span className="text-[10px] text-gray-400">{flight.arrivalDate}</span>}
                 <span className="text-gray-400">{flight.eta || "--:--"}</span>
-                <span className="text-gray-300">→</span>
+                <ArrowRight size={12} className="shrink-0 text-gray-300" />
                 <span className="text-gray-400">SAL</span>
                 <span className="font-medium">{flight.destination || "----"}</span>
                 {flight.departureDate && <span className="text-[10px] text-gray-400">{flight.departureDate}</span>}
@@ -120,10 +121,10 @@ export function FlightCard({
                 {FUEL_LABELS[flight.fuelState as FuelState] || flight.fuelState}
               </div>
             </div>
-            <span className="text-gray-300">{expanded ? "▲" : "▼"}</span>
+            {expanded ? <ChevronUp size={16} className="text-gray-300" /> : <ChevronDown size={16} className="text-gray-300" />}
           </div>
 
-          <span className="text-gray-300 sm:hidden">{expanded ? "▲" : "▼"}</span>
+          <span className="sm:hidden">{expanded ? <ChevronUp size={16} className="text-gray-300" /> : <ChevronDown size={16} className="text-gray-300" />}</span>
         </div>
 
         {/* State progress bar */}
@@ -431,21 +432,21 @@ export function FlightCard({
                   <div className="mt-2 space-y-1">
                     {flight.services.map((service) => (
                       <div key={service.id} className="flex items-center justify-between gap-2 text-xs text-gray-500">
-                        <span className="min-w-0">
-                          {SERVICE_ICONS[service.type as ServiceType] || "🔧"}{" "}
+                        <span className="flex min-w-0 items-center gap-1">
+                          <ServiceIcon type={service.type} size={12} className="shrink-0 text-gray-400" />
                           {service.type === "CUSTOM" ? service.customName : SERVICE_LABELS[service.type as ServiceType]}{" "}
                           {service.reference && <span className="text-blue-500">#{service.reference}</span>}
                           {service.origin && <span className="text-gray-400">({service.origin})</span>}
                         </span>
                         <div className="flex shrink-0 items-center gap-2">
-                          {service.arrivedAt && <span className="text-blue-500">◐ {service.arrivedAt}</span>}
-                          {service.deliveredAt && <span className="text-green-600">✓ {service.deliveredAt}</span>}
+                          {service.arrivedAt && <span className="flex items-center gap-0.5 text-blue-500"><ArrivedIcon size={10} /> {service.arrivedAt}</span>}
+                          {service.deliveredAt && <span className="flex items-center gap-0.5 text-green-600"><DeliveredIcon size={10} /> {service.deliveredAt}</span>}
                           <button
                             onClick={() => onDeleteService(service.id)}
                             className="text-red-400 hover:text-red-600"
                             title="Eliminar servicio"
                           >
-                            ✕
+                            <CloseIcon size={12} />
                           </button>
                         </div>
                       </div>
@@ -659,7 +660,7 @@ function AddServiceRow({
         <option value="">Seleccionar...</option>
         {SERVICE_TYPES.map((t) => (
           <option key={t} value={t}>
-            {SERVICE_ICONS[t]} {SERVICE_LABELS[t]}
+            {SERVICE_LABELS[t]}
           </option>
         ))}
       </select>

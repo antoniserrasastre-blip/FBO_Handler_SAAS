@@ -1,9 +1,9 @@
 "use client";
 
 import { Service } from "@prisma/client";
-import { SERVICE_ICONS, SERVICE_LABELS, ServiceType } from "@/types";
+import { SERVICE_LABELS, ServiceType } from "@/types";
+import { ServiceIcon, PendingIcon, ArrivedIcon, DeliveredIcon } from "./Icons";
 
-// 3-state cycle: PENDING → ARRIVED → DELIVERED → PENDING
 const NEXT_STATE: Record<string, string> = {
   PENDING: "ARRIVED",
   ARRIVED: "DELIVERED",
@@ -16,7 +16,6 @@ interface ServiceCheckboxProps {
 }
 
 export function ServiceCheckbox({ service, onToggle }: ServiceCheckboxProps) {
-  const icon = SERVICE_ICONS[service.type as ServiceType] || "🔧";
   const label = service.type === "CUSTOM"
     ? service.customName || "Extra"
     : SERVICE_LABELS[service.type as ServiceType] || service.type;
@@ -28,11 +27,9 @@ export function ServiceCheckbox({ service, onToggle }: ServiceCheckboxProps) {
     DELIVERED: "bg-green-100 text-green-700",
   };
 
-  const stateIndicator: Record<string, string> = {
-    PENDING: "○",
-    ARRIVED: "◐",
-    DELIVERED: "✓",
-  };
+  const StateIndicator = service.state === "DELIVERED" ? DeliveredIcon
+    : service.state === "ARRIVED" ? ArrivedIcon
+    : PendingIcon;
 
   return (
     <button
@@ -40,8 +37,8 @@ export function ServiceCheckbox({ service, onToggle }: ServiceCheckboxProps) {
       className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${stateStyles[service.state] || stateStyles.PENDING}`}
       title={`${label} — ${service.state === "PENDING" ? "Pendiente" : service.state === "ARRIVED" ? "Llegado" : "Entregado"}${service.reference ? ` (Ref: ${service.reference})` : ""}. Click para avanzar.`}
     >
-      <span>{icon}</span>
-      {stateIndicator[service.state] || "○"}
+      <ServiceIcon type={service.type} size={12} />
+      <StateIndicator size={12} />
       {service.reference && <span className="text-[10px] opacity-60">#{service.reference}</span>}
       {service.deliveredAt && service.state === "DELIVERED" && (
         <span className="text-[10px] opacity-70">{service.deliveredAt}</span>

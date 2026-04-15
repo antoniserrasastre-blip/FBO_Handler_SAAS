@@ -3,6 +3,7 @@
 import { useSession, signOut } from "next-auth/react";
 import { Flight } from "@prisma/client";
 import { useRouter } from "next/navigation";
+import { ChevronLeft, ChevronRight } from "./Icons";
 
 interface DaySummaryProps {
   flights: Flight[];
@@ -71,7 +72,7 @@ export function DaySummary({ flights, date, connected, isToday = true, onDateCha
                 onClick={() => goDay(-1)}
                 className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
               >
-                ◀
+                <ChevronLeft size={14} />
               </button>
               <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-700 sm:px-2 sm:text-sm">
                 <span className="hidden sm:inline">{dateStrLong}</span>
@@ -81,7 +82,7 @@ export function DaySummary({ flights, date, connected, isToday = true, onDateCha
                 onClick={() => goDay(1)}
                 className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
               >
-                ▶
+                <ChevronRight size={14} />
               </button>
               {!isToday && (
                 <button

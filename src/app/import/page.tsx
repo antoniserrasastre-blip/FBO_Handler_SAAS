@@ -3,7 +3,8 @@
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { ParsedFlight } from "@/lib/pdfParser";
-import { SERVICE_LABELS, SERVICE_ICONS, ServiceType } from "@/types";
+import { SERVICE_LABELS, ServiceType } from "@/types";
+import { ServiceIcon, PdfIcon, ExcelIcon, SuccessIcon } from "@/components/Icons";
 
 type Tab = "pdf" | "extras";
 
@@ -125,7 +126,7 @@ function PdfImportTab() {
       {!result && !saveResult && (
         <UploadArea
           accept=".pdf,.PDF"
-          icon="📄"
+          icon={<PdfIcon size={40} className="text-gray-300" />}
           label="Arrastra el PDF de Cybermax o selecciona archivo"
           sublabel="Los vuelos existentes se actualizan automaticamente"
           loading={parsing}
@@ -243,7 +244,7 @@ function ExtrasImportTab() {
       {!result && !saveResult && (
         <UploadArea
           accept=".xlsx,.xls"
-          icon="📊"
+          icon={<ExcelIcon size={40} className="text-gray-300" />}
           label="Arrastra el Excel de extras o selecciona archivo"
           sublabel="Los servicios se asocian a cada avion por matricula"
           loading={parsing}
@@ -269,11 +270,10 @@ function ExtrasImportTab() {
                 </div>
                 <div className="mt-1.5 flex flex-wrap gap-1">
                   {extra.services.map((svc, j) => {
-                    const icon = SERVICE_ICONS[svc.type as ServiceType] || "🔧";
                     const label = svc.type === "CUSTOM" ? svc.name : (SERVICE_LABELS[svc.type as ServiceType] || svc.type);
                     return (
                       <span key={j} className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
-                        {icon} {(svc.quantity || 1) > 1 ? `${svc.quantity}x ` : ""}{label}
+                        <ServiceIcon type={svc.type} size={12} /> {(svc.quantity || 1) > 1 ? `${svc.quantity}x ` : ""}{label}
                       </span>
                     );
                   })}
@@ -306,7 +306,7 @@ function ExtrasImportTab() {
 
 // ======= Shared UI Components =======
 function UploadArea({ accept, icon, label, sublabel, loading, loadingText, onFile, inputRef }: {
-  accept: string; icon: string; label: string; sublabel: string;
+  accept: string; icon: React.ReactNode; label: string; sublabel: string;
   loading: boolean; loadingText: string;
   onFile: (f: File) => void; inputRef: React.RefObject<HTMLInputElement | null>;
 }) {
@@ -321,7 +321,7 @@ function UploadArea({ accept, icon, label, sublabel, loading, loadingText, onFil
         <div className="text-gray-500"><div className="mb-2 text-lg">{loadingText}</div></div>
       ) : (
         <>
-          <div className="mb-4 text-4xl text-gray-300">{icon}</div>
+          <div className="mb-4 flex justify-center">{icon}</div>
           <p className="text-gray-600">
             {label.split(" o ")[0]} o{" "}
             <button onClick={() => inputRef.current?.click()} className="font-medium text-blue-600 hover:text-blue-500">selecciona un archivo</button>
@@ -350,7 +350,7 @@ function SuccessResult({ lines, onReset, resetLabel }: { lines: (string | null)[
   const router = useRouter();
   return (
     <div className="mt-6 rounded-xl bg-white p-8 text-center shadow-sm">
-      <div className="mb-3 text-4xl text-green-500">✓</div>
+      <div className="mb-3 flex justify-center"><SuccessIcon size={40} className="text-green-500" /></div>
       <h2 className="text-lg font-bold text-gray-900">Importacion completada</h2>
       <div className="mt-3 space-y-1 text-sm text-gray-600">
         {lines.filter(Boolean).map((l, i) => <p key={i}>{l}</p>)}

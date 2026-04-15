@@ -10,6 +10,7 @@ import { TurnaroundAlerts } from "@/components/TurnaroundAlert";
 import { ToastContainer, ToastMessage } from "@/components/Toast";
 import { useEventStream } from "@/hooks/useEventStream";
 import { FlightEvent } from "@/lib/events";
+import { ChevronDown } from "@/components/Icons";
 
 type FlightWithRelations = Flight & {
   services: Service[];
@@ -212,7 +213,7 @@ export default function HomePage() {
             {flights.length > 0 && (
               <div className="relative group">
                 <button className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 sm:px-3 sm:py-2 sm:text-sm">
-                  Exportar ▾
+                  Exportar <ChevronDown size={14} className="inline" />
                 </button>
                 <div className="absolute right-0 top-full z-10 mt-1 hidden min-w-[140px] rounded-lg border bg-white py-1 shadow-lg group-hover:block">
                   <button
