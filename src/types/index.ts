@@ -68,6 +68,30 @@ export const FUEL_LABELS: Record<FuelState, string> = {
   SERVED: "Servido",
 };
 
+export const TOILET_STATES = ["NOT_REQUESTED", "REQUESTED", "COMPLETED"] as const;
+export type ToiletState = (typeof TOILET_STATES)[number];
+
+export const TOILET_LABELS: Record<ToiletState, string> = {
+  NOT_REQUESTED: "No pedido",
+  REQUESTED: "Pedido",
+  COMPLETED: "Completado",
+};
+
+export const BAGS_STATE_LABELS: Record<string, string> = {
+  PENDING: "Pendiente",
+  SENT_TO_AIRCRAFT: "En avion",
+};
+
+export const TRANSPORT_STATE_LABELS: Record<string, string> = {
+  PENDING: "Pendiente",
+  CONFIRMED: "Confirmado",
+};
+
+export const CREW_LOCATION_LABELS: Record<string, string> = {
+  IN_AIRCRAFT: "En avion",
+  IN_LOUNGE: "En sala",
+};
+
 export const TRANSPORT_TYPES = ["RENTAL_CAR", "PREPARED_CAR", "TAXI", "UNDEFINED"] as const;
 export type TransportType = (typeof TRANSPORT_TYPES)[number];
 

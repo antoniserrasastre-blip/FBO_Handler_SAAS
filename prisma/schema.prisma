@@ -79,7 +79,8 @@ model Flight {
   fuelServedAt   String?
 
   // Toilet
-  toiletState    String         @default("PENDING") // PENDING | COMPLETED
+  toiletState    String         @default("NOT_REQUESTED") // NOT_REQUESTED | REQUESTED | COMPLETED
+  toiletRequestedAt String?
   toiletCompletedAt String?
 
   services       Service[]

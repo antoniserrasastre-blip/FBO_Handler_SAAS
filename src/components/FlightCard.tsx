@@ -7,10 +7,16 @@ import {
   FlightState,
   FUEL_LABELS,
   FuelState,
+  TOILET_STATES,
+  TOILET_LABELS,
+  ToiletState,
   TRANSPORT_LABELS,
   TransportType,
   PAX_STATE_LABELS,
   PaxState,
+  BAGS_STATE_LABELS,
+  TRANSPORT_STATE_LABELS,
+  CREW_LOCATION_LABELS,
   FLIGHT_STATES,
   FUEL_STATES,
   TRANSPORT_TYPES,
@@ -48,11 +54,9 @@ export function FlightCard({
   const [expanded, setExpanded] = useState(false);
   const stateConfig = FLIGHT_STATE_CONFIG[flight.state as FlightState] || FLIGHT_STATE_CONFIG.EXPECTED;
 
-  // Progress percentage for the state bar
   const stateProgress: Record<string, number> = { EXPECTED: 0, ON_GROUND: 33, BOARDING: 66, DISPATCHED: 100 };
   const progress = stateProgress[flight.state] ?? 0;
 
-  // Check if arrival/departure dates differ from each other (overnight stay)
   const isOvernight = flight.arrivalDate && flight.departureDate && flight.arrivalDate !== flight.departureDate;
 
   return (
@@ -66,7 +70,6 @@ export function FlightCard({
         className="w-full cursor-pointer px-3 py-2 text-left sm:px-4 sm:py-3"
       >
         <div className="flex items-start justify-between gap-2 sm:gap-4">
-          {/* Left: aircraft info */}
           <div className="flex items-start gap-2 min-w-0 sm:gap-3">
             <span
               className={`mt-0.5 inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase sm:px-2.5 sm:text-xs ${stateConfig.bg} ${stateConfig.text}`}
@@ -89,8 +92,6 @@ export function FlightCard({
                   </span>
                 )}
               </div>
-
-              {/* Route with dates */}
               <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-gray-600 sm:mt-1 sm:gap-x-2 sm:text-sm">
                 <span className="text-gray-400">LLEG</span>
                 <span className="font-medium">{flight.origin || "----"}</span>
@@ -105,7 +106,6 @@ export function FlightCard({
             </div>
           </div>
 
-          {/* Right: quick stats */}
           <div className="hidden shrink-0 items-center gap-4 text-xs text-gray-500 sm:flex">
             <div className="text-center">
               <div className="text-gray-400">CREW</div>
@@ -127,7 +127,6 @@ export function FlightCard({
           <span className="sm:hidden">{expanded ? <ChevronUp size={16} className="text-gray-300" /> : <ChevronDown size={16} className="text-gray-300" />}</span>
         </div>
 
-        {/* State progress bar */}
         <div className="mt-1.5 h-1.5 w-full rounded-full bg-gray-100 sm:mt-2">
           <div
             className="h-full rounded-full transition-all duration-500"
@@ -135,7 +134,6 @@ export function FlightCard({
           />
         </div>
 
-        {/* Mobile quick stats */}
         <div className="mt-1 flex flex-wrap gap-x-3 text-[10px] text-gray-500 sm:hidden">
           <span>C:{flight.crewArrival}/{flight.crewDeparture}</span>
           <span>P:{flight.paxArrival}/{flight.paxDeparture}</span>
@@ -144,7 +142,6 @@ export function FlightCard({
           </span>
         </div>
 
-        {/* Services row + last modified in collapsed view */}
         {!expanded && (
           <div className="mt-2 flex items-center justify-between gap-4">
             <div onClick={(e) => e.stopPropagation()} className={readOnly ? "pointer-events-none" : ""}>
@@ -159,203 +156,134 @@ export function FlightCard({
         )}
       </div>
 
-      {/* Expanded view */}
+      {/* ========== EXPANDED VIEW ========== */}
       {expanded && (
         <div className="border-t border-gray-100 px-3 pb-3 pt-2 sm:px-4 sm:pb-4 sm:pt-3" onClick={(e) => e.stopPropagation()}>
-          <div className={`grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3 ${readOnly ? "pointer-events-none opacity-75" : ""}`}>
-            {/* Flight details — editable */}
-            <Section title="Datos del vuelo">
-              <div className="space-y-2">
-                <div className="grid grid-cols-3 gap-2">
-                  <TextField label="Indicativo" value={flight.callsign} onChange={(v) => onUpdate(flight.id, { callsign: v })} />
-                  <TextField label="Matricula" value={flight.registration} onChange={(v) => onUpdate(flight.id, { registration: v })} />
-                  <TextField label="Tipo" value={flight.aircraftType} onChange={(v) => onUpdate(flight.id, { aircraftType: v })} />
-                </div>
-                <div className="grid grid-cols-4 gap-2">
-                  <TextField label="Origen" value={flight.origin || ""} onChange={(v) => onUpdate(flight.id, { origin: v })} placeholder="ICAO" />
-                  <TextField label="Fecha lleg." value={flight.arrivalDate || ""} onChange={(v) => onUpdate(flight.id, { arrivalDate: v })} placeholder="DD/MM" />
+          <div className={`grid gap-4 lg:grid-cols-3 ${readOnly ? "pointer-events-none opacity-75" : ""}`}>
+
+            {/* ===== LEFT COLUMN — LLEGADA ===== */}
+            <div className="space-y-4 rounded-lg bg-blue-50/40 p-3">
+              <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-blue-700">
+                <span className="flex h-5 w-5 items-center justify-center rounded bg-blue-100 text-[10px]">&#x2193;</span>
+                Llegada
+              </h2>
+
+              {/* Arrival flight info */}
+              <Section title="Vuelo">
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <TextField label="Origen" value={flight.origin || ""} onChange={(v) => onUpdate(flight.id, { origin: v })} placeholder="ICAO" />
+                    <TextField label="Fecha" value={flight.arrivalDate || ""} onChange={(v) => onUpdate(flight.id, { arrivalDate: v })} placeholder="DD/MM" />
+                  </div>
                   <TextField label="ETA" value={flight.eta || ""} onChange={(v) => onUpdate(flight.id, { eta: v })} placeholder="HH:MM" />
-                  <TextField label="Parking" value={flight.parking || ""} onChange={(v) => onUpdate(flight.id, { parking: v })} />
                 </div>
-                <div className="grid grid-cols-4 gap-2">
-                  <TextField label="Destino" value={flight.destination || ""} onChange={(v) => onUpdate(flight.id, { destination: v })} placeholder="ICAO" />
-                  <TextField label="Fecha sal." value={flight.departureDate || ""} onChange={(v) => onUpdate(flight.id, { departureDate: v })} placeholder="DD/MM" />
-                  <TextField label="ETD" value={flight.etd || ""} onChange={(v) => onUpdate(flight.id, { etd: v })} placeholder="HH:MM" />
-                  <TextField label="TOBT" value={flight.tobt || ""} onChange={(v) => onUpdate(flight.id, { tobt: v })} placeholder="HH:MM" />
-                </div>
-              </div>
-            </Section>
+              </Section>
 
-            {/* Flight State */}
-            <Section title="Estado del vuelo">
-              <div className="flex flex-wrap gap-1">
-                {FLIGHT_STATES.map((s) => (
-                  <button
-                    key={s}
-                    onClick={() => onUpdate(flight.id, { state: s })}
-                    className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                      flight.state === s
-                        ? `${FLIGHT_STATE_CONFIG[s].bg} ${FLIGHT_STATE_CONFIG[s].text} ring-1 ring-current`
-                        : "bg-gray-50 text-gray-400 hover:bg-gray-100"
-                    }`}
-                  >
-                    {FLIGHT_STATE_CONFIG[s].label}
-                  </button>
-                ))}
-              </div>
-            </Section>
-
-            {/* Arrival Crew */}
-            <Section title="Tripulacion llegada">
-              <div className="space-y-2">
-                <NumberField
-                  label="Crew"
-                  value={flight.crewArrival}
-                  onChange={(v) => onUpdate(flight.id, { crewArrival: v })}
-                />
-                <SelectField
-                  label="Ubicacion"
-                  value={flight.crewArrLocation}
-                  options={[
-                    { value: "IN_AIRCRAFT", label: "En avion" },
-                    { value: "IN_LOUNGE", label: "En sala" },
-                  ]}
-                  onChange={(v) => onUpdate(flight.id, { crewArrLocation: v })}
-                />
-                <NumberField
-                  label="Cruces filtro"
-                  value={flight.crewArrFilterCrossings}
-                  onChange={(v) => onUpdate(flight.id, { crewArrFilterCrossings: v })}
-                />
-              </div>
-            </Section>
-
-            {/* Arrival Passengers */}
-            <Section title="Pasajeros llegada">
-              <div className="space-y-2">
-                <NumberField
-                  label="Pax"
-                  value={flight.paxArrival}
-                  onChange={(v) => onUpdate(flight.id, { paxArrival: v })}
-                />
-                <div className="flex gap-2">
-                  <NumberField
-                    label="Bodega"
-                    value={flight.paxArrBagsChecked}
-                    onChange={(v) => onUpdate(flight.id, { paxArrBagsChecked: v })}
+              {/* Arrival Crew */}
+              <Section title="Tripulacion">
+                <div className="space-y-2">
+                  <NumberField label="Crew" value={flight.crewArrival} onChange={(v) => onUpdate(flight.id, { crewArrival: v })} />
+                  <ButtonGroup
+                    label="Ubicacion"
+                    value={flight.crewArrLocation}
+                    options={[
+                      { value: "IN_AIRCRAFT", label: "En avion", activeClass: "bg-blue-100 text-blue-700 ring-1 ring-blue-400" },
+                      { value: "IN_LOUNGE", label: "En sala", activeClass: "bg-amber-100 text-amber-700 ring-1 ring-amber-400" },
+                    ]}
+                    onChange={(v) => onUpdate(flight.id, { crewArrLocation: v })}
                   />
-                  <NumberField
-                    label="Cabina"
-                    value={flight.paxArrBagsCabin}
-                    onChange={(v) => onUpdate(flight.id, { paxArrBagsCabin: v })}
+                  <NumberField label="Cruces filtro" value={flight.crewArrFilterCrossings} onChange={(v) => onUpdate(flight.id, { crewArrFilterCrossings: v })} />
+                </div>
+              </Section>
+
+              {/* Arrival Passengers */}
+              <Section title="Pasajeros">
+                <div className="space-y-2">
+                  <NumberField label="Pax" value={flight.paxArrival} onChange={(v) => onUpdate(flight.id, { paxArrival: v })} />
+                  <div className="flex gap-2">
+                    <NumberField label="Bodega" value={flight.paxArrBagsChecked} onChange={(v) => onUpdate(flight.id, { paxArrBagsChecked: v })} />
+                    <NumberField label="Cabina" value={flight.paxArrBagsCabin} onChange={(v) => onUpdate(flight.id, { paxArrBagsCabin: v })} />
+                  </div>
+                  <ButtonGroup
+                    label="Maletas"
+                    value={flight.paxArrBagsState}
+                    options={[
+                      { value: "PENDING", label: "Pendiente" },
+                      { value: "SENT_TO_AIRCRAFT", label: "En avion", activeClass: "bg-green-100 text-green-700 ring-1 ring-green-400" },
+                    ]}
+                    onChange={(v) => onUpdate(flight.id, { paxArrBagsState: v })}
+                  />
+                  <ButtonGroup
+                    label="Estado pax"
+                    value={flight.paxArrState}
+                    options={PAX_STATES.map((s) => ({
+                      value: s,
+                      label: PAX_STATE_LABELS[s],
+                      activeClass: s === "BOARDED" ? "bg-green-100 text-green-700 ring-1 ring-green-400"
+                        : s === "IN_LOUNGE" ? "bg-yellow-100 text-yellow-700 ring-1 ring-yellow-400"
+                        : undefined,
+                    }))}
+                    onChange={(v) => onUpdate(flight.id, { paxArrState: v })}
+                  />
+                  <ButtonGroup
+                    label="Transporte"
+                    value={flight.paxArrTransportType}
+                    options={TRANSPORT_TYPES.map((t) => ({ value: t, label: TRANSPORT_LABELS[t] }))}
+                    onChange={(v) => onUpdate(flight.id, { paxArrTransportType: v })}
+                  />
+                  <ButtonGroup
+                    label="Est. transporte"
+                    value={flight.paxArrTransportState}
+                    options={[
+                      { value: "PENDING", label: "Pendiente" },
+                      { value: "CONFIRMED", label: "Confirmado", activeClass: "bg-green-100 text-green-700 ring-1 ring-green-400" },
+                    ]}
+                    onChange={(v) => onUpdate(flight.id, { paxArrTransportState: v })}
                   />
                 </div>
-                <SelectField
-                  label="Transporte"
-                  value={flight.paxArrTransportType}
-                  options={TRANSPORT_TYPES.map((t) => ({ value: t, label: TRANSPORT_LABELS[t] }))}
-                  onChange={(v) => onUpdate(flight.id, { paxArrTransportType: v })}
-                />
-                <SelectField
-                  label="Estado transporte"
-                  value={flight.paxArrTransportState}
-                  options={[
-                    { value: "PENDING", label: "Pendiente" },
-                    { value: "CONFIRMED", label: "Confirmado" },
-                  ]}
-                  onChange={(v) => onUpdate(flight.id, { paxArrTransportState: v })}
-                />
-              </div>
-            </Section>
+              </Section>
+            </div>
 
-            {/* Departure Crew */}
-            <Section title="Tripulacion salida">
-              <div className="space-y-2">
-                <NumberField
-                  label="Crew"
-                  value={flight.crewDeparture}
-                  onChange={(v) => onUpdate(flight.id, { crewDeparture: v })}
-                />
-                <SelectField
-                  label="Ubicacion"
-                  value={flight.crewDepLocation}
-                  options={[
-                    { value: "IN_AIRCRAFT", label: "En avion" },
-                    { value: "IN_LOUNGE", label: "En sala" },
-                  ]}
-                  onChange={(v) => onUpdate(flight.id, { crewDepLocation: v })}
-                />
-                <NumberField
-                  label="Cruces filtro"
-                  value={flight.crewDepFilterCrossings}
-                  onChange={(v) => onUpdate(flight.id, { crewDepFilterCrossings: v })}
-                />
-              </div>
-            </Section>
-
-            {/* Departure Passengers */}
-            <Section title={
-              <span>
-                Pasajeros salida
-              </span>
-            }>
-              <div className="space-y-2">
-                <NumberField
-                  label="Pax"
-                  value={flight.paxDeparture}
-                  onChange={(v) => onUpdate(flight.id, { paxDeparture: v })}
-                />
-                <div className="flex gap-2">
-                  <NumberField
-                    label="Bodega"
-                    value={flight.paxDepBagsChecked}
-                    onChange={(v) => onUpdate(flight.id, { paxDepBagsChecked: v })}
-                  />
-                  <NumberField
-                    label="Cabina"
-                    value={flight.paxDepBagsCabin}
-                    onChange={(v) => onUpdate(flight.id, { paxDepBagsCabin: v })}
-                  />
+            {/* ===== CENTER COLUMN — ESTADO, DATOS, FUEL, TOILET ===== */}
+            <div className="space-y-4">
+              {/* Flight State */}
+              <Section title="Estado del vuelo">
+                <div className="flex flex-wrap gap-1">
+                  {FLIGHT_STATES.map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => onUpdate(flight.id, { state: s })}
+                      className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                        flight.state === s
+                          ? `${FLIGHT_STATE_CONFIG[s].bg} ${FLIGHT_STATE_CONFIG[s].text} ring-1 ring-current`
+                          : "bg-gray-50 text-gray-400 hover:bg-gray-100"
+                      }`}
+                    >
+                      {FLIGHT_STATE_CONFIG[s].label}
+                    </button>
+                  ))}
                 </div>
-                <SelectField
-                  label="Maletas"
-                  value={flight.paxDepBagsState}
-                  options={[
-                    { value: "PENDING", label: "Pendiente" },
-                    { value: "SENT_TO_AIRCRAFT", label: "Enviadas a avion" },
-                  ]}
-                  onChange={(v) => onUpdate(flight.id, { paxDepBagsState: v })}
-                />
-                <SelectField
-                  label="Estado pax"
-                  value={flight.paxDepState}
-                  options={PAX_STATES.map((s) => ({ value: s, label: PAX_STATE_LABELS[s] }))}
-                  onChange={(v) => onUpdate(flight.id, { paxDepState: v })}
-                />
-                <SelectField
-                  label="Transporte"
-                  value={flight.paxDepTransportType}
-                  options={TRANSPORT_TYPES.map((t) => ({ value: t, label: TRANSPORT_LABELS[t] }))}
-                  onChange={(v) => onUpdate(flight.id, { paxDepTransportType: v })}
-                />
-                <SelectField
-                  label="Estado transporte"
-                  value={flight.paxDepTransportState}
-                  options={[
-                    { value: "PENDING", label: "Pendiente" },
-                    { value: "CONFIRMED", label: "Confirmado" },
-                  ]}
-                  onChange={(v) => onUpdate(flight.id, { paxDepTransportState: v })}
-                />
-              </div>
-            </Section>
+              </Section>
 
-            {/* Fuel & Toilet */}
-            <Section title="Combustible y servicios">
-              <div className="space-y-3">
+              {/* Flight Data */}
+              <Section title="Datos del vuelo">
+                <div className="space-y-2">
+                  <div className="grid grid-cols-3 gap-2">
+                    <TextField label="Indicativo" value={flight.callsign} onChange={(v) => onUpdate(flight.id, { callsign: v })} />
+                    <TextField label="Matricula" value={flight.registration} onChange={(v) => onUpdate(flight.id, { registration: v })} />
+                    <TextField label="Tipo" value={flight.aircraftType} onChange={(v) => onUpdate(flight.id, { aircraftType: v })} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <TextField label="Parking" value={flight.parking || ""} onChange={(v) => onUpdate(flight.id, { parking: v })} />
+                    <TextField label="TOBT" value={flight.tobt || ""} onChange={(v) => onUpdate(flight.id, { tobt: v })} placeholder="HH:MM" />
+                  </div>
+                </div>
+              </Section>
+
+              {/* Fuel */}
+              <Section title="Combustible">
                 <div>
-                  <label className="text-xs font-medium text-gray-500">Fuel</label>
-                  <div className="mt-1 flex gap-1">
+                  <div className="flex gap-1">
                     {FUEL_STATES.map((s) => (
                       <button
                         key={s}
@@ -369,7 +297,7 @@ export function FlightCard({
                           }
                           onUpdate(flight.id, data);
                         }}
-                        className={`rounded-md px-2 py-1 text-xs font-medium transition-colors ${
+                        className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
                           flight.fuelState === s
                             ? s === "SERVED" ? "bg-green-100 text-green-700 ring-1 ring-green-400"
                               : s === "REQUESTED" ? "bg-yellow-100 text-yellow-700 ring-1 ring-yellow-400"
@@ -381,91 +309,183 @@ export function FlightCard({
                       </button>
                     ))}
                   </div>
+                  {flight.fuelRequestedAt && (
+                    <p className="mt-0.5 text-[10px] text-gray-400">Pedido: {flight.fuelRequestedAt}</p>
+                  )}
                   {flight.fuelServedAt && (
                     <p className="mt-0.5 text-[10px] text-gray-400">Servido: {flight.fuelServedAt}</p>
                   )}
                 </div>
+              </Section>
 
+              {/* Toilet */}
+              <Section title="Toilet">
                 <div>
-                  <label className="text-xs font-medium text-gray-500">Toilet</label>
-                  <div className="mt-1 flex gap-1">
-                    {(["PENDING", "COMPLETED"] as const).map((s) => (
+                  <div className="flex gap-1">
+                    {TOILET_STATES.map((s) => (
                       <button
                         key={s}
                         onClick={() => {
                           const data: Partial<Flight> & Record<string, unknown> = { toiletState: s };
+                          if (s === "REQUESTED") {
+                            data.toiletRequestedAt = new Date().toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+                          }
                           if (s === "COMPLETED") {
                             data.toiletCompletedAt = new Date().toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
                           }
                           onUpdate(flight.id, data);
                         }}
-                        className={`rounded-md px-2 py-1 text-xs font-medium transition-colors ${
+                        className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
                           flight.toiletState === s
                             ? s === "COMPLETED" ? "bg-green-100 text-green-700 ring-1 ring-green-400"
+                              : s === "REQUESTED" ? "bg-yellow-100 text-yellow-700 ring-1 ring-yellow-400"
                               : "bg-gray-100 text-gray-700 ring-1 ring-gray-400"
                             : "bg-gray-50 text-gray-400 hover:bg-gray-100"
                         }`}
                       >
-                        {s === "PENDING" ? "Pendiente" : "Completado"}
+                        {TOILET_LABELS[s]}
                       </button>
                     ))}
                   </div>
+                  {(flight as unknown as Record<string, string>).toiletRequestedAt && (
+                    <p className="mt-0.5 text-[10px] text-gray-400">Pedido: {(flight as unknown as Record<string, string>).toiletRequestedAt}</p>
+                  )}
                   {flight.toiletCompletedAt && (
                     <p className="mt-0.5 text-[10px] text-gray-400">Completado: {flight.toiletCompletedAt}</p>
                   )}
                 </div>
-              </div>
-            </Section>
-          </div>
+              </Section>
 
-          {/* Services section */}
-          <div className={`mt-4 ${readOnly ? "pointer-events-none opacity-75" : ""}`}>
-            <Section title="Servicios / Extras">
-              <div className="space-y-2">
-                <ServiceBadges services={flight.services} onToggle={onServiceToggle} />
-                <AddServiceRow
-                  flightId={flight.id}
-                  existingTypes={flight.services.map((s) => s.type)}
-                  onAdd={onAddService}
-                />
-                {flight.services.length > 0 && (
-                  <div className="mt-2 space-y-1">
-                    {flight.services.map((service) => (
-                      <div key={service.id} className="flex items-center justify-between gap-2 text-xs text-gray-500">
-                        <span className="flex min-w-0 items-center gap-1">
-                          <ServiceIcon type={service.type} size={12} className="shrink-0 text-gray-400" />
-                          {service.type === "CUSTOM" ? service.customName : SERVICE_LABELS[service.type as ServiceType]}{" "}
-                          {service.reference && <span className="text-blue-500">#{service.reference}</span>}
-                          {service.origin && <span className="text-gray-400">({service.origin})</span>}
-                        </span>
-                        <div className="flex shrink-0 items-center gap-2">
-                          {service.arrivedAt && <span className="flex items-center gap-0.5 text-blue-500"><ArrivedIcon size={10} /> {service.arrivedAt}</span>}
-                          {service.deliveredAt && <span className="flex items-center gap-0.5 text-green-600"><DeliveredIcon size={10} /> {service.deliveredAt}</span>}
-                          <button
-                            onClick={() => onDeleteService(service.id)}
-                            className="text-red-400 hover:text-red-600"
-                            title="Eliminar servicio"
-                          >
-                            <CloseIcon size={12} />
-                          </button>
+              {/* Services */}
+              <Section title="Servicios / Extras">
+                <div className="space-y-2">
+                  <ServiceBadges services={flight.services} onToggle={onServiceToggle} />
+                  <AddServiceRow
+                    flightId={flight.id}
+                    existingTypes={flight.services.map((s) => s.type)}
+                    onAdd={onAddService}
+                  />
+                  {flight.services.length > 0 && (
+                    <div className="mt-2 space-y-1">
+                      {flight.services.map((service) => (
+                        <div key={service.id} className="flex items-center justify-between gap-2 text-xs text-gray-500">
+                          <span className="flex min-w-0 items-center gap-1">
+                            <ServiceIcon type={service.type} size={12} className="shrink-0 text-gray-400" />
+                            {service.type === "CUSTOM" ? service.customName : SERVICE_LABELS[service.type as ServiceType]}{" "}
+                            {service.reference && <span className="text-blue-500">#{service.reference}</span>}
+                            {service.origin && <span className="text-gray-400">({service.origin})</span>}
+                          </span>
+                          <div className="flex shrink-0 items-center gap-2">
+                            {service.arrivedAt && <span className="flex items-center gap-0.5 text-blue-500"><ArrivedIcon size={10} /> {service.arrivedAt}</span>}
+                            {service.deliveredAt && <span className="flex items-center gap-0.5 text-green-600"><DeliveredIcon size={10} /> {service.deliveredAt}</span>}
+                            <button
+                              onClick={() => onDeleteService(service.id)}
+                              className="text-red-400 hover:text-red-600"
+                              title="Eliminar servicio"
+                            >
+                              <CloseIcon size={12} />
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </Section>
+            </div>
+
+            {/* ===== RIGHT COLUMN — SALIDA ===== */}
+            <div className="space-y-4 rounded-lg bg-orange-50/40 p-3">
+              <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-orange-700">
+                <span className="flex h-5 w-5 items-center justify-center rounded bg-orange-100 text-[10px]">&#x2191;</span>
+                Salida
+              </h2>
+
+              {/* Departure flight info */}
+              <Section title="Vuelo">
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <TextField label="Destino" value={flight.destination || ""} onChange={(v) => onUpdate(flight.id, { destination: v })} placeholder="ICAO" />
+                    <TextField label="Fecha" value={flight.departureDate || ""} onChange={(v) => onUpdate(flight.id, { departureDate: v })} placeholder="DD/MM" />
                   </div>
-                )}
-              </div>
-            </Section>
+                  <TextField label="ETD" value={flight.etd || ""} onChange={(v) => onUpdate(flight.id, { etd: v })} placeholder="HH:MM" />
+                </div>
+              </Section>
+
+              {/* Departure Crew */}
+              <Section title="Tripulacion">
+                <div className="space-y-2">
+                  <NumberField label="Crew" value={flight.crewDeparture} onChange={(v) => onUpdate(flight.id, { crewDeparture: v })} />
+                  <ButtonGroup
+                    label="Ubicacion"
+                    value={flight.crewDepLocation}
+                    options={[
+                      { value: "IN_AIRCRAFT", label: "En avion", activeClass: "bg-blue-100 text-blue-700 ring-1 ring-blue-400" },
+                      { value: "IN_LOUNGE", label: "En sala", activeClass: "bg-amber-100 text-amber-700 ring-1 ring-amber-400" },
+                    ]}
+                    onChange={(v) => onUpdate(flight.id, { crewDepLocation: v })}
+                  />
+                  <NumberField label="Cruces filtro" value={flight.crewDepFilterCrossings} onChange={(v) => onUpdate(flight.id, { crewDepFilterCrossings: v })} />
+                </div>
+              </Section>
+
+              {/* Departure Passengers */}
+              <Section title="Pasajeros">
+                <div className="space-y-2">
+                  <NumberField label="Pax" value={flight.paxDeparture} onChange={(v) => onUpdate(flight.id, { paxDeparture: v })} />
+                  <div className="flex gap-2">
+                    <NumberField label="Bodega" value={flight.paxDepBagsChecked} onChange={(v) => onUpdate(flight.id, { paxDepBagsChecked: v })} />
+                    <NumberField label="Cabina" value={flight.paxDepBagsCabin} onChange={(v) => onUpdate(flight.id, { paxDepBagsCabin: v })} />
+                  </div>
+                  <ButtonGroup
+                    label="Maletas"
+                    value={flight.paxDepBagsState}
+                    options={[
+                      { value: "PENDING", label: "Pendiente" },
+                      { value: "SENT_TO_AIRCRAFT", label: "En avion", activeClass: "bg-green-100 text-green-700 ring-1 ring-green-400" },
+                    ]}
+                    onChange={(v) => onUpdate(flight.id, { paxDepBagsState: v })}
+                  />
+                  <ButtonGroup
+                    label="Estado pax"
+                    value={flight.paxDepState}
+                    options={PAX_STATES.map((s) => ({
+                      value: s,
+                      label: PAX_STATE_LABELS[s],
+                      activeClass: s === "BOARDED" ? "bg-green-100 text-green-700 ring-1 ring-green-400"
+                        : s === "IN_LOUNGE" ? "bg-yellow-100 text-yellow-700 ring-1 ring-yellow-400"
+                        : undefined,
+                    }))}
+                    onChange={(v) => onUpdate(flight.id, { paxDepState: v })}
+                  />
+                  <ButtonGroup
+                    label="Transporte"
+                    value={flight.paxDepTransportType}
+                    options={TRANSPORT_TYPES.map((t) => ({ value: t, label: TRANSPORT_LABELS[t] }))}
+                    onChange={(v) => onUpdate(flight.id, { paxDepTransportType: v })}
+                  />
+                  <ButtonGroup
+                    label="Est. transporte"
+                    value={flight.paxDepTransportState}
+                    options={[
+                      { value: "PENDING", label: "Pendiente" },
+                      { value: "CONFIRMED", label: "Confirmado", activeClass: "bg-green-100 text-green-700 ring-1 ring-green-400" },
+                    ]}
+                    onChange={(v) => onUpdate(flight.id, { paxDepTransportState: v })}
+                  />
+                </div>
+              </Section>
+            </div>
           </div>
 
-          {/* Enhanced Event log timeline */}
+          {/* Event log — full width below */}
           {flight.eventLogs.length > 0 && (
             <div className="mt-4">
               <Section title="Log de eventos">
                 <div className="max-h-48 overflow-y-auto">
                   <div className="relative border-l-2 border-gray-200 pl-4">
                     {flight.eventLogs.map((log, i) => (
-                      <div key={log.id} className={`relative pb-3 ${i === 0 ? "" : ""}`}>
-                        {/* Timeline dot */}
+                      <div key={log.id} className="relative pb-3">
                         <div className={`absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full border-2 border-white ${i === 0 ? "bg-blue-500" : "bg-gray-300"}`} />
                         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                           <span className={`text-xs font-medium ${i === 0 ? "text-gray-700" : "text-gray-500"}`}>
@@ -499,6 +519,39 @@ export function FlightCard({
 
 // --- Helper sub-components ---
 
+function ButtonGroup({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: { value: string; label: string; activeClass?: string }[];
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div>
+      <label className="block text-[10px] font-medium text-gray-400 mb-0.5">{label}</label>
+      <div className="flex flex-wrap gap-1">
+        {options.map((opt) => (
+          <button
+            key={opt.value}
+            onClick={() => onChange(opt.value)}
+            className={`rounded-md px-2 py-1 text-xs font-medium transition-colors ${
+              value === opt.value
+                ? opt.activeClass || "bg-gray-200 text-gray-700 ring-1 ring-gray-400"
+                : "bg-gray-50 text-gray-400 hover:bg-gray-100"
+            }`}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function TextField({
   label,
   value,
@@ -513,7 +566,6 @@ function TextField({
   const [local, setLocal] = useState(value);
   const [dirty, setDirty] = useState(false);
 
-  // Sync with external updates
   if (!dirty && local !== value) setLocal(value);
 
   return (
@@ -579,35 +631,6 @@ function NumberField({
           +
         </button>
       </div>
-    </div>
-  );
-}
-
-function SelectField({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  options: { value: string; label: string }[];
-  onChange: (v: string) => void;
-}) {
-  return (
-    <div className="flex items-center gap-2">
-      <label className="w-16 shrink-0 text-xs text-gray-500">{label}</label>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="rounded border border-gray-200 px-2 py-1 text-xs text-gray-700"
-      >
-        {options.map((opt) => (
-          <option key={opt.value} value={opt.value}>
-            {opt.label}
-          </option>
-        ))}
-      </select>
     </div>
   );
 }
