@@ -17,10 +17,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No se envio ningun archivo PDF" }, { status: 400 });
   }
 
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const result = await parseCybermaxPdf(buffer);
-
-  return NextResponse.json(result);
+  try {
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const result = await parseCybermaxPdf(buffer);
+    return NextResponse.json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Error procesando PDF";
+    return NextResponse.json({ error: message, flights: [], errors: [message] }, { status: 500 });
+  }
 }
 
 // PUT /api/import — confirm and save parsed flights
