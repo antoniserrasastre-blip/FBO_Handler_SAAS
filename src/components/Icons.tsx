@@ -1,11 +1,12 @@
 import {
   UtensilsCrossed,
+  Wine,
   Snowflake,
-  Package,
-  Shirt,
+  BriefcaseConveyorBelt,
+  WashingMachine,
   Coffee,
   Newspaper,
-  Wrench,
+  Sparkles,
   ChevronUp,
   ChevronDown,
   ChevronLeft,
@@ -25,17 +26,17 @@ import { ServiceType } from "@/types";
 // Service type → icon mapping
 const SERVICE_ICON_MAP: Record<ServiceType, React.FC<LucideProps>> = {
   CATERING: UtensilsCrossed,
-  DISHES: UtensilsCrossed,
+  DISHES: Wine,
   COOLER_BAG: Snowflake,
-  STORAGE_BAG: Package,
-  LAUNDRY: Shirt,
+  STORAGE_BAG: BriefcaseConveyorBelt,
+  LAUNDRY: WashingMachine,
   THERMOS: Coffee,
   NEWSPAPERS: Newspaper,
-  CUSTOM: Wrench,
+  CUSTOM: Sparkles,
 };
 
 export function ServiceIcon({ type, size = 14, className }: { type: string; size?: number; className?: string }) {
-  const Icon = SERVICE_ICON_MAP[type as ServiceType] || Wrench;
+  const Icon = SERVICE_ICON_MAP[type as ServiceType] || Sparkles;
   return <Icon size={size} className={className} />;
 }
 
