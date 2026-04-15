@@ -38,6 +38,19 @@ export async function GET() {
     }
     log.push("Tables created");
 
+    // 1b. Migrate existing tables: add new columns if missing
+    const migrations = [
+      `ALTER TABLE "Flight" ADD COLUMN "toiletRequestedAt" TEXT`,
+    ];
+    for (const sql of migrations) {
+      try {
+        await client.execute(sql);
+        log.push("Migration applied: " + sql.slice(0, 60));
+      } catch {
+        // Column already exists — ignore
+      }
+    }
+
     // 2. Seed users
     const now = new Date().toISOString();
     const users = [
