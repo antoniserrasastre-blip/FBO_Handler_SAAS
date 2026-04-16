@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { requireAdmin } from "@/lib/roles";
 
 // GET /api/daysheets — list all day sheets with flight counts
 export async function GET() {
@@ -44,4 +45,32 @@ export async function GET() {
   });
 
   return NextResponse.json(result);
+}
+
+// DELETE /api/daysheets?id=xxx — delete a specific day sheet (and all its flights/services/logs)
+// DELETE /api/daysheets?all=true — delete ALL data (all daysheets, flights, services, logs)
+export async function DELETE(req: NextRequest) {
+  const { error } = await requireAdmin();
+  if (error) return error;
+
+  const id = req.nextUrl.searchParams.get("id");
+  const all = req.nextUrl.searchParams.get("all");
+
+  if (all === "true") {
+    // Delete everything (cascade deletes flights, services, logs)
+    await prisma.eventLog.deleteMany();
+    await prisma.service.deleteMany();
+    await prisma.flight.deleteMany();
+    await prisma.daySheet.deleteMany();
+    return NextResponse.json({ ok: true, message: "Todos los datos eliminados" });
+  }
+
+  if (id) {
+    const ds = await prisma.daySheet.findUnique({ where: { id } });
+    if (!ds) return NextResponse.json({ error: "No encontrado" }, { status: 404 });
+    await prisma.daySheet.delete({ where: { id } });
+    return NextResponse.json({ ok: true, message: `DaySheet ${ds.date.toISOString().slice(0, 10)} eliminado` });
+  }
+
+  return NextResponse.json({ error: "Falta parametro id o all=true" }, { status: 400 });
 }

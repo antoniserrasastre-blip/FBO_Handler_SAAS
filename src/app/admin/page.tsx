@@ -251,6 +251,47 @@ export default function AdminPage() {
           ))}
         </div>
       </div>
+
+      {/* Data Management */}
+      <div className="mt-8 rounded-lg border border-red-200 bg-red-50 p-4">
+        <h2 className="text-sm font-bold text-red-700 mb-3">Gestion de datos</h2>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={async () => {
+              if (!window.confirm("Eliminar TODOS los vuelos y datos del dia actual?")) return;
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              const res = await fetch("/api/daysheets");
+              const sheets = await res.json();
+              const todaySheet = sheets.find((s: { date: string }) => {
+                const d = new Date(s.date);
+                d.setHours(0, 0, 0, 0);
+                return d.getTime() === today.getTime();
+              });
+              if (todaySheet) {
+                await fetch(`/api/daysheets?id=${todaySheet.id}`, { method: "DELETE" });
+                alert("Dia eliminado");
+              } else {
+                alert("No hay datos para hoy");
+              }
+            }}
+            className="rounded bg-red-100 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-200"
+          >
+            Borrar dia actual
+          </button>
+          <button
+            onClick={async () => {
+              if (!window.confirm("ATENCION: Esto eliminara TODOS los vuelos, servicios y datos de TODAS las fechas. Continuar?")) return;
+              if (!window.confirm("Seguro? Esta accion no se puede deshacer.")) return;
+              await fetch("/api/daysheets?all=true", { method: "DELETE" });
+              alert("Todos los datos eliminados");
+            }}
+            className="rounded bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700"
+          >
+            Borrar TODOS los datos
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

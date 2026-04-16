@@ -54,19 +54,32 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: `No hay hoja del dia para ${targetDate.toLocaleDateString("es-ES")}` }, { status: 404 });
   }
 
-  // Get all flights for this day, indexed by registration
+  // Get all flights for this day, indexed by registration (normalized without dashes)
   const flights = await prisma.flight.findMany({
     where: { daySheetId: daySheet.id },
     include: { services: true },
   });
-  const flightByReg = new Map(flights.map((f) => [f.registration, f]));
+
+  // Build lookup maps: both with-dash and without-dash forms
+  const flightByReg = new Map<string, typeof flights[0]>();
+  for (const f of flights) {
+    flightByReg.set(f.registration, f);
+    flightByReg.set(f.registration.replace(/-/g, ""), f);
+    flightByReg.set(f.registration.toUpperCase(), f);
+    flightByReg.set(f.registration.replace(/-/g, "").toUpperCase(), f);
+  }
 
   let matched = 0;
   let servicesCreated = 0;
   let notFound: string[] = [];
 
   for (const extra of extras) {
-    const flight = flightByReg.get(extra.registration);
+    // Try exact match, then without dashes, then uppercase variants
+    const reg = extra.registration;
+    const flight = flightByReg.get(reg)
+      || flightByReg.get(reg.replace(/-/g, ""))
+      || flightByReg.get(reg.toUpperCase())
+      || flightByReg.get(reg.replace(/-/g, "").toUpperCase());
     if (!flight) {
       notFound.push(extra.registration);
       continue;
