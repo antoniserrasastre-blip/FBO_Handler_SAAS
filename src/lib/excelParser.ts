@@ -289,7 +289,38 @@ export function parseExtrasExcel(buffer: Buffer): ExcelParseResult {
     }
   }
 
-  return { date, extras, errors };
+  // Convert date like "13APR", "10ABR", "5MAY" to YYYY-MM-DD
+  const parsedDate = parseExcelDate(date);
+
+  return { date: parsedDate || date, extras, errors };
+}
+
+const MONTH_MAP: Record<string, number> = {
+  JAN: 0, FEB: 1, MAR: 2, APR: 3, MAY: 4, JUN: 5,
+  JUL: 6, AUG: 7, SEP: 8, OCT: 9, NOV: 10, DEC: 11,
+  ENE: 0, FEV: 1, ABR: 3, AGO: 7, SET: 8, DIC: 11,
+};
+
+function parseExcelDate(raw: string): string | null {
+  if (!raw) return null;
+  const cleaned = raw.trim().toUpperCase().replace(/\s+/g, "");
+  // Match "13APR", "5MAY", "10ABR", "13APR26", etc.
+  const m = cleaned.match(/^(\d{1,2})([A-Z]{3})(\d{2,4})?$/);
+  if (!m) return null;
+  const day = parseInt(m[1], 10);
+  const monthStr = m[2];
+  const month = MONTH_MAP[monthStr];
+  if (month === undefined) return null;
+  let year: number;
+  if (m[3]) {
+    year = parseInt(m[3], 10);
+    if (year < 100) year += 2000;
+  } else {
+    year = new Date().getFullYear();
+  }
+  const dd = String(day).padStart(2, "0");
+  const mm = String(month + 1).padStart(2, "0");
+  return `${year}-${mm}-${dd}`;
 }
 
 function categorizeService(desc: string): ParsedService[] {

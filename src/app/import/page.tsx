@@ -234,7 +234,12 @@ function ExtrasImportTab() {
     try {
       const res = await fetch("/api/import/extras", { method: "POST", body: formData });
       if (!res.ok) { setError((await res.json()).error || "Error"); return; }
-      setResult(await res.json());
+      const data: ExcelParseResult = await res.json();
+      setResult(data);
+      // Auto-set target date from Excel if it's a valid YYYY-MM-DD
+      if (data.date && /^\d{4}-\d{2}-\d{2}$/.test(data.date)) {
+        setTargetDate(data.date);
+      }
     } catch { setError("Error de conexion"); } finally { setParsing(false); }
   }
 
@@ -271,22 +276,17 @@ function ExtrasImportTab() {
 
       {result && result.extras.length > 0 && !saveResult && (
         <div className="mt-6">
-          {/* Date selector */}
+          {/* Date info */}
           <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg bg-blue-50 px-4 py-3">
-            <label className="text-sm font-medium text-blue-800">Importar a fecha:</label>
+            <label className="text-sm font-medium text-blue-800">Fecha detectada:</label>
             <input
               type="date"
               value={targetDate}
               onChange={(e) => setTargetDate(e.target.value)}
               className="rounded border border-blue-200 bg-white px-3 py-1.5 text-sm text-gray-700"
             />
-            {daySheets.length > 0 && (
-              <span className="text-xs text-blue-600">
-                Hojas disponibles: {daySheets.map((s) => {
-                  const d = new Date(s.date);
-                  return d.toLocaleDateString("es-ES", { day: "2-digit", month: "2-digit" });
-                }).join(", ")} ({daySheets.length})
-              </span>
+            {result?.date && /^\d{4}-\d{2}-\d{2}$/.test(result.date) && result.date === targetDate && (
+              <span className="rounded bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">Auto-detectada del Excel</span>
             )}
           </div>
 
