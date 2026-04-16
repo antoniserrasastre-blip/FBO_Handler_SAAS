@@ -280,7 +280,16 @@ export function parseExtrasExcel(buffer: Buffer): ExcelParseResult {
   const extras: ParsedExtra[] = [];
   for (const [registration, data] of extrasMap) {
     const mainServices = data.descriptions.flatMap(desc => categorizeService(desc));
-    const allServices = [...mainServices, ...data.services];
+    const specialServices = data.services;
+
+    // Deduplicate: if a special section (Catering Aire / NJE) provides a detailed
+    // catering entry with origin/time, drop the generic "CATERING" from the main section.
+    const hasDetailedCatering = specialServices.some(s => s.type === "CATERING");
+    const filtered = hasDetailedCatering
+      ? mainServices.filter(s => s.type !== "CATERING")
+      : mainServices;
+
+    const allServices = [...filtered, ...specialServices];
     if (allServices.length > 0) {
       extras.push({
         registration,

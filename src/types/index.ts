@@ -46,7 +46,7 @@ export const FLIGHT_STATE_CONFIG: Record<
     text: "text-gray-700",
   },
   ON_GROUND: {
-    label: "En tierra",
+    label: "Calzos",
     color: "#3B82F6",
     bg: "bg-blue-100",
     text: "text-blue-700",
@@ -140,10 +140,20 @@ export const TRANSPORT_STATE_LABELS: Record<string, string> = {
   CONFIRMED: "Confirmado",
 };
 
-export const CREW_LOCATION_LABELS: Record<string, string> = {
+export const CREW_ARR_LOCATION_LABELS: Record<string, string> = {
+  IN_AIRCRAFT: "En avion",
+  IN_LOUNGE: "En sala",
+  HOTEL: "Hotel",
+};
+
+export const CREW_DEP_LOCATION_LABELS: Record<string, string> = {
+  NOT_ARRIVED: "No llegados",
   IN_AIRCRAFT: "En avion",
   IN_LOUNGE: "En sala",
 };
+
+// Backwards compat
+export const CREW_LOCATION_LABELS = CREW_ARR_LOCATION_LABELS;
 
 // Legacy exports for backwards compat during transition
 export const PAX_STATES = PAX_DEP_STATES;

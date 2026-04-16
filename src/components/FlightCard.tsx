@@ -13,7 +13,8 @@ import {
   TRANSPORT_LABELS,
   TransportType,
   TRANSPORT_STATE_LABELS,
-  CREW_LOCATION_LABELS,
+  CREW_ARR_LOCATION_LABELS,
+  CREW_DEP_LOCATION_LABELS,
   FLIGHT_STATES,
   FUEL_STATES,
   TRANSPORT_TYPES,
@@ -251,8 +252,9 @@ export function FlightCard({
                     label="Ubicacion"
                     value={flight.crewArrLocation}
                     options={[
-                      { value: "IN_AIRCRAFT", label: CREW_LOCATION_LABELS.IN_AIRCRAFT, activeClass: "bg-blue-100 text-blue-700 ring-1 ring-blue-400" },
-                      { value: "IN_LOUNGE", label: CREW_LOCATION_LABELS.IN_LOUNGE, activeClass: "bg-amber-100 text-amber-700 ring-1 ring-amber-400" },
+                      { value: "IN_AIRCRAFT", label: CREW_ARR_LOCATION_LABELS.IN_AIRCRAFT, activeClass: "bg-blue-100 text-blue-700 ring-1 ring-blue-400" },
+                      { value: "IN_LOUNGE", label: CREW_ARR_LOCATION_LABELS.IN_LOUNGE, activeClass: "bg-amber-100 text-amber-700 ring-1 ring-amber-400" },
+                      { value: "HOTEL", label: CREW_ARR_LOCATION_LABELS.HOTEL, activeClass: "bg-purple-100 text-purple-700 ring-1 ring-purple-400" },
                     ]}
                     onChange={(v) => onUpdate(flight.id, { crewArrLocation: v })}
                   />
@@ -591,8 +593,9 @@ export function FlightCard({
                     label="Ubicacion"
                     value={flight.crewDepLocation}
                     options={[
-                      { value: "IN_AIRCRAFT", label: CREW_LOCATION_LABELS.IN_AIRCRAFT, activeClass: "bg-blue-100 text-blue-700 ring-1 ring-blue-400" },
-                      { value: "IN_LOUNGE", label: CREW_LOCATION_LABELS.IN_LOUNGE, activeClass: "bg-amber-100 text-amber-700 ring-1 ring-amber-400" },
+                      { value: "NOT_ARRIVED", label: CREW_DEP_LOCATION_LABELS.NOT_ARRIVED, activeClass: "bg-gray-200 text-gray-700 ring-1 ring-gray-400" },
+                      { value: "IN_AIRCRAFT", label: CREW_DEP_LOCATION_LABELS.IN_AIRCRAFT, activeClass: "bg-blue-100 text-blue-700 ring-1 ring-blue-400" },
+                      { value: "IN_LOUNGE", label: CREW_DEP_LOCATION_LABELS.IN_LOUNGE, activeClass: "bg-amber-100 text-amber-700 ring-1 ring-amber-400" },
                     ]}
                     onChange={(v) => onUpdate(flight.id, { crewDepLocation: v })}
                   />
