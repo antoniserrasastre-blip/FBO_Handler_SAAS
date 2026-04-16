@@ -98,19 +98,19 @@ interface SearchBarProps {
   resultCount: number;
   totalCount: number;
   inputRef?: React.RefObject<HTMLInputElement | null>;
+  query: string;
+  onQueryChange: (query: string) => void;
 }
 
-export function SearchBar({ flights, onFilteredFlights, resultCount, totalCount, inputRef }: SearchBarProps) {
-  const [query, setQuery] = useState("");
-
+export function SearchBar({ flights, onFilteredFlights, resultCount, totalCount, inputRef, query, onQueryChange }: SearchBarProps) {
   const handleQueryChange = useCallback((newQuery: string) => {
-    setQuery(newQuery);
+    onQueryChange(newQuery);
     if (!newQuery.trim()) {
       onFilteredFlights(flights);
     } else {
       onFilteredFlights(flights.filter((f) => flightMatchesQuery(f, newQuery)));
     }
-  }, [flights, onFilteredFlights]);
+  }, [flights, onFilteredFlights, onQueryChange]);
 
   // Recompute when flights change but query stays
   useMemo(() => {

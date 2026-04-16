@@ -13,6 +13,7 @@ import { FlightEvent } from "@/lib/events";
 import { ChevronDown } from "@/components/Icons";
 import { SearchBar } from "@/components/SearchBar";
 import { ShortcutsHelp } from "@/components/ShortcutsHelp";
+import { PendingServicesPanel } from "@/components/PendingServicesPanel";
 
 type FlightWithRelations = Flight & {
   services: Service[];
@@ -33,6 +34,7 @@ export default function HomePage() {
   const [filteredFlights, setFilteredFlights] = useState<FlightWithRelations[]>([]);
   const [selectedFlightId, setSelectedFlightId] = useState<string | null>(null);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(true);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -371,6 +373,8 @@ export default function HomePage() {
 
       {isToday && <TurnaroundAlerts flights={flights} />}
 
+      <PendingServicesPanel flights={flights} onQuickFilter={setSearchQuery} />
+
       <main className="mx-auto max-w-7xl px-3 py-3 sm:px-4 sm:py-4">
         {/* Search bar */}
         {flights.length > 0 && (
@@ -380,6 +384,8 @@ export default function HomePage() {
             resultCount={filteredFlights.length}
             totalCount={flights.length}
             inputRef={searchInputRef}
+            query={searchQuery}
+            onQueryChange={setSearchQuery}
           />
         )}
 
