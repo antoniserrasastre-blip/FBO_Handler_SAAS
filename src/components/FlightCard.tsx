@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, memo } from "react";
 import { Flight, Service, EventLog, LostItem } from "@prisma/client";
 import {
   FLIGHT_STATE_CONFIG,
@@ -68,7 +68,7 @@ interface FlightCardProps {
   readOnly?: boolean;
 }
 
-export function FlightCard({
+export const FlightCard = memo(function FlightCard({
   flight,
   onUpdate,
   onServiceToggle,
@@ -705,7 +705,10 @@ export function FlightCard({
       )}
     </div>
   );
-}
+}, (prev, next) => {
+  // Only re-render if flight data actually changed
+  return prev.flight === next.flight && prev.readOnly === next.readOnly;
+});
 
 // --- Helper sub-components ---
 
