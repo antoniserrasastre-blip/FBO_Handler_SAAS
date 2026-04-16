@@ -26,7 +26,13 @@ export const SERVICE_LABELS: Record<ServiceType, string> = {
   CUSTOM: "Extra",
 };
 
-// SERVICE_ICONS removed — use ServiceIcon component from @/components/Icons instead
+export const SERVICE_TARGETS = ["CREW", "PAX"] as const;
+export type ServiceTarget = (typeof SERVICE_TARGETS)[number];
+
+export const SERVICE_TARGET_LABELS: Record<ServiceTarget, string> = {
+  CREW: "Crew",
+  PAX: "Pax",
+};
 
 // Flight state colors and labels
 export const FLIGHT_STATE_CONFIG: Record<
@@ -77,9 +83,56 @@ export const TOILET_LABELS: Record<ToiletState, string> = {
   COMPLETED: "Completado",
 };
 
-export const BAGS_STATE_LABELS: Record<string, string> = {
-  PENDING: "Pendiente",
-  SENT_TO_AIRCRAFT: "En avion",
+// --- Arrival-specific states ---
+
+export const PAX_ARR_STATES = ["IN_AIRCRAFT", "IN_LOUNGE", "COMPLETED"] as const;
+export type PaxArrState = (typeof PAX_ARR_STATES)[number];
+
+export const PAX_ARR_STATE_LABELS: Record<PaxArrState, string> = {
+  IN_AIRCRAFT: "En avion",
+  IN_LOUNGE: "En sala",
+  COMPLETED: "Completado",
+};
+
+export const BAGS_ARR_STATES = ["IN_AIRCRAFT", "UNLOADED", "DELIVERED"] as const;
+export type BagsArrState = (typeof BAGS_ARR_STATES)[number];
+
+export const BAGS_ARR_STATE_LABELS: Record<BagsArrState, string> = {
+  IN_AIRCRAFT: "En avion",
+  UNLOADED: "Descargadas",
+  DELIVERED: "Entregadas",
+};
+
+// --- Departure-specific states ---
+
+export const PAX_DEP_STATES = ["NOT_ARRIVED", "IN_LOUNGE", "BOARDED"] as const;
+export type PaxDepState = (typeof PAX_DEP_STATES)[number];
+
+export const PAX_DEP_STATE_LABELS: Record<PaxDepState, string> = {
+  NOT_ARRIVED: "No llegados",
+  IN_LOUNGE: "En sala",
+  BOARDED: "Embarcados",
+};
+
+export const BAGS_DEP_STATES = ["NOT_ARRIVED", "TAGGED", "SENT_TO_AIRCRAFT"] as const;
+export type BagsDepState = (typeof BAGS_DEP_STATES)[number];
+
+export const BAGS_DEP_STATE_LABELS: Record<BagsDepState, string> = {
+  NOT_ARRIVED: "No llegadas",
+  TAGGED: "Etiquetadas",
+  SENT_TO_AIRCRAFT: "Enviadas a avion",
+};
+
+// --- Shared states ---
+
+export const TRANSPORT_TYPES = ["RENTAL_CAR", "PREPARED_CAR", "TAXI", "UNDEFINED"] as const;
+export type TransportType = (typeof TRANSPORT_TYPES)[number];
+
+export const TRANSPORT_LABELS: Record<TransportType, string> = {
+  RENTAL_CAR: "Coche alquiler",
+  PREPARED_CAR: "Coche preparado",
+  TAXI: "Taxi",
+  UNDEFINED: "Sin definir",
 };
 
 export const TRANSPORT_STATE_LABELS: Record<string, string> = {
@@ -92,24 +145,10 @@ export const CREW_LOCATION_LABELS: Record<string, string> = {
   IN_LOUNGE: "En sala",
 };
 
-export const TRANSPORT_TYPES = ["RENTAL_CAR", "PREPARED_CAR", "TAXI", "UNDEFINED"] as const;
-export type TransportType = (typeof TRANSPORT_TYPES)[number];
-
-export const TRANSPORT_LABELS: Record<TransportType, string> = {
-  RENTAL_CAR: "Coche alquiler",
-  PREPARED_CAR: "Coche preparado",
-  TAXI: "Taxi",
-  UNDEFINED: "Sin definir",
-};
-
-export const PAX_STATES = ["NOT_ARRIVED", "IN_LOUNGE", "BOARDED"] as const;
-export type PaxState = (typeof PAX_STATES)[number];
-
-export const PAX_STATE_LABELS: Record<PaxState, string> = {
-  NOT_ARRIVED: "No llegados",
-  IN_LOUNGE: "En sala",
-  BOARDED: "Embarcados",
-};
+// Legacy exports for backwards compat during transition
+export const PAX_STATES = PAX_DEP_STATES;
+export type PaxState = PaxDepState;
+export const PAX_STATE_LABELS = PAX_DEP_STATE_LABELS;
 
 // Roles
 export const ROLES = ["ADMIN", "HANDLER", "VIEWER"] as const;

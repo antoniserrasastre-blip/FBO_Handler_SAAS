@@ -35,43 +35,45 @@ model Flight {
   aircraftType   String
   origin         String?
   eta            String?        // HH:MM
-  arrivalDate    String?        // DD/MM (when different from day sheet date)
+  arrivalDate    String?        // DD/MM
   destination    String?
   etd            String?        // HH:MM
-  departureDate  String?        // DD/MM (when different from day sheet date)
+  departureDate  String?        // DD/MM
   parking        String?
   tobt           String?
   state          String         @default("EXPECTED") // EXPECTED | ON_GROUND | BOARDING | DISPATCHED
 
-  // Arrival counts
+  // Arrival counts (estimated from import, real from handler)
   crewArrival    Int            @default(0)
+  crewArrivalReal Int?
   paxArrival     Int            @default(0)
+  paxArrivalReal Int?
 
-  // Departure counts
+  // Departure counts (estimated from import, real from handler)
   crewDeparture  Int            @default(0)
+  crewDepartureReal Int?
   paxDeparture   Int            @default(0)
+  paxDepartureReal Int?
 
   // Arrival passenger details
   paxArrBagsChecked    Int      @default(0)
   paxArrBagsCabin      Int      @default(0)
-  paxArrBagsState      String   @default("PENDING") // PENDING | SENT_TO_AIRCRAFT
+  paxArrBagsState      String   @default("IN_AIRCRAFT") // IN_AIRCRAFT | UNLOADED | DELIVERED
   paxArrTransportType  String   @default("UNDEFINED") // RENTAL_CAR | PREPARED_CAR | TAXI | UNDEFINED
   paxArrTransportState String   @default("PENDING") // PENDING | CONFIRMED
-  paxArrState          String   @default("NOT_ARRIVED") // NOT_ARRIVED | IN_LOUNGE | BOARDED
+  paxArrState          String   @default("IN_AIRCRAFT") // IN_AIRCRAFT | IN_LOUNGE | COMPLETED
 
   // Departure passenger details
   paxDepBagsChecked    Int      @default(0)
   paxDepBagsCabin      Int      @default(0)
-  paxDepBagsState      String   @default("PENDING")
+  paxDepBagsState      String   @default("NOT_ARRIVED") // NOT_ARRIVED | TAGGED | SENT_TO_AIRCRAFT
   paxDepTransportType  String   @default("UNDEFINED")
   paxDepTransportState String   @default("PENDING")
-  paxDepState          String   @default("NOT_ARRIVED")
+  paxDepState          String   @default("NOT_ARRIVED") // NOT_ARRIVED | IN_LOUNGE | BOARDED
 
   // Crew details
   crewArrLocation      String   @default("IN_AIRCRAFT") // IN_AIRCRAFT | IN_LOUNGE
-  crewArrFilterCrossings Int    @default(0)
   crewDepLocation      String   @default("IN_AIRCRAFT")
-  crewDepFilterCrossings Int    @default(0)
 
   // Fuel
   fuelState      String         @default("NOT_REQUESTED") // NOT_REQUESTED | REQUESTED | SERVED
@@ -82,6 +84,9 @@ model Flight {
   toiletState    String         @default("NOT_REQUESTED") // NOT_REQUESTED | REQUESTED | COMPLETED
   toiletRequestedAt String?
   toiletCompletedAt String?
+
+  // Overnight link: if this flight is a departure copy of an arrival on another day
+  linkedFlightId String?
 
   services       Service[]
   eventLogs      EventLog[]
@@ -99,6 +104,7 @@ model Service {
   type        String   // CATERING | DISHES | COOLER_BAG | STORAGE_BAG | LAUNDRY | THERMOS | NEWSPAPERS | CUSTOM
   customName  String?
   reference   String?  // Order/reference number (e.g., NJE catering ref)
+  target      String?  // CREW | PAX (for catering distinction)
   state       String   @default("PENDING") // PENDING | ARRIVED | DELIVERED
   origin      String?  // Crossroads / Catering Aire / Otro
   arrivedAt   String?  // When the item arrived at FBO
