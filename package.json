@@ -13,7 +13,8 @@
     "db:setup-turso": "tsx scripts/setup-turso.ts",
     "db:seed": "tsx prisma/seed.ts",
     "db:seed-docs": "tsx scripts/seed-from-docs.ts",
-    "db:setup-full": "tsx scripts/setup-turso.ts && tsx scripts/seed-from-docs.ts",
+    "db:seed-gendec": "tsx scripts/seed-gendec-13apr.ts",
+    "db:setup-full": "tsx scripts/setup-turso.ts && tsx scripts/seed-from-docs.ts && tsx scripts/seed-gendec-13apr.ts",
     "db:reset": "prisma db push --force-reset && tsx prisma/seed.ts"
   },
   "dependencies": {
