@@ -202,8 +202,7 @@ async function main() {
 
 main()
   .catch((e) => {
-    console.error(e);
-    process.exit(1);
+    console.error("seed-from-docs error (non-fatal):", e.message || e);
   })
   .finally(async () => {
     await prisma.$disconnect();
