@@ -22,6 +22,7 @@ export async function POST(
       customName: body.customName || null,
       reference: body.reference || null,
       origin: body.origin || null,
+      target: body.target || null,
     },
   });
 

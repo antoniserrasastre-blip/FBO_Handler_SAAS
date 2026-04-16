@@ -1,7 +1,7 @@
 "use client";
 
 import { Service } from "@prisma/client";
-import { SERVICE_LABELS, ServiceType } from "@/types";
+import { SERVICE_LABELS, ServiceType, SERVICE_TARGET_LABELS, ServiceTarget } from "@/types";
 import { ServiceIcon, PendingIcon, ArrivedIcon, DeliveredIcon } from "./Icons";
 
 const NEXT_STATE: Record<string, string> = {
@@ -39,6 +39,11 @@ export function ServiceCheckbox({ service, onToggle }: ServiceCheckboxProps) {
     >
       <ServiceIcon type={service.type} size={12} />
       <StateIndicator size={12} />
+      {service.target && (
+        <span className="text-[10px] font-bold opacity-80">
+          {SERVICE_TARGET_LABELS[service.target as ServiceTarget] || service.target}
+        </span>
+      )}
       {service.reference && <span className="text-[10px] opacity-60">#{service.reference}</span>}
       {service.deliveredAt && service.state === "DELIVERED" && (
         <span className="text-[10px] opacity-70">{service.deliveredAt}</span>

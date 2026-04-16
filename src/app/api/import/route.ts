@@ -41,96 +41,120 @@ export async function PUT(req: NextRequest) {
 
   const targetDate = parseDate(date);
 
-  // Find or create day sheet
-  let daySheet = await prisma.daySheet.findUnique({ where: { date: targetDate } });
-  if (!daySheet) {
-    daySheet = await prisma.daySheet.create({ data: { date: targetDate } });
+  // Helper: find or create a DaySheet for a given date
+  async function getOrCreateDaySheet(d: Date) {
+    let ds = await prisma.daySheet.findUnique({ where: { date: d } });
+    if (!ds) ds = await prisma.daySheet.create({ data: { date: d } });
+    return ds;
   }
 
-  // Find existing flights to merge (match by registration — aircraft is unique per day)
-  const existingFlights = await prisma.flight.findMany({
-    where: { daySheetId: daySheet.id },
-    select: { id: true, callsign: true, registration: true },
-  });
-  const existingByReg = new Map(
-    existingFlights.map((f) => [f.registration, f])
-  );
+  // Primary day sheet (from the PDF header date)
+  const primaryDaySheet = await getOrCreateDaySheet(targetDate);
+
+  // Cache of existing flights per daySheet for dedup
+  const existingCache = new Map<string, Map<string, { id: string }>>();
+  async function getExistingByReg(daySheetId: string) {
+    if (!existingCache.has(daySheetId)) {
+      const flights = await prisma.flight.findMany({
+        where: { daySheetId },
+        select: { id: true, registration: true },
+      });
+      existingCache.set(daySheetId, new Map(flights.map((f) => [f.registration, f])));
+    }
+    return existingCache.get(daySheetId)!;
+  }
 
   let created = 0;
   let updated = 0;
+  let linked = 0;
 
   for (const f of flights) {
+    // Determine which DaySheet this flight belongs to based on arrival date
+    const arrDate = f.arrivalDate || date;
+    const flightDate = parseDate(arrDate);
+    const daySheet = flightDate.getTime() === targetDate.getTime()
+      ? primaryDaySheet
+      : await getOrCreateDaySheet(flightDate);
+
+    const existingByReg = await getExistingByReg(daySheet.id);
     const existing = existingByReg.get(f.registration);
 
+    const flightData = {
+      callsign: f.callsign,
+      aircraftType: f.aircraftType,
+      origin: f.origin,
+      eta: f.eta,
+      arrivalDate: f.arrivalDate || null,
+      destination: f.destination,
+      etd: f.etd,
+      departureDate: f.departureDate || null,
+      parking: f.parking,
+      crewArrival: f.crewArrival || 0,
+      crewDeparture: f.crewDeparture || 0,
+      paxArrival: f.paxArrival || 0,
+      paxDeparture: f.paxDeparture || 0,
+    };
+
+    let flightId: string;
+
     if (existing) {
-      // Update existing flight with new data from PDF
-      await prisma.flight.update({
-        where: { id: existing.id },
-        data: {
-          callsign: f.callsign,
-          aircraftType: f.aircraftType,
-          origin: f.origin,
-          eta: f.eta,
-          arrivalDate: f.arrivalDate || null,
-          destination: f.destination,
-          etd: f.etd,
-          departureDate: f.departureDate || null,
-          parking: f.parking,
-          crewArrival: f.crewArrival || 0,
-          crewDeparture: f.crewDeparture || 0,
-          paxArrival: f.paxArrival || 0,
-          paxDeparture: f.paxDeparture || 0,
-        },
-      });
-
+      await prisma.flight.update({ where: { id: existing.id }, data: flightData });
       await prisma.eventLog.create({
-        data: {
-          flightId: existing.id,
-          userId: session.user.id,
-          action: "Actualizado desde PDF",
-          details: `${f.callsign} (${f.registration})`,
-        },
+        data: { flightId: existing.id, userId: session.user.id, action: "Actualizado desde PDF", details: `${f.callsign} (${f.registration})` },
       });
-
+      flightId = existing.id;
       updated++;
-      continue;
+    } else {
+      const flight = await prisma.flight.create({ data: { daySheetId: daySheet.id, registration: f.registration, ...flightData } });
+      await prisma.eventLog.create({
+        data: { flightId: flight.id, userId: session.user.id, action: "Importado desde PDF", details: `${f.callsign} (${f.registration})` },
+      });
+      flightId = flight.id;
+      existingByReg.set(f.registration, { id: flightId });
+      created++;
     }
 
-    const flight = await prisma.flight.create({
-      data: {
-        daySheetId: daySheet.id,
-        callsign: f.callsign,
-        registration: f.registration,
-        aircraftType: f.aircraftType,
-        origin: f.origin,
-        eta: f.eta,
-        arrivalDate: f.arrivalDate || null,
-        destination: f.destination,
-        etd: f.etd,
-        departureDate: f.departureDate || null,
-        parking: f.parking,
-        crewArrival: f.crewArrival || 0,
-        crewDeparture: f.crewDeparture || 0,
-        paxArrival: f.paxArrival || 0,
-        paxDeparture: f.paxDeparture || 0,
-      },
-    });
+    // Overnight: if departure date differs from arrival date, create a linked copy on the departure DaySheet
+    const depDate = f.departureDate || date;
+    if (depDate !== arrDate) {
+      const depDateObj = parseDate(depDate);
+      const depDaySheet = await getOrCreateDaySheet(depDateObj);
+      const depExisting = await getExistingByReg(depDaySheet.id);
 
-    await prisma.eventLog.create({
-      data: {
-        flightId: flight.id,
-        userId: session.user.id,
-        action: "Importado desde PDF",
-        details: `${f.callsign} (${f.registration})`,
-      },
-    });
-
-    created++;
+      if (!depExisting.has(f.registration)) {
+        const depFlight = await prisma.flight.create({
+          data: {
+            daySheetId: depDaySheet.id,
+            callsign: f.callsign,
+            registration: f.registration,
+            aircraftType: f.aircraftType,
+            origin: f.origin,
+            eta: f.eta,
+            arrivalDate: f.arrivalDate || null,
+            destination: f.destination,
+            etd: f.etd,
+            departureDate: f.departureDate || null,
+            parking: f.parking,
+            crewArrival: f.crewArrival || 0,
+            crewDeparture: f.crewDeparture || 0,
+            paxArrival: f.paxArrival || 0,
+            paxDeparture: f.paxDeparture || 0,
+            linkedFlightId: flightId,
+          },
+        });
+        await prisma.eventLog.create({
+          data: { flightId: depFlight.id, userId: session.user.id, action: "Pernocta creada desde PDF", details: `${f.callsign} (${f.registration})` },
+        });
+        depExisting.set(f.registration, { id: depFlight.id });
+        linked++;
+      }
+    }
   }
 
   const parts = [];
   if (created > 0) parts.push(`${created} nuevos`);
   if (updated > 0) parts.push(`${updated} actualizados`);
+  if (linked > 0) parts.push(`${linked} pernoctas`);
 
   eventBus.emit({
     type: "flight_created",
@@ -144,6 +168,7 @@ export async function PUT(req: NextRequest) {
   return NextResponse.json({
     created,
     updated,
+    linked,
     total: flights.length,
   });
 }

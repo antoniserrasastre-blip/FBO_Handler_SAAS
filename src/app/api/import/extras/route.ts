@@ -85,6 +85,9 @@ export async function PUT(req: NextRequest) {
             type: svc.type,
             customName: svc.type === "CUSTOM" ? svc.name : (svc.name !== svc.type ? svc.name : null),
             state: "PENDING",
+            reference: svc.reference || null,
+            target: svc.target || null,
+            origin: svc.origin || null,
           },
         });
         servicesCreated++;

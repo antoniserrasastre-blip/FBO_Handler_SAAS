@@ -74,10 +74,18 @@ export function DaySummary({ flights, date, connected, isToday = true, onDateCha
               >
                 <ChevronLeft size={14} />
               </button>
-              <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-700 sm:px-2 sm:text-sm">
-                <span className="hidden sm:inline">{dateStrLong}</span>
-                <span className="sm:hidden">{dateStrShort}</span>
-              </span>
+              <input
+                type="date"
+                value={date.toISOString().slice(0, 10)}
+                onChange={(e) => {
+                  if (!onDateChange || !e.target.value) return;
+                  const [y, m, d] = e.target.value.split("-").map(Number);
+                  const newDate = new Date(y, m - 1, d);
+                  newDate.setHours(0, 0, 0, 0);
+                  onDateChange(newDate);
+                }}
+                className="rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-700 sm:px-2 sm:text-sm cursor-pointer border-none focus:outline-none focus:ring-1 focus:ring-blue-400"
+              />
               <button
                 onClick={() => goDay(1)}
                 className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"

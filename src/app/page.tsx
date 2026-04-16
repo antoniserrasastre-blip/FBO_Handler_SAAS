@@ -107,7 +107,7 @@ export default function HomePage() {
   // Fallback polling only for today
   useEffect(() => {
     if (status !== "authenticated" || !isToday) return;
-    const interval = setInterval(fetchFlights, 60000);
+    const interval = setInterval(fetchFlights, 10000);
     return () => clearInterval(interval);
   }, [status, fetchFlights, isToday]);
 
@@ -159,12 +159,17 @@ export default function HomePage() {
     if (!res.ok) fetchFlights();
   };
 
-  const handleAddService = async (flightId: string, type: string, customName?: string, reference?: string) => {
+  const handleAddService = async (flightId: string, type: string, customName?: string, reference?: string, target?: string) => {
     const res = await fetch(`/api/flights/${flightId}/services`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type, customName, reference }),
+      body: JSON.stringify({ type, customName, reference, target }),
     });
+    if (res.ok) fetchFlights();
+  };
+
+  const handleDeleteFlight = async (id: string) => {
+    const res = await fetch(`/api/flights/${id}`, { method: "DELETE" });
     if (res.ok) fetchFlights();
   };
 
@@ -267,6 +272,7 @@ export default function HomePage() {
                 onServiceToggle={handleServiceToggle}
                 onAddService={handleAddService}
                 onDeleteService={handleDeleteService}
+                onDelete={handleDeleteFlight}
                 readOnly={false}
               />
             ))}
