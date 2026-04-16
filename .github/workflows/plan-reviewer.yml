@@ -1,0 +1,176 @@
+name: Plan Reviewer
+
+on:
+  push:
+    branches: ["**"]
+
+permissions:
+  contents: read
+
+jobs:
+  review:
+    name: Review against PLAN.md
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Gather diff and plan
+        id: gather
+        run: |
+          # --- Get commit diff ---------------------------------------------------
+          if git rev-parse HEAD~1 >/dev/null 2>&1; then
+            DIFF=$(git diff HEAD~1 HEAD -- . ':!package-lock.json' ':!*.lock')
+          else
+            # First commit — diff against empty tree
+            DIFF=$(git diff 4b825dc642cb6eb9a060e54bf899d15363d7af88 HEAD -- . ':!package-lock.json' ':!*.lock')
+          fi
+
+          if [ -z "$DIFF" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "No code diff to review."
+            exit 0
+          fi
+
+          # --- Read PLAN.md ------------------------------------------------------
+          if [ ! -f PLAN.md ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "PLAN.md not found — skipping review."
+            exit 0
+          fi
+
+          PLAN=$(cat PLAN.md)
+
+          # --- Truncate to fit context (keep under ~120 K chars) -----------------
+          MAX_DIFF=100000
+          if [ ${#DIFF} -gt $MAX_DIFF ]; then
+            DIFF="${DIFF:0:$MAX_DIFF}
+          ... [diff truncated at ${MAX_DIFF} chars]"
+          fi
+
+          # --- Write to temp files (avoids shell escaping issues) ----------------
+          echo "$PLAN" > /tmp/plan_content.txt
+          echo "$DIFF" > /tmp/diff_content.txt
+
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+      - name: Call Claude API
+        if: steps.gather.outputs.skip != 'true'
+        id: claude
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.THE_ANTHROPIC_API_KEY }}
+        run: |
+          PLAN=$(cat /tmp/plan_content.txt)
+          DIFF=$(cat /tmp/diff_content.txt)
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+          COMMIT_SHA="${{ github.sha }}"
+          BRANCH="${{ github.ref_name }}"
+
+          # --- Build JSON payload with jq (safe escaping) -----------------------
+          PAYLOAD=$(jq -n \
+            --arg plan "$PLAN" \
+            --arg diff "$DIFF" \
+            --arg msg  "$COMMIT_MSG" \
+            --arg sha  "$COMMIT_SHA" \
+            --arg branch "$BRANCH" \
+            '{
+              model: "claude-sonnet-4-20250514",
+              max_tokens: 4096,
+              messages: [
+                {
+                  role: "user",
+                  content: [
+                    {
+                      type: "text",
+                      text: ("You are a strict technical project auditor for an FBO (Fixed Base Operator) aviation handling SaaS application.\n\nYour job: compare every code change against the project plan and flag ALL deviations. Zero tolerance. No benefit of the doubt.\n\n## PLAN.md (source of truth)\n\n" + $plan),
+                      cache_control: { type: "ephemeral" }
+                    },
+                    {
+                      type: "text",
+                      text: ("## Commit under review\n\n- **Branch:** " + $branch + "\n- **SHA:** `" + $sha + "`\n- **Message:** " + $msg + "\n\n## Diff\n\n```diff\n" + $diff + "\n```\n\n## Your review\n\nAnalyze this commit against the plan above. Flag EVERY issue you find in these categories:\n\n### 1. Scope creep\nCode that adds features, fields, UI, or logic NOT described in any phase of the plan. Even small additions count.\n\n### 2. Phase violations\nWork that belongs to a later phase being done now. Reference the specific phase.\n\n### 3. Style / convention violations\nAnything that breaks the conventions stated in the plan (naming, language, stack choices, UI patterns).\n\n### 4. Plan deviations\nDecisions that contradict specific plan requirements (e.g. using a different DB, different state names, missing fields that the plan requires).\n\n### 5. Missing plan coverage\nChanges that touch areas the plan describes but the implementation skips or simplifies required behavior.\n\n## Output format\n\nUse this exact markdown structure:\n\n```\n## Plan Review — <one-line verdict>\n\n**Commit:** `<sha short>`  \n**Branch:** <branch>  \n**Risk level:** HIGH | MEDIUM | LOW | CLEAN\n\n### Findings\n\n#### Scope Creep\n- <finding or \"None detected\">\n\n#### Phase Violations  \n- <finding or \"None detected\">\n\n#### Style Violations\n- <finding or \"None detected\">\n\n#### Plan Deviations\n- <finding or \"None detected\">\n\n#### Missing Coverage\n- <finding or \"None detected\">\n\n### Summary\n<2-3 sentence summary of overall alignment>\n```\n\nBe specific. Reference file names and line context. If the commit is clean, say so — but only if it truly is.")
+                    }
+                  ]
+                }
+              ]
+            }')
+
+          # --- Call API with retries ---------------------------------------------
+          HTTP_CODE=0
+          ATTEMPT=0
+          MAX_RETRIES=2
+
+          while [ $ATTEMPT -le $MAX_RETRIES ]; do
+            RESPONSE=$(curl -s -w "\n%{http_code}" \
+              --max-time 120 \
+              -X POST https://api.anthropic.com/v1/messages \
+              -H "content-type: application/json" \
+              -H "x-api-key: ${ANTHROPIC_API_KEY}" \
+              -H "anthropic-version: 2023-06-01" \
+              -d "$PAYLOAD")
+
+            HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+            BODY=$(echo "$RESPONSE" | sed '$d')
+
+            if [ "$HTTP_CODE" = "200" ]; then
+              break
+            fi
+
+            ATTEMPT=$((ATTEMPT + 1))
+            if [ $ATTEMPT -le $MAX_RETRIES ]; then
+              echo "API returned $HTTP_CODE — retrying in 10s (attempt $((ATTEMPT))/$MAX_RETRIES)..."
+              sleep 10
+            fi
+          done
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "Claude API failed after $((MAX_RETRIES + 1)) attempts (HTTP $HTTP_CODE)"
+            echo "$BODY" | jq -r '.error.message // .error // "Unknown error"' 2>/dev/null || echo "$BODY"
+            exit 1
+          fi
+
+          # --- Extract review text -----------------------------------------------
+          REVIEW=$(echo "$BODY" | jq -r '.content[0].text // empty')
+
+          if [ -z "$REVIEW" ]; then
+            echo "Claude returned empty response."
+            echo "$BODY" | jq .
+            exit 1
+          fi
+
+          # --- Save for next step ------------------------------------------------
+          echo "$REVIEW" > /tmp/review_output.txt
+          echo "Review generated successfully."
+
+      - name: Post review as commit comment
+        if: steps.gather.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.THE_GITHUB_TOKEN_CUSTOM }}
+        run: |
+          REVIEW=$(cat /tmp/review_output.txt)
+          COMMIT_SHA="${{ github.sha }}"
+          REPO="${{ github.repository }}"
+
+          # --- Build comment body with jq ----------------------------------------
+          COMMENT_BODY=$(jq -n --arg review "$REVIEW" '$review')
+
+          # --- Post commit comment -----------------------------------------------
+          HTTP_CODE=$(curl -s -o /tmp/gh_response.json -w "%{http_code}" \
+            --max-time 30 \
+            -X POST "https://api.github.com/repos/${REPO}/commits/${COMMIT_SHA}/comments" \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            -d "{\"body\": ${COMMENT_BODY}}")
+
+          if [ "$HTTP_CODE" = "201" ]; then
+            COMMENT_URL=$(jq -r '.html_url' /tmp/gh_response.json)
+            echo "Review posted: $COMMENT_URL"
+          else
+            echo "Failed to post comment (HTTP $HTTP_CODE)"
+            cat /tmp/gh_response.json
+            exit 1
+          fi
