@@ -70,7 +70,7 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { session, error } = await requireAdmin();
+  const { session, error } = await requireWriter();
   if (error) return error;
 
   const { id } = await params;
