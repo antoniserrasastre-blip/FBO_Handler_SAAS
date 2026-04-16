@@ -359,13 +359,19 @@ function categorizeService(desc: string): ParsedService[] {
     return plusParts.flatMap(part => categorizeService(part));
   }
 
-  // Extract quantity prefix
+  // Extract quantity prefix: "2x BOLSA NEVERA", "01 TERMO", etc.
+  // Only accept as quantity if: explicit "x" separator, or single digit (1-9)
+  // Avoids misinterpreting "45 MIN DESPUES DE ARR" as qty=45
   let quantity = 1;
   let cleaned = desc.trim();
-  const qtyMatch = cleaned.match(/^(\d+)\s*[xX]?\s+(.+)/);
-  if (qtyMatch) {
-    quantity = parseInt(qtyMatch[1], 10) || 1;
-    cleaned = qtyMatch[2];
+  const qtyExplicit = cleaned.match(/^(\d+)\s*[xX]\s+(.+)/);
+  const qtyImplicit = cleaned.match(/^(0?[1-9])\s+(.+)/);
+  if (qtyExplicit) {
+    quantity = parseInt(qtyExplicit[1], 10) || 1;
+    cleaned = qtyExplicit[2];
+  } else if (qtyImplicit) {
+    quantity = parseInt(qtyImplicit[1], 10) || 1;
+    cleaned = qtyImplicit[2];
   }
 
   const u = cleaned.toUpperCase();
