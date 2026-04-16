@@ -66,6 +66,8 @@ interface FlightCardProps {
   onAddLostItem: (flightId: string, description: string, location: string) => void;
   onLostItemToggle: (itemId: string, newState: string) => void;
   onDeleteLostItem: (itemId: string) => void;
+  isSelected?: boolean;
+  onSelect?: (id: string) => void;
   readOnly?: boolean;
 }
 
@@ -79,6 +81,8 @@ export const FlightCard = memo(function FlightCard({
   onAddLostItem,
   onLostItemToggle,
   onDeleteLostItem,
+  isSelected = false,
+  onSelect,
   readOnly = false,
 }: FlightCardProps) {
   const [expanded, setExpanded] = useState(false);
@@ -92,8 +96,9 @@ export const FlightCard = memo(function FlightCard({
 
   return (
     <div
-      className={`overflow-hidden rounded-lg border-l-4 bg-white shadow-sm transition-shadow hover:shadow-md`}
+      className={`overflow-hidden rounded-lg border-l-4 bg-white shadow-sm transition-shadow hover:shadow-md ${isSelected ? "ring-2 ring-blue-400 ring-offset-1" : ""}`}
       style={{ borderLeftColor: stateConfig.color }}
+      onClick={() => onSelect?.(flight.id)}
     >
       {/* Collapsed view */}
       <div
@@ -710,8 +715,7 @@ export const FlightCard = memo(function FlightCard({
     </div>
   );
 }, (prev, next) => {
-  // Only re-render if flight data actually changed
-  return prev.flight === next.flight && prev.readOnly === next.readOnly;
+  return prev.flight === next.flight && prev.readOnly === next.readOnly && prev.isSelected === next.isSelected;
 });
 
 // --- Helper sub-components ---

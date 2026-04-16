@@ -97,9 +97,10 @@ interface SearchBarProps {
   onFilteredFlights: (filtered: FlightWithRelations[]) => void;
   resultCount: number;
   totalCount: number;
+  inputRef?: React.RefObject<HTMLInputElement | null>;
 }
 
-export function SearchBar({ flights, onFilteredFlights, resultCount, totalCount }: SearchBarProps) {
+export function SearchBar({ flights, onFilteredFlights, resultCount, totalCount, inputRef }: SearchBarProps) {
   const [query, setQuery] = useState("");
 
   const handleQueryChange = useCallback((newQuery: string) => {
@@ -128,10 +129,11 @@ export function SearchBar({ flights, onFilteredFlights, resultCount, totalCount 
       <div className="relative">
         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
         <input
+          ref={inputRef}
           type="text"
           value={query}
           onChange={(e) => handleQueryChange(e.target.value)}
-          placeholder="Buscar: fuel, netjets, policia, calzos, matricula..."
+          placeholder="Buscar: fuel, netjets, policia, calzos, matricula... ( / )"
           className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-20 text-sm text-gray-700 placeholder-gray-400 shadow-sm focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
         />
         {isFiltered && (

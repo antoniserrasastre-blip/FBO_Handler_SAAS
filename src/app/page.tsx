@@ -12,6 +12,7 @@ import { useEventStream } from "@/hooks/useEventStream";
 import { FlightEvent } from "@/lib/events";
 import { ChevronDown } from "@/components/Icons";
 import { SearchBar } from "@/components/SearchBar";
+import { ShortcutsHelp } from "@/components/ShortcutsHelp";
 
 type FlightWithRelations = Flight & {
   services: Service[];
@@ -30,6 +31,9 @@ export default function HomePage() {
   const router = useRouter();
   const [flights, setFlights] = useState<FlightWithRelations[]>([]);
   const [filteredFlights, setFilteredFlights] = useState<FlightWithRelations[]>([]);
+  const [selectedFlightId, setSelectedFlightId] = useState<string | null>(null);
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(true);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const toastIdRef = useRef(0);
@@ -262,6 +266,86 @@ export default function HomePage() {
     }
   };
 
+  // Keyboard shortcuts (after handlers are defined)
+  useEffect(() => {
+    const FUEL_CYCLE: Record<string, string> = { NOT_REQUESTED: "REQUESTED", REQUESTED: "SERVED", SERVED: "NOT_REQUESTED" };
+    const TOILET_CYCLE: Record<string, string> = { NOT_REQUESTED: "REQUESTED", REQUESTED: "COMPLETED", COMPLETED: "NOT_REQUESTED" };
+    const SVC_NEXT: Record<string, string> = { PENDING: "ARRIVED", ARRIVED: "DELIVERED" };
+
+    const handler = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+
+      const list = filteredFlights;
+      const idx = list.findIndex((f) => f.id === selectedFlightId);
+      const selected = idx >= 0 ? list[idx] : null;
+
+      switch (e.key) {
+        case "ArrowDown":
+          e.preventDefault();
+          if (list.length > 0) {
+            const next = idx < list.length - 1 ? idx + 1 : 0;
+            setSelectedFlightId(list[next].id);
+            document.getElementById(`flight-${list[next].id}`)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+          }
+          break;
+        case "ArrowUp":
+          e.preventDefault();
+          if (list.length > 0) {
+            const prev = idx > 0 ? idx - 1 : list.length - 1;
+            setSelectedFlightId(list[prev].id);
+            document.getElementById(`flight-${list[prev].id}`)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+          }
+          break;
+        case "f":
+        case "F":
+          if (selected) {
+            const next = FUEL_CYCLE[selected.fuelState] || "NOT_REQUESTED";
+            const data: Partial<Flight> & Record<string, unknown> = { fuelState: next };
+            if (next === "REQUESTED") data.fuelRequestedAt = new Date().toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+            if (next === "SERVED") data.fuelServedAt = new Date().toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+            handleFlightUpdate(selected.id, data);
+          }
+          break;
+        case "t":
+        case "T":
+          if (selected) {
+            const next = TOILET_CYCLE[selected.toiletState] || "NOT_REQUESTED";
+            const data: Partial<Flight> & Record<string, unknown> = { toiletState: next };
+            if (next === "REQUESTED") data.toiletRequestedAt = new Date().toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+            if (next === "COMPLETED") data.toiletCompletedAt = new Date().toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+            handleFlightUpdate(selected.id, data);
+          }
+          break;
+        case "c":
+        case "C":
+          if (selected) {
+            const catering = selected.services.find((s) => s.type === "CATERING" && SVC_NEXT[s.state]);
+            if (catering) handleServiceToggle(catering.id, SVC_NEXT[catering.state]);
+          }
+          break;
+        case "s":
+        case "S":
+          if (selected) {
+            const svc = selected.services.find((s) => SVC_NEXT[s.state]);
+            if (svc) handleServiceToggle(svc.id, SVC_NEXT[svc.state]);
+          }
+          break;
+        case "/":
+          e.preventDefault();
+          searchInputRef.current?.focus();
+          break;
+        case "?":
+          setShowShortcuts((prev) => !prev);
+          break;
+      }
+    };
+
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredFlights, selectedFlightId]);
+
   const handleExport = (type: "flights" | "services") => {
     const dateStr = date.toISOString().slice(0, 10);
     window.open(`/api/export?date=${dateStr}&type=${type}`, "_blank");
@@ -295,6 +379,7 @@ export default function HomePage() {
             onFilteredFlights={setFilteredFlights}
             resultCount={filteredFlights.length}
             totalCount={flights.length}
+            inputRef={searchInputRef}
           />
         )}
 
@@ -385,24 +470,28 @@ export default function HomePage() {
         ) : (
           <div className="space-y-3">
             {filteredFlights.map((flight) => (
-              <FlightCard
-                key={flight.id}
-                flight={flight}
-                onUpdate={handleFlightUpdate}
-                onServiceToggle={handleServiceToggle}
-                onAddService={handleAddService}
-                onDeleteService={handleDeleteService}
-                onDelete={handleDeleteFlight}
-                onAddLostItem={handleAddLostItem}
-                onLostItemToggle={handleLostItemToggle}
-                onDeleteLostItem={handleDeleteLostItem}
-                readOnly={false}
-              />
+              <div key={flight.id} id={`flight-${flight.id}`}>
+                <FlightCard
+                  flight={flight}
+                  onUpdate={handleFlightUpdate}
+                  onServiceToggle={handleServiceToggle}
+                  onAddService={handleAddService}
+                  onDeleteService={handleDeleteService}
+                  onDelete={handleDeleteFlight}
+                  onAddLostItem={handleAddLostItem}
+                  onLostItemToggle={handleLostItemToggle}
+                  onDeleteLostItem={handleDeleteLostItem}
+                  isSelected={selectedFlightId === flight.id}
+                  onSelect={setSelectedFlightId}
+                  readOnly={false}
+                />
+              </div>
             ))}
           </div>
         )}
       </main>
 
+      <ShortcutsHelp isOpen={showShortcuts} onClose={() => setShowShortcuts(false)} />
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
