@@ -235,6 +235,200 @@ FBO_Handler_SAAS/
 
 ---
 
+---
+
+## Documentos de referencia (`docs/`)
+
+Los archivos en `docs/` son muestras reales del flujo operativo de MALLORCAIR. Se organizan en tres categorías:
+
+### Categoría A — Orden del Día (Cybermax PDF)
+Hojas de vuelo diarias generadas por Cybermax. Tablas con LLEGADAS y SALIDAS: indicativo, origen/destino, hora, matrícula, tipo, parking, crew, pax. PDF digital, parseables.
+
+| Archivo | Fecha |
+|---------|-------|
+| `01 APR.PDF` | 01/04 |
+| `02APR.PDF` | 02/04 |
+| `03APR.PDF` | 03/04 |
+| `04APR.PDF` | 04/04 |
+| `05APR.PDF` | 05/04 |
+| `06ABRIL.PDF` | 06/04 |
+| `07APR.PDF` | 07/04 |
+| `08APR.PDF` | 08/04 |
+| `09APR.PDF` | 09/04 |
+| `10APR.PDF` | 10/04 |
+| `11APR.PDF` | 11/04 |
+| `12.abril.PDF` | 12/04 |
+| `13APR.PDF` | 13/04 |
+| `14-04.PDF` | 14/04 |
+| `15APR.PDF`, `15APR (1).PDF` | 15/04 |
+| `16apr (1).PDF` | 16/04 |
+
+### Categoría B — Declaraciones Generales (AENA)
+Formularios oficiales "DETALLE DE VUELOS EN TERMINAL DE AVIACIÓN GENERAL — AEROPUERTO PMI". Documentos escaneados con datos manuscritos/rellenados: nombres de tripulación y pasajeros, fecha de nacimiento, número de pasaporte/DNI, nacionalidad, firma del agente. Un formulario por operación (llegada o salida).
+
+| Archivo | Contenido |
+|---------|-----------|
+| `13 APR.pdf` (150 KB) | Declaraciones individuales — 13/04 |
+| `LLEGADAS 13 ABRIL.pdf` (2.1 MB) | Lote de declaraciones de llegada — 13/04 |
+| `SALIDAS 13 ABRIL.pdf` (2.8 MB) | Lote de declaraciones de salida — 13/04 |
+
+### Categoría C — Hoja de Extras (Excel)
+Hojas de extras diarias de MALLORCAIR. Columnas de matrícula + descripción de servicios (catering, thermos, nevera, prensa, etc.), secciones especiales: Catering Aire, Catering NetJets (con referencia NJE), Prensa MCR & Relay.
+
+| Archivos | Contenido |
+|----------|-----------|
+| `1 - copia (1).xlsx` a `1 - copia (14).xlsx` | 14 días de extras (01/04 a 14/04) |
+
+### Uso de estos documentos
+- **Cat. A**: Entrada del parser `pdfParser.ts` → importación de vuelos
+- **Cat. B**: Plantilla de referencia para generación de Declaraciones Generales en v0.3
+- **Cat. C**: Entrada del parser `excelParser.ts` → importación de extras/servicios
+
+---
+
+## Fase v0.3 — Documentación, validación de pasajeros y objetos olvidados
+
+**Objetivo**: Generar documentación oficial, validar datos de pasajeros/tripulación, y gestionar objetos olvidados — todo integrado en las tarjetas de vuelo existentes, sin añadir páginas nuevas.
+
+### v0.3.1 — Exportación de vuelos individuales
+
+Accesible desde un botón/menú en cada FlightCard expandida.
+
+#### PDF individual por vuelo
+- Genera un PDF que replica el layout exacto de la Declaración General escaneada (Cat. B)
+- Rellena automáticamente: indicativo, matrícula, origen/destino, fecha, parking
+- Incluye datos de tripulación: nombre, fecha nacimiento, pasaporte, nacionalidad
+- Incluye datos de pasajeros: nombre, nacionalidad, pasaporte
+- Campo de firma del agente (en blanco para firmar a mano)
+- Formato idéntico al original de AENA para aceptación oficial
+
+#### Excel individual por vuelo
+- Una hoja limpia con los datos del vuelo en formato tabular
+- Secciones: datos del vuelo, tripulación (tabla), pasajeros (tabla), servicios (tabla)
+- Formato one-page, imprimible
+
+### v0.3.2 — Exportación masiva diaria
+
+Accesible desde el menú de exportación existente en la cabecera del dashboard (`DaySummary`).
+
+#### PDF diario multi-página
+- Un documento PDF con una página por vuelo del día
+- Cada página usa la misma plantilla de Declaración General (idéntica a v0.3.1)
+- Solo cambian los datos: pasajeros, tripulación, fechas, pasaportes
+- Portada opcional con resumen del día (total vuelos, total pax, total crew)
+
+#### Excel diario
+- Un archivo Excel con todos los vuelos del día
+- Columnas limpias: indicativo, matrícula, tipo, origen, ETA, destino, ETD, parking, crew, pax, estado, servicios
+- Hoja adicional con desglose de servicios por vuelo
+- Formato listo para facturación o reporting
+
+### v0.3.3 — Validación de pasajeros y tripulación
+
+Accesible desde la sección de pasajeros/tripulación en la FlightCard expandida (modal o popover).
+
+#### Lista detallada de pasajeros
+- Modal que muestra la lista completa de pasajeros del vuelo
+- Campos por pasajero: nombre completo, género, nacionalidad, número de pasaporte, fecha nacimiento
+- Origen de datos: entrada manual o importado desde Declaración General escaneada (Cat. B)
+
+#### Verificación contra documentos escaneados
+- Comparación visual: el modal muestra los datos introducidos junto al extracto del PDF escaneado
+- Posibilidad de marcar discrepancias (nombre incorrecto, pasaporte no legible, etc.)
+
+#### Gestión de incidencias
+- Marcar pasajero como **no-show** (no se presentó)
+- Añadir pasajero de última hora (no aparecía en la lista original)
+- Marcar correcciones en datos de pasaporte (dato original → dato corregido)
+- Confirmación de género (para cumplir requisitos de declaración)
+- Cada acción genera entrada en el EventLog del vuelo
+
+### v0.3.4 — Objetos olvidados (Lost & Found por vuelo)
+
+Accesible desde una nueva sección colapsable dentro de la FlightCard expandida, entre Servicios y el Log.
+
+#### Registro de objetos
+- Formulario inline (mismo patrón que AddServiceRow): descripción del objeto + localización donde se encontró
+- Campos: descripción libre, ubicación (avión, sala, pista), fecha/hora de hallazgo (auto)
+- Cada objeto registrado genera entrada en EventLog
+
+#### Estado de recuperación
+- Estados: `ENCONTRADO` → `RECLAMADO` → `ENTREGADO`
+- Timestamp automático en cada transición
+- Indicador visual en la tarjeta colapsada si hay objetos pendientes de recoger
+
+### v0.3.5 — Generación de Declaraciones Generales en blanco
+
+Accesible desde el menú de exportación en la cabecera o desde cada FlightCard.
+
+- Genera un PDF vacío con la plantilla exacta de la Declaración General de AENA
+- Pre-rellena solo los datos del vuelo (indicativo, matrícula, origen/destino, fecha)
+- Los campos de pasajeros y tripulación quedan en blanco para rellenar a mano
+- Útil para imprimir formularios limpios antes de la operación
+
+---
+
+### Puntos de integración con el dashboard existente
+
+Todas las funcionalidades de v0.3 se integran dentro de las tarjetas de vuelo y la cabecera existentes:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  DaySummary (cabecera)                                      │
+│  [Exportar ▾]  ← v0.3.2: PDF diario, Excel diario,        │
+│                  v0.3.5: Declaración en blanco              │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  FlightCard (colapsada)                                     │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │ 🔵 EC-MXQ · CRJ2 · VJT630 · P232                  │    │
+│  │ [badges servicios] [⚠ 1 objeto pendiente]           │    │
+│  └─────────────────────────────────────────────────────┘    │
+│                                                             │
+│  FlightCard (expandida) — 3 columnas existentes             │
+│  ┌──────────┬──────────────────────┬──────────┐             │
+│  │ LLEGADA  │ ESTADO / DATOS       │ SALIDA   │             │
+│  │          │ Combustible          │          │             │
+│  │ Crew ← [modal pax v0.3.3]      │ Crew     │             │
+│  │ Pax  ← [modal pax v0.3.3]      │ Pax      │             │
+│  │          │ Toilet               │          │             │
+│  │          │ Servicios            │          │             │
+│  │          │ Objetos olvidados    │ ← v0.3.4 │             │
+│  │          │ [📄 PDF] [📊 Excel] │ ← v0.3.1 │             │
+│  │          │ Log de eventos       │          │             │
+│  └──────────┴──────────────────────┴──────────┘             │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Modelo de datos (nuevas tablas/campos para v0.3)
+
+#### Tabla: Passenger (nueva)
+- `id` (cuid), `flightId` (FK → Flight)
+- `direction`: `ARRIVAL` | `DEPARTURE`
+- `fullName`, `gender` (`M` | `F`), `nationality`, `passportNumber`, `dateOfBirth`
+- `status`: `CONFIRMED` | `NO_SHOW` | `ADDED` (añadido de última hora)
+- `corrections`: texto libre (si se corrigió algún dato)
+- `verified`: boolean (validado contra documento escaneado)
+- `createdAt`, `updatedAt`
+
+#### Tabla: CrewMember (nueva)
+- `id` (cuid), `flightId` (FK → Flight)
+- `direction`: `ARRIVAL` | `DEPARTURE`
+- `fullName`, `nationality`, `passportNumber`, `dateOfBirth`
+- `role`: `CAPTAIN` | `FIRST_OFFICER` | `CABIN_CREW` | `OTHER`
+- `createdAt`, `updatedAt`
+
+#### Tabla: LostItem (nueva)
+- `id` (cuid), `flightId` (FK → Flight)
+- `description`, `location` (`AIRCRAFT` | `LOUNGE` | `RAMP`)
+- `state`: `FOUND` → `CLAIMED` → `DELIVERED`
+- `foundAt` (auto), `claimedAt`, `deliveredAt`
+- `claimedBy`: texto libre (nombre de quien lo reclama)
+- `createdAt`
+
+---
+
 ## Decisiones de diseño
 
 1. **Un vuelo = una fila** que agrupa llegada y salida (no separar como en la hoja de papel). La matrícula es siempre la misma para llegada y salida.
