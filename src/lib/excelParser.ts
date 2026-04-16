@@ -297,16 +297,21 @@ export function parseExtrasExcel(buffer: Buffer): ExcelParseResult {
 }
 
 const MONTH_MAP: Record<string, number> = {
-  JAN: 0, FEB: 1, MAR: 2, APR: 3, MAY: 4, JUN: 5,
-  JUL: 6, AUG: 7, SEP: 8, OCT: 9, NOV: 10, DEC: 11,
-  ENE: 0, FEV: 1, ABR: 3, AGO: 7, SET: 8, DIC: 11,
+  JAN: 0, JANUARY: 0, FEB: 1, FEBRUARY: 1, MAR: 2, MARCH: 2,
+  APR: 3, APRIL: 3, MAY: 4, JUN: 5, JUNE: 5,
+  JUL: 6, JULY: 6, AUG: 7, AUGUST: 7, SEP: 8, SEPTEMBER: 8,
+  OCT: 9, OCTOBER: 9, NOV: 10, NOVEMBER: 10, DEC: 11, DECEMBER: 11,
+  ENE: 0, ENERO: 0, FEV: 1, FEBRERO: 1, MAR2: 2, MARZO: 2,
+  ABR: 3, ABRIL: 3, MAYO: 4, JUN2: 5, JUNIO: 5,
+  JUL2: 6, JULIO: 6, AGO: 7, AGOSTO: 7, SET: 8, SEPTIEMBRE: 8,
+  OCT2: 9, OCTUBRE: 9, NOV2: 10, NOVIEMBRE: 10, DIC: 11, DICIEMBRE: 11,
 };
 
 function parseExcelDate(raw: string): string | null {
   if (!raw) return null;
   const cleaned = raw.trim().toUpperCase().replace(/\s+/g, "");
-  // Match "13APR", "5MAY", "10ABR", "13APR26", etc.
-  const m = cleaned.match(/^(\d{1,2})([A-Z]{3})(\d{2,4})?$/);
+  // Match "13APR", "5MAY", "10ABR", "01APRIL", "13APR26", etc.
+  const m = cleaned.match(/^(\d{1,2})([A-Z]{3,10})(\d{2,4})?$/);
   if (!m) return null;
   const day = parseInt(m[1], 10);
   const monthStr = m[2];
