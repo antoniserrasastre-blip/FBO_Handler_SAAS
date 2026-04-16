@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Flight, Service, EventLog } from "@prisma/client";
+import { Flight, Service, EventLog, LostItem } from "@prisma/client";
 import { DaySummary } from "@/components/DaySummary";
 import { FlightCard } from "@/components/FlightCard";
 import { TurnaroundAlerts } from "@/components/TurnaroundAlert";
@@ -14,6 +14,7 @@ import { ChevronDown } from "@/components/Icons";
 
 type FlightWithRelations = Flight & {
   services: Service[];
+  lostItems: LostItem[];
   eventLogs: (EventLog & { user: { name: string } | null })[];
 };
 
@@ -83,6 +84,7 @@ export default function HomePage() {
           service_updated: "cambio servicio",
           service_created: "añadio servicio",
           service_deleted: "elimino servicio",
+          lost_item_updated: "objeto olvidado",
         };
         const action = typeLabels[event.type] || event.type;
         addToast(`${action}${event.detail ? `: ${event.detail}` : ""}`, event.userName, "info");
@@ -175,6 +177,37 @@ export default function HomePage() {
 
   const handleDeleteService = async (serviceId: string) => {
     const res = await fetch(`/api/services/${serviceId}`, { method: "DELETE" });
+    if (res.ok) fetchFlights();
+  };
+
+  const handleAddLostItem = async (flightId: string, description: string, location: string) => {
+    const res = await fetch(`/api/flights/${flightId}/lost-items`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ description, location }),
+    });
+    if (res.ok) fetchFlights();
+  };
+
+  const handleLostItemToggle = async (itemId: string, newState: string) => {
+    setFlights((prev) =>
+      prev.map((f) => ({
+        ...f,
+        lostItems: f.lostItems.map((li) =>
+          li.id === itemId ? { ...li, state: newState } : li
+        ),
+      }))
+    );
+    const res = await fetch(`/api/lost-items/${itemId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ state: newState }),
+    });
+    if (!res.ok) fetchFlights();
+  };
+
+  const handleDeleteLostItem = async (itemId: string) => {
+    const res = await fetch(`/api/lost-items/${itemId}`, { method: "DELETE" });
     if (res.ok) fetchFlights();
   };
 
@@ -273,6 +306,9 @@ export default function HomePage() {
                 onAddService={handleAddService}
                 onDeleteService={handleDeleteService}
                 onDelete={handleDeleteFlight}
+                onAddLostItem={handleAddLostItem}
+                onLostItemToggle={handleLostItemToggle}
+                onDeleteLostItem={handleDeleteLostItem}
                 readOnly={false}
               />
             ))}

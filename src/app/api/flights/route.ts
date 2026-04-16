@@ -23,6 +23,7 @@ export async function GET(req: NextRequest) {
     where: { daySheetId: daySheet.id },
     include: {
       services: { orderBy: { createdAt: "asc" } },
+      lostItems: { orderBy: { createdAt: "asc" } },
     },
     orderBy: { eta: "asc" },
   });

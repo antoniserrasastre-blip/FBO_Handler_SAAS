@@ -19,6 +19,7 @@ import {
   FileText,
   FileSpreadsheet,
   CheckCircle,
+  PackageSearch,
   type LucideProps,
 } from "lucide-react";
 import { ServiceType } from "@/types";
@@ -64,3 +65,6 @@ export { FileText as PdfIcon, FileSpreadsheet as ExcelIcon };
 
 // Success
 export { CheckCircle as SuccessIcon };
+
+// Lost & Found
+export { PackageSearch as LostItemIcon };

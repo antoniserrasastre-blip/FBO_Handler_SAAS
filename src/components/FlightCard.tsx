@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Flight, Service, EventLog } from "@prisma/client";
+import { Flight, Service, EventLog, LostItem } from "@prisma/client";
 import {
   FLIGHT_STATE_CONFIG,
   FlightState,
@@ -35,13 +35,20 @@ import {
   SERVICE_TARGETS,
   SERVICE_TARGET_LABELS,
   ServiceTarget,
+  LOST_ITEM_STATES,
+  LOST_ITEM_STATE_CONFIG,
+  LostItemState,
+  LOST_ITEM_LOCATIONS,
+  LOST_ITEM_LOCATION_LABELS,
+  LostItemLocation,
 } from "@/types";
-import { ServiceIcon, ArrivedIcon, DeliveredIcon, ChevronUp, ChevronDown, CloseIcon } from "./Icons";
+import { ServiceIcon, ArrivedIcon, DeliveredIcon, ChevronUp, ChevronDown, CloseIcon, LostItemIcon } from "./Icons";
 import { ArrowRight, Trash2 } from "lucide-react";
 import { ServiceBadges } from "./ServiceCheckbox";
 
 type FlightWithRelations = Flight & {
   services: Service[];
+  lostItems?: LostItem[];
   eventLogs?: (EventLog & { user: { name: string } | null })[];
 };
 
@@ -52,6 +59,9 @@ interface FlightCardProps {
   onAddService: (flightId: string, type: string, customName?: string, reference?: string, target?: string) => void;
   onDeleteService: (serviceId: string) => void;
   onDelete: (id: string) => void;
+  onAddLostItem: (flightId: string, description: string, location: string) => void;
+  onLostItemToggle: (itemId: string, newState: string) => void;
+  onDeleteLostItem: (itemId: string) => void;
   readOnly?: boolean;
 }
 
@@ -62,6 +72,9 @@ export function FlightCard({
   onAddService,
   onDeleteService,
   onDelete,
+  onAddLostItem,
+  onLostItemToggle,
+  onDeleteLostItem,
   readOnly = false,
 }: FlightCardProps) {
   const [expanded, setExpanded] = useState(false);
@@ -157,9 +170,17 @@ export function FlightCard({
 
         {!expanded && (
           <div className="mt-2 flex items-center justify-between gap-4">
-            <div onClick={(e) => e.stopPropagation()} className={readOnly ? "pointer-events-none" : ""}>
-              {flight.services.length > 0 && (
-                <ServiceBadges services={flight.services} onToggle={onServiceToggle} />
+            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+              <div className={readOnly ? "pointer-events-none" : ""}>
+                {flight.services.length > 0 && (
+                  <ServiceBadges services={flight.services} onToggle={onServiceToggle} />
+                )}
+              </div>
+              {(flight.lostItems || []).filter((li) => li.state !== "DELIVERED").length > 0 && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                  <LostItemIcon size={10} />
+                  {(flight.lostItems || []).filter((li) => li.state !== "DELIVERED").length} objeto{(flight.lostItems || []).filter((li) => li.state !== "DELIVERED").length !== 1 ? "s" : ""}
+                </span>
               )}
             </div>
             {flight.eventLogs && flight.eventLogs.length > 0 && (
@@ -431,6 +452,59 @@ export function FlightCard({
                           </div>
                         </div>
                       ))}
+                    </div>
+                  )}
+                </div>
+              </Section>
+
+              {/* Lost & Found */}
+              <Section title={
+                <span className="flex items-center gap-1.5">
+                  <LostItemIcon size={12} />
+                  Objetos olvidados
+                  {(flight.lostItems || []).filter((li) => li.state !== "DELIVERED").length > 0 && (
+                    <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+                      {(flight.lostItems || []).filter((li) => li.state !== "DELIVERED").length}
+                    </span>
+                  )}
+                </span>
+              }>
+                <div className="space-y-2">
+                  <AddLostItemRow flightId={flight.id} onAdd={onAddLostItem} />
+                  {(flight.lostItems || []).length > 0 && (
+                    <div className="mt-2 space-y-1">
+                      {(flight.lostItems || []).map((item) => {
+                        const stateConfig = LOST_ITEM_STATE_CONFIG[item.state as LostItemState] || LOST_ITEM_STATE_CONFIG.FOUND;
+                        const nextState = LOST_ITEM_STATES[(LOST_ITEM_STATES.indexOf(item.state as LostItemState) + 1) % LOST_ITEM_STATES.length];
+                        return (
+                          <div key={item.id} className="flex items-center justify-between gap-2 text-xs text-gray-500">
+                            <span className="flex min-w-0 items-center gap-1">
+                              <button
+                                onClick={() => onLostItemToggle(item.id, nextState)}
+                                className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${stateConfig.bg} ${stateConfig.text}`}
+                                title={`Cambiar a: ${LOST_ITEM_STATE_CONFIG[nextState]?.label}`}
+                              >
+                                {stateConfig.label}
+                              </button>
+                              <span className="truncate">{item.description}</span>
+                              <span className="shrink-0 text-[10px] text-gray-400">
+                                ({LOST_ITEM_LOCATION_LABELS[item.location as LostItemLocation] || item.location})
+                              </span>
+                            </span>
+                            <div className="flex shrink-0 items-center gap-2">
+                              {item.foundAt && <span className="text-[10px] text-gray-400">{item.foundAt}</span>}
+                              {item.claimedBy && <span className="text-[10px] text-blue-500">{item.claimedBy}</span>}
+                              <button
+                                onClick={() => onDeleteLostItem(item.id)}
+                                className="text-red-400 hover:text-red-600"
+                                title="Eliminar"
+                              >
+                                <CloseIcon size={12} />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -723,6 +797,74 @@ function LastModifiedBadge({ log }: { log: EventLog & { user: { name: string } |
     <span className="shrink-0 whitespace-nowrap text-[10px] text-gray-400">
       {log.user?.name || "Sistema"} · {log.action.length > 30 ? log.action.slice(0, 30) + "..." : log.action} · {time}
     </span>
+  );
+}
+
+function AddLostItemRow({
+  flightId,
+  onAdd,
+}: {
+  flightId: string;
+  onAdd: (flightId: string, description: string, location: string) => void;
+}) {
+  const [showForm, setShowForm] = useState(false);
+  const [description, setDescription] = useState("");
+  const [location, setLocation] = useState("AIRCRAFT");
+
+  if (!showForm) {
+    return (
+      <button
+        onClick={() => setShowForm(true)}
+        className="rounded-md border border-dashed border-gray-300 px-2 py-1 text-xs text-gray-400 hover:border-gray-400 hover:text-gray-500"
+      >
+        + Registrar objeto
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <input
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        placeholder="Descripcion del objeto..."
+        className="min-w-[120px] flex-1 rounded border border-gray-200 px-2 py-1 text-xs"
+        autoFocus
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && description.trim()) {
+            onAdd(flightId, description.trim(), location);
+            setDescription(""); setLocation("AIRCRAFT"); setShowForm(false);
+          }
+        }}
+      />
+      <select
+        value={location}
+        onChange={(e) => setLocation(e.target.value)}
+        className="rounded border border-gray-200 px-2 py-1 text-xs"
+      >
+        {LOST_ITEM_LOCATIONS.map((l) => (
+          <option key={l} value={l}>{LOST_ITEM_LOCATION_LABELS[l]}</option>
+        ))}
+      </select>
+      <button
+        onClick={() => {
+          if (description.trim()) {
+            onAdd(flightId, description.trim(), location);
+            setDescription(""); setLocation("AIRCRAFT"); setShowForm(false);
+          }
+        }}
+        disabled={!description.trim()}
+        className="rounded bg-amber-500 px-2 py-1 text-xs text-white hover:bg-amber-600 disabled:opacity-50"
+      >
+        Registrar
+      </button>
+      <button
+        onClick={() => { setShowForm(false); setDescription(""); setLocation("AIRCRAFT"); }}
+        className="text-xs text-gray-400 hover:text-gray-600"
+      >
+        Cancelar
+      </button>
+    </div>
   );
 }
 
