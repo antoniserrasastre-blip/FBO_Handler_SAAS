@@ -7,6 +7,7 @@ export interface ToastMessage {
   text: string;
   userName?: string;
   type?: "info" | "success" | "warning";
+  onRetry?: () => void;
 }
 
 interface ToastContainerProps {
@@ -30,11 +31,12 @@ function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: 
   useEffect(() => {
     // Animate in
     requestAnimationFrame(() => setVisible(true));
-    // Auto-dismiss after 4s
+    // Auto-dismiss: 10s for errors with retry, 4s for normal
+    const delay = toast.onRetry ? 10000 : 4000;
     const timer = setTimeout(() => {
       setVisible(false);
       setTimeout(() => onDismiss(toast.id), 300);
-    }, 4000);
+    }, delay);
     return () => clearTimeout(timer);
   }, [toast.id, onDismiss]);
 
@@ -55,7 +57,15 @@ function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: 
         {toast.userName && (
           <span className="font-semibold">{toast.userName}</span>
         )}
-        <span>{toast.text}</span>
+        <span className="flex-1">{toast.text}</span>
+        {toast.onRetry && (
+          <button
+            onClick={(e) => { e.stopPropagation(); toast.onRetry!(); onDismiss(toast.id); }}
+            className="shrink-0 rounded bg-amber-600 px-2 py-0.5 text-xs font-medium text-white hover:bg-amber-700"
+          >
+            Reintentar
+          </button>
+        )}
       </div>
     </div>
   );

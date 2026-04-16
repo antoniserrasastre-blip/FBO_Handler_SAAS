@@ -64,9 +64,9 @@ export default function HomePage() {
     }
   }, [date]);
 
-  const addToast = useCallback((text: string, userName?: string, type?: ToastMessage["type"]) => {
+  const addToast = useCallback((text: string, userName?: string, type?: ToastMessage["type"], onRetry?: () => void) => {
     const id = String(++toastIdRef.current);
-    setToasts((prev) => [...prev.slice(-4), { id, text, userName, type }]);
+    setToasts((prev) => [...prev.slice(-4), { id, text, userName, type, onRetry }]);
   }, []);
 
   const dismissToast = useCallback((id: string) => {
@@ -130,19 +130,25 @@ export default function HomePage() {
     setLoading(true);
   }, []);
 
-  // --- Mutation handlers (disabled for past days) ---
+  // --- Mutation handlers with error feedback ---
   const handleFlightUpdate = async (id: string, data: Partial<Flight>) => {
     setFlights((prev) => prev.map((f) => (f.id === id ? { ...f, ...data } : f)));
-    const res = await fetch(`/api/flights/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    });
-    if (res.ok) {
-      const updated = await res.json();
-      setFlights((prev) => prev.map((f) => (f.id === id ? updated : f)));
-    } else {
+    try {
+      const res = await fetch(`/api/flights/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setFlights((prev) => prev.map((f) => (f.id === id ? updated : f)));
+      } else {
+        fetchFlights();
+        addToast("Error al guardar vuelo", undefined, "warning", () => handleFlightUpdate(id, data));
+      }
+    } catch {
       fetchFlights();
+      addToast("Sin conexion — cambio no guardado", undefined, "warning", () => handleFlightUpdate(id, data));
     }
   };
 
@@ -155,40 +161,68 @@ export default function HomePage() {
         ),
       }))
     );
-    const res = await fetch(`/api/services/${serviceId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ state: newState }),
-    });
-    if (!res.ok) fetchFlights();
+    try {
+      const res = await fetch(`/api/services/${serviceId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ state: newState }),
+      });
+      if (!res.ok) {
+        fetchFlights();
+        addToast("Error al cambiar servicio", undefined, "warning", () => handleServiceToggle(serviceId, newState));
+      }
+    } catch {
+      fetchFlights();
+      addToast("Sin conexion — servicio no actualizado", undefined, "warning", () => handleServiceToggle(serviceId, newState));
+    }
   };
 
   const handleAddService = async (flightId: string, type: string, customName?: string, reference?: string, target?: string) => {
-    const res = await fetch(`/api/flights/${flightId}/services`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type, customName, reference, target }),
-    });
-    if (res.ok) fetchFlights();
+    try {
+      const res = await fetch(`/api/flights/${flightId}/services`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type, customName, reference, target }),
+      });
+      if (res.ok) fetchFlights();
+      else addToast("Error al anadir servicio", undefined, "warning", () => handleAddService(flightId, type, customName, reference, target));
+    } catch {
+      addToast("Sin conexion — servicio no anadido", undefined, "warning", () => handleAddService(flightId, type, customName, reference, target));
+    }
   };
 
   const handleDeleteFlight = async (id: string) => {
-    const res = await fetch(`/api/flights/${id}`, { method: "DELETE" });
-    if (res.ok) fetchFlights();
+    try {
+      const res = await fetch(`/api/flights/${id}`, { method: "DELETE" });
+      if (res.ok) fetchFlights();
+      else addToast("Error al eliminar vuelo", undefined, "warning");
+    } catch {
+      addToast("Sin conexion — vuelo no eliminado", undefined, "warning");
+    }
   };
 
   const handleDeleteService = async (serviceId: string) => {
-    const res = await fetch(`/api/services/${serviceId}`, { method: "DELETE" });
-    if (res.ok) fetchFlights();
+    try {
+      const res = await fetch(`/api/services/${serviceId}`, { method: "DELETE" });
+      if (res.ok) fetchFlights();
+      else addToast("Error al eliminar servicio", undefined, "warning");
+    } catch {
+      addToast("Sin conexion — servicio no eliminado", undefined, "warning");
+    }
   };
 
   const handleAddLostItem = async (flightId: string, description: string, location: string) => {
-    const res = await fetch(`/api/flights/${flightId}/lost-items`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ description, location }),
-    });
-    if (res.ok) fetchFlights();
+    try {
+      const res = await fetch(`/api/flights/${flightId}/lost-items`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description, location }),
+      });
+      if (res.ok) fetchFlights();
+      else addToast("Error al registrar objeto", undefined, "warning");
+    } catch {
+      addToast("Sin conexion — objeto no registrado", undefined, "warning");
+    }
   };
 
   const handleLostItemToggle = async (itemId: string, newState: string) => {
@@ -200,17 +234,30 @@ export default function HomePage() {
         ),
       }))
     );
-    const res = await fetch(`/api/lost-items/${itemId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ state: newState }),
-    });
-    if (!res.ok) fetchFlights();
+    try {
+      const res = await fetch(`/api/lost-items/${itemId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ state: newState }),
+      });
+      if (!res.ok) {
+        fetchFlights();
+        addToast("Error al actualizar objeto", undefined, "warning", () => handleLostItemToggle(itemId, newState));
+      }
+    } catch {
+      fetchFlights();
+      addToast("Sin conexion — objeto no actualizado", undefined, "warning", () => handleLostItemToggle(itemId, newState));
+    }
   };
 
   const handleDeleteLostItem = async (itemId: string) => {
-    const res = await fetch(`/api/lost-items/${itemId}`, { method: "DELETE" });
-    if (res.ok) fetchFlights();
+    try {
+      const res = await fetch(`/api/lost-items/${itemId}`, { method: "DELETE" });
+      if (res.ok) fetchFlights();
+      else addToast("Error al eliminar objeto", undefined, "warning");
+    } catch {
+      addToast("Sin conexion — objeto no eliminado", undefined, "warning");
+    }
   };
 
   const handleExport = (type: "flights" | "services") => {
