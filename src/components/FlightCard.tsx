@@ -390,10 +390,10 @@ export const FlightCard = memo(function FlightCard({
                     ))}
                   </div>
                   {flight.fuelRequestedAt && (
-                    <p className="mt-0.5 text-[10px] text-gray-400">Pedido: {flight.fuelRequestedAt}</p>
+                    <p className="mt-1 flex items-center gap-1 text-xs text-yellow-600"><span className="text-[10px]">&#9201;</span> Pedido: {flight.fuelRequestedAt}</p>
                   )}
                   {flight.fuelServedAt && (
-                    <p className="mt-0.5 text-[10px] text-gray-400">Servido: {flight.fuelServedAt}</p>
+                    <p className="mt-0.5 flex items-center gap-1 text-xs text-green-600"><span className="text-[10px]">&#9989;</span> Servido: {flight.fuelServedAt}</p>
                   )}
                 </div>
               </Section>
@@ -428,10 +428,10 @@ export const FlightCard = memo(function FlightCard({
                     ))}
                   </div>
                   {flight.toiletRequestedAt && (
-                    <p className="mt-0.5 text-[10px] text-gray-400">Pedido: {flight.toiletRequestedAt}</p>
+                    <p className="mt-1 flex items-center gap-1 text-xs text-yellow-600"><span className="text-[10px]">&#9201;</span> Pedido: {flight.toiletRequestedAt}</p>
                   )}
                   {flight.toiletCompletedAt && (
-                    <p className="mt-0.5 text-[10px] text-gray-400">Completado: {flight.toiletCompletedAt}</p>
+                    <p className="mt-0.5 flex items-center gap-1 text-xs text-green-600"><span className="text-[10px]">&#9989;</span> Completado: {flight.toiletCompletedAt}</p>
                   )}
                 </div>
               </Section>
