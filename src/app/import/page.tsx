@@ -343,12 +343,16 @@ function UploadArea({ accept, icon, label, sublabel, loading, loadingText, onFil
   loading: boolean; loadingText: string;
   onFiles: (files: File[]) => void; inputRef: React.RefObject<HTMLInputElement | null>;
 }) {
+  const exts = accept.split(",").map((e) => e.trim().toLowerCase());
+  function filterByType(files: File[]) {
+    return files.filter((f) => exts.some((ext) => f.name.toLowerCase().endsWith(ext)));
+  }
   return (
     <div
       className="rounded-xl border-2 border-dashed border-gray-300 bg-white p-12 text-center transition-colors hover:border-blue-400"
       onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add("border-blue-400", "bg-blue-50"); }}
       onDragLeave={(e) => { e.currentTarget.classList.remove("border-blue-400", "bg-blue-50"); }}
-      onDrop={(e) => { e.preventDefault(); e.currentTarget.classList.remove("border-blue-400", "bg-blue-50"); const files = Array.from(e.dataTransfer.files); if (files.length) onFiles(files); }}
+      onDrop={(e) => { e.preventDefault(); e.currentTarget.classList.remove("border-blue-400", "bg-blue-50"); const files = filterByType(Array.from(e.dataTransfer.files)); if (files.length) onFiles(files); }}
     >
       {loading ? (
         <div className="text-gray-500"><div className="mb-2 text-lg">{loadingText}</div></div>
