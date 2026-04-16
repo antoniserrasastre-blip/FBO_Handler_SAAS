@@ -291,11 +291,24 @@ export function parseExtrasExcel(buffer: Buffer): ExcelParseResult {
       : mainServices;
 
     const allServices = [...filtered, ...specialServices];
-    if (allServices.length > 0) {
+
+    // Deduplicate only generic main-section entries that appear more than once
+    // (e.g., "CATERING" listed twice because the aircraft has two legs)
+    // Keep special-section entries even if identical — two legs = two caterings
+    const mainSeen = new Set<string>();
+    const dedupedMain = filtered.filter((s) => {
+      const key = `${s.type}|${s.name}`;
+      if (mainSeen.has(key)) return false;
+      mainSeen.add(key);
+      return true;
+    });
+
+    const finalServices = [...dedupedMain, ...specialServices];
+    if (finalServices.length > 0) {
       extras.push({
         registration,
         rawDescriptions: data.descriptions,
-        services: allServices,
+        services: finalServices,
       });
     }
   }
@@ -361,15 +374,17 @@ function categorizeService(desc: string): ParsedService[] {
 
   // Extract quantity prefix: "2x BOLSA NEVERA", "01 TERMO", etc.
   // Only accept as quantity if: explicit "x" separator, or single digit (1-9)
-  // Avoids misinterpreting "45 MIN DESPUES DE ARR" as qty=45
+  // followed by a service word (not units like KG, PAX, MIN, BAGS, etc.)
   let quantity = 1;
   let cleaned = desc.trim();
   const qtyExplicit = cleaned.match(/^(\d+)\s*[xX]\s+(.+)/);
   const qtyImplicit = cleaned.match(/^(0?[1-9])\s+(.+)/);
+  // Words that mean the number is part of the description, not a repetition count
+  const NOT_QTY_NEXT = /^(KG|PAX|MIN|BAGS?|BULTOS|HORAS?|PERSONAS?|COCHES?|FURG)\b/i;
   if (qtyExplicit) {
     quantity = parseInt(qtyExplicit[1], 10) || 1;
     cleaned = qtyExplicit[2];
-  } else if (qtyImplicit) {
+  } else if (qtyImplicit && !NOT_QTY_NEXT.test(qtyImplicit[2])) {
     quantity = parseInt(qtyImplicit[1], 10) || 1;
     cleaned = qtyImplicit[2];
   }
