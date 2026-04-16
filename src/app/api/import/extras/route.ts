@@ -60,13 +60,34 @@ export async function PUT(req: NextRequest) {
     include: { services: true },
   });
 
-  // Build lookup maps: both with-dash and without-dash forms
+  // Build lookup map: both with-dash and without-dash forms
   const flightByReg = new Map<string, typeof flights[0]>();
   for (const f of flights) {
-    flightByReg.set(f.registration, f);
-    flightByReg.set(f.registration.replace(/-/g, ""), f);
     flightByReg.set(f.registration.toUpperCase(), f);
     flightByReg.set(f.registration.replace(/-/g, "").toUpperCase(), f);
+  }
+
+  // Also search nearby days (pernoctas: flights that arrived earlier but depart on this date)
+  const nearbyFlights = await prisma.flight.findMany({
+    where: {
+      daySheetId: { not: daySheet.id },
+      departureDate: { not: null },
+    },
+    include: { services: true },
+  });
+  // Only add if not already in today's map — prefer today's flights
+  for (const f of nearbyFlights) {
+    const depDate = f.departureDate;
+    if (!depDate) continue;
+    // Check if departureDate matches our target (DD/MM format)
+    const dd = String(targetDate.getDate()).padStart(2, "0");
+    const mm = String(targetDate.getMonth() + 1).padStart(2, "0");
+    const targetDDMM = `${dd}/${mm}`;
+    if (depDate !== targetDDMM) continue;
+    const regUp = f.registration.toUpperCase();
+    const regNoDash = regUp.replace(/-/g, "");
+    if (!flightByReg.has(regUp)) flightByReg.set(regUp, f);
+    if (!flightByReg.has(regNoDash)) flightByReg.set(regNoDash, f);
   }
 
   let matched = 0;
@@ -75,11 +96,9 @@ export async function PUT(req: NextRequest) {
 
   for (const extra of extras) {
     // Try exact match, then without dashes, then uppercase variants
-    const reg = extra.registration;
-    const flight = flightByReg.get(reg)
-      || flightByReg.get(reg.replace(/-/g, ""))
-      || flightByReg.get(reg.toUpperCase())
-      || flightByReg.get(reg.replace(/-/g, "").toUpperCase());
+    const reg = extra.registration.toUpperCase();
+    const regNoDash = reg.replace(/-/g, "");
+    const flight = flightByReg.get(reg) || flightByReg.get(regNoDash);
     if (!flight) {
       notFound.push(extra.registration);
       continue;
