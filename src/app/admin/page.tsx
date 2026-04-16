@@ -24,12 +24,15 @@ export default function AdminPage() {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
-  // Only admins can access
+  const isAdmin = session?.user?.role === "ADMIN";
+  const isSupervisor = session?.user?.role === "SUPERVISOR";
+
+  // Only admins and supervisors can access
   useEffect(() => {
-    if (session && session.user.role !== "ADMIN") {
+    if (session && !isAdmin && !isSupervisor) {
       router.push("/");
     }
-  }, [session, router]);
+  }, [session, router, isAdmin, isSupervisor]);
 
   useEffect(() => {
     fetch("/api/users")
@@ -124,8 +127,8 @@ export default function AdminPage() {
       <div className="mx-auto max-w-3xl">
         <div className="mb-6 flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-bold text-gray-900">Gestion de usuarios</h1>
-            <p className="mt-1 text-sm text-gray-500">{users.length} usuarios registrados</p>
+            <h1 className="text-xl font-bold text-gray-900">{isAdmin ? "Administracion" : "Panel supervisor"}</h1>
+            <p className="mt-1 text-sm text-gray-500">{isAdmin ? `${users.length} usuarios registrados` : "Gestion de datos"}</p>
           </div>
           <div className="flex gap-2">
             <button
@@ -134,7 +137,7 @@ export default function AdminPage() {
             >
               Volver
             </button>
-            {!showForm && (
+            {isAdmin && !showForm && (
               <button
                 onClick={() => { resetForm(); setShowForm(true); }}
                 className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500"
@@ -145,8 +148,8 @@ export default function AdminPage() {
           </div>
         </div>
 
-        {/* Create/Edit form */}
-        {showForm && (
+        {/* Create/Edit form — admin only */}
+        {isAdmin && showForm && (
           <div className="mb-6 rounded-xl bg-white p-6 shadow-sm">
             <h2 className="mb-4 text-sm font-semibold text-gray-700">
               {editingId ? "Editar usuario" : "Nuevo usuario"}
@@ -214,7 +217,8 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* User list */}
+        {/* User list — admin only */}
+        {isAdmin && (
         <div className="space-y-2">
           {users.map((user) => (
             <div key={user.id} className="flex items-center justify-between rounded-lg bg-white px-4 py-3 shadow-sm">
@@ -250,9 +254,10 @@ export default function AdminPage() {
             </div>
           ))}
         </div>
+      )}
       </div>
 
-      {/* Data Management */}
+      {/* Data Management — admin and supervisor */}
       <div className="mt-8 rounded-lg border border-red-200 bg-red-50 p-4">
         <h2 className="text-sm font-bold text-red-700 mb-3">Gestion de datos</h2>
         <div className="flex flex-wrap gap-2">

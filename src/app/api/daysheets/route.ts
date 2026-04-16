@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/roles";
+import { requireSupervisor } from "@/lib/roles";
 
 // GET /api/daysheets — list all day sheets with flight counts
 export async function GET() {
@@ -50,7 +50,7 @@ export async function GET() {
 // DELETE /api/daysheets?id=xxx — delete a specific day sheet (and all its flights/services/logs)
 // DELETE /api/daysheets?all=true — delete ALL data (all daysheets, flights, services, logs)
 export async function DELETE(req: NextRequest) {
-  const { error } = await requireAdmin();
+  const { error } = await requireSupervisor();
   if (error) return error;
 
   const id = req.nextUrl.searchParams.get("id");

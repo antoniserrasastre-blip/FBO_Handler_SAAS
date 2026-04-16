@@ -151,11 +151,12 @@ export type PaxState = PaxDepState;
 export const PAX_STATE_LABELS = PAX_DEP_STATE_LABELS;
 
 // Roles
-export const ROLES = ["ADMIN", "HANDLER", "VIEWER"] as const;
+export const ROLES = ["ADMIN", "SUPERVISOR", "HANDLER", "VIEWER"] as const;
 export type Role = (typeof ROLES)[number];
 
 export const ROLE_LABELS: Record<Role, string> = {
   ADMIN: "Administrador",
+  SUPERVISOR: "Jefe de turno",
   HANDLER: "Handler",
   VIEWER: "Viewer (solo lectura)",
 };

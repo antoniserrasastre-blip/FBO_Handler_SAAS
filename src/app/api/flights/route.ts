@@ -23,11 +23,6 @@ export async function GET(req: NextRequest) {
     where: { daySheetId: daySheet.id },
     include: {
       services: { orderBy: { createdAt: "asc" } },
-      eventLogs: {
-        orderBy: { timestamp: "desc" },
-        take: 20,
-        include: { user: { select: { name: true } } },
-      },
     },
     orderBy: { eta: "asc" },
   });

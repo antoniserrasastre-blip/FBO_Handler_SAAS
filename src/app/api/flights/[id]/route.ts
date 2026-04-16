@@ -22,11 +22,6 @@ export async function PATCH(
     data: body,
     include: {
       services: { orderBy: { createdAt: "asc" } },
-      eventLogs: {
-        orderBy: { timestamp: "desc" },
-        take: 20,
-        include: { user: { select: { name: true } } },
-      },
     },
   });
 

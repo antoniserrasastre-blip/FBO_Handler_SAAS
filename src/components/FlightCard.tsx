@@ -42,7 +42,7 @@ import { ServiceBadges } from "./ServiceCheckbox";
 
 type FlightWithRelations = Flight & {
   services: Service[];
-  eventLogs: (EventLog & { user: { name: string } | null })[];
+  eventLogs?: (EventLog & { user: { name: string } | null })[];
 };
 
 interface FlightCardProps {
@@ -162,7 +162,7 @@ export function FlightCard({
                 <ServiceBadges services={flight.services} onToggle={onServiceToggle} />
               )}
             </div>
-            {flight.eventLogs.length > 0 && (
+            {flight.eventLogs && flight.eventLogs.length > 0 && (
               <LastModifiedBadge log={flight.eventLogs[0]} />
             )}
           </div>
@@ -529,8 +529,8 @@ export function FlightCard({
             </div>
           </div>
 
-          {/* Event log */}
-          {flight.eventLogs.length > 0 && (
+          {/* Event log — only shown if loaded */}
+          {flight.eventLogs && flight.eventLogs.length > 0 && (
             <div className="mt-4">
               <Section title="Log de eventos">
                 <div className="max-h-48 overflow-y-auto">
