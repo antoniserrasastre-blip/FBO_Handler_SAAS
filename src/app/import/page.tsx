@@ -211,7 +211,7 @@ function ExtrasImportTab() {
   const [parsing, setParsing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<ExcelParseResult | null>(null);
-  const [saveResult, setSaveResult] = useState<{ matched: number; servicesCreated: number; notFound: string[] } | null>(null);
+  const [saveResult, setSaveResult] = useState<{ matched: number; servicesCreated: number; notFound: string[]; pendingCreated?: string[] } | null>(null);
   const [error, setError] = useState("");
   const [targetDate, setTargetDate] = useState(() => {
     const d = new Date();
@@ -326,7 +326,9 @@ function ExtrasImportTab() {
         <SuccessResult
           lines={[
             `${saveResult.servicesCreated} servicios creados para ${saveResult.matched} aviones`,
-            saveResult.notFound.length > 0 ? `${saveResult.notFound.length} matriculas no encontradas: ${saveResult.notFound.join(", ")}` : null,
+            saveResult.pendingCreated && saveResult.pendingCreated.length > 0
+              ? `${saveResult.pendingCreated.length} vuelos creados como pendientes (no estaban en orden del dia): ${saveResult.pendingCreated.join(", ")}`
+              : null,
           ]}
           onReset={() => { setResult(null); setSaveResult(null); setError(""); }}
           resetLabel="Importar otro Excel"

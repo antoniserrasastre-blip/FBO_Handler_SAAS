@@ -93,15 +93,37 @@ export async function PUT(req: NextRequest) {
   let matched = 0;
   let servicesCreated = 0;
   let notFound: string[] = [];
+  let pendingCreated: string[] = [];
 
   for (const extra of extras) {
     // Try exact match, then without dashes, then uppercase variants
     const reg = extra.registration.toUpperCase();
     const regNoDash = reg.replace(/-/g, "");
     const flight = flightByReg.get(reg) || flightByReg.get(regNoDash);
-    if (!flight) {
-      notFound.push(extra.registration);
-      continue;
+    let wasCreated = false;
+    let resolvedFlight = flight;
+
+    if (!resolvedFlight) {
+      // Create a placeholder flight for unmatched registrations
+      resolvedFlight = await prisma.flight.create({
+        data: {
+          daySheetId: daySheet.id,
+          callsign: "---",
+          registration: extra.registration,
+          aircraftType: "---",
+          state: "EXPECTED",
+        },
+        include: { services: true },
+      });
+      await prisma.eventLog.create({
+        data: {
+          flightId: resolvedFlight.id,
+          userId: session.user.id,
+          action: `Vuelo creado desde extras (matricula no encontrada en orden del dia)`,
+        },
+      });
+      wasCreated = true;
+      pendingCreated.push(extra.registration);
     }
 
     matched++;
@@ -113,7 +135,7 @@ export async function PUT(req: NextRequest) {
       for (let i = 0; i < (svc.quantity || 1); i++) {
         await prisma.service.create({
           data: {
-            flightId: flight.id,
+            flightId: resolvedFlight.id,
             type: svc.type,
             customName: svc.type === "CUSTOM" ? svc.name : (svc.name !== svc.type ? svc.name : null),
             state: "PENDING",
@@ -126,13 +148,15 @@ export async function PUT(req: NextRequest) {
       }
     }
 
-    await prisma.eventLog.create({
-      data: {
-        flightId: flight.id,
-        userId: session.user.id,
-        action: `Extras importados desde Excel (${extra.services.length})`,
-      },
-    });
+    if (!wasCreated) {
+      await prisma.eventLog.create({
+        data: {
+          flightId: resolvedFlight.id,
+          userId: session.user.id,
+          action: `Extras importados desde Excel (${extra.services.length})`,
+        },
+      });
+    }
   }
 
   eventBus.emit({
@@ -148,6 +172,7 @@ export async function PUT(req: NextRequest) {
     matched,
     servicesCreated,
     notFound,
+    pendingCreated,
     total: extras.length,
   });
 }
