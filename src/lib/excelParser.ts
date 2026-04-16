@@ -28,6 +28,7 @@ export interface ParsedExtra {
   registration: string;
   rawDescriptions: string[];
   services: ParsedService[];
+  date?: string;
 }
 
 export interface ExcelParseResult {

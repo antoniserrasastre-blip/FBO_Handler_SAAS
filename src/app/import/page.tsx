@@ -24,6 +24,7 @@ interface ParsedExtra {
   registration: string;
   rawDescriptions: string[];
   services: ParsedService[];
+  date?: string;
 }
 
 interface ExcelParseResult {
@@ -211,21 +212,8 @@ function ExtrasImportTab() {
   const [parsing, setParsing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<ExcelParseResult | null>(null);
-  const [saveResult, setSaveResult] = useState<{ matched: number; servicesCreated: number; notFound: string[]; pendingCreated?: string[] } | null>(null);
+  const [saveResult, setSaveResult] = useState<{ matched: number; servicesCreated: number; notFound: string[]; pendingCreated?: string[]; datesProcessed?: string[] } | null>(null);
   const [error, setError] = useState("");
-  const [targetDate, setTargetDate] = useState(() => {
-    const d = new Date();
-    return d.toISOString().slice(0, 10); // YYYY-MM-DD
-  });
-  const [daySheets, setDaySheets] = useState<{ date: string; totalFlights: number }[]>([]);
-
-  // Fetch available daysheets on mount
-  useState(() => {
-    fetch("/api/daysheets")
-      .then((r) => r.ok ? r.json() : [])
-      .then((data: { date: string; totalFlights: number }[]) => setDaySheets(Array.isArray(data) ? data : []))
-      .catch(() => {});
-  });
 
   async function handleFileUpload(files: File[]) {
     setError(""); setResult(null); setSaveResult(null); setParsing(true);
@@ -236,9 +224,6 @@ function ExtrasImportTab() {
       if (!res.ok) { setError((await res.json()).error || "Error"); return; }
       const data: ExcelParseResult = await res.json();
       setResult(data);
-      if (data.date && /^\d{4}-\d{2}-\d{2}$/.test(data.date)) {
-        setTargetDate(data.date);
-      }
     } catch { setError("Error de conexion"); } finally { setParsing(false); }
   }
 
@@ -249,12 +234,23 @@ function ExtrasImportTab() {
       const res = await fetch("/api/import/extras", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ extras: result.extras, date: targetDate }),
+        body: JSON.stringify({ extras: result.extras }),
       });
       if (!res.ok) { setError((await res.json()).error || "Error"); return; }
       setSaveResult(await res.json());
     } catch { setError("Error de conexion"); } finally { setSaving(false); }
   }
+
+  // Group extras by date for display
+  const groupedByDate = result ? (() => {
+    const groups = new Map<string, ParsedExtra[]>();
+    for (const extra of result.extras) {
+      const d = extra.date || "Sin fecha";
+      if (!groups.has(d)) groups.set(d, []);
+      groups.get(d)!.push(extra);
+    }
+    return Array.from(groups.entries()).sort(([a], [b]) => a.localeCompare(b));
+  })() : [];
 
   return (
     <>
@@ -263,7 +259,7 @@ function ExtrasImportTab() {
           accept=".xlsx,.xls"
           icon={<ExcelIcon size={40} className="text-gray-300" />}
           label="Arrastra los Excel de extras o selecciona archivos"
-          sublabel="Puedes subir varios a la vez — los servicios se asocian a cada avion por matricula"
+          sublabel="Puedes subir varios a la vez — cada archivo se importa en su fecha"
           loading={parsing}
           loadingText="Procesando Excels..."
           onFiles={(files) => handleFileUpload(files)}
@@ -275,47 +271,45 @@ function ExtrasImportTab() {
 
       {result && result.extras.length > 0 && !saveResult && (
         <div className="mt-6">
-          {/* Date info */}
-          <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg bg-blue-50 px-4 py-3">
-            <label className="text-sm font-medium text-blue-800">Fecha detectada:</label>
-            <input
-              type="date"
-              value={targetDate}
-              onChange={(e) => setTargetDate(e.target.value)}
-              className="rounded border border-blue-200 bg-white px-3 py-1.5 text-sm text-gray-700"
-            />
-            {result?.date && /^\d{4}-\d{2}-\d{2}$/.test(result.date) && result.date === targetDate && (
-              <span className="rounded bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">Auto-detectada del Excel</span>
-            )}
-          </div>
-
           <h2 className="mb-3 text-sm font-semibold text-gray-700">
-            {result.extras.length} aviones con extras {result.date && `— Excel: ${result.date}`}
+            {result.extras.length} aviones con extras — {groupedByDate.length === 1 ? groupedByDate[0][0] : `${groupedByDate.length} fechas`}
           </h2>
-          <div className="space-y-2">
-            {result.extras.map((extra, i) => (
-              <div key={i} className="rounded-lg bg-white px-4 py-3 shadow-sm">
-                <div className="flex items-start justify-between">
-                  <span className="text-sm font-bold text-gray-900">{extra.registration}</span>
-                  <span className="text-xs text-gray-400">{extra.services.length} servicios</span>
+
+          {groupedByDate.map(([date, extras]) => (
+            <div key={date} className="mb-4">
+              {groupedByDate.length > 1 && (
+                <div className="mb-2 flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-2">
+                  <span className="text-sm font-semibold text-blue-800">{date}</span>
+                  <span className="text-xs text-blue-600">{extras.length} aviones</span>
                 </div>
-                <div className="mt-1.5 flex flex-wrap gap-1">
-                  {extra.services.map((svc, j) => {
-                    const label = svc.type === "CUSTOM" ? svc.name : (SERVICE_LABELS[svc.type as ServiceType] || svc.type);
-                    return (
-                      <span key={j} className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
-                        <ServiceIcon type={svc.type} size={12} /> {(svc.quantity || 1) > 1 ? `${svc.quantity}x ` : ""}{label}
-                      </span>
-                    );
-                  })}
-                </div>
+              )}
+              <div className="space-y-2">
+                {extras.map((extra, i) => (
+                  <div key={i} className="rounded-lg bg-white px-4 py-3 shadow-sm">
+                    <div className="flex items-start justify-between">
+                      <span className="text-sm font-bold text-gray-900">{extra.registration}</span>
+                      <span className="text-xs text-gray-400">{extra.services.length} servicios</span>
+                    </div>
+                    <div className="mt-1.5 flex flex-wrap gap-1">
+                      {extra.services.map((svc, j) => {
+                        const label = svc.type === "CUSTOM" ? svc.name : (SERVICE_LABELS[svc.type as ServiceType] || svc.type);
+                        return (
+                          <span key={j} className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
+                            <ServiceIcon type={svc.type} size={12} /> {(svc.quantity || 1) > 1 ? `${svc.quantity}x ` : ""}{label}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </div>
+          ))}
+
           <div className="mt-4 flex justify-end gap-3">
             <button onClick={() => { setResult(null); setError(""); }} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600">Cancelar</button>
             <button onClick={handleConfirm} disabled={saving} className="rounded-lg bg-blue-600 px-6 py-2 text-sm font-medium text-white disabled:opacity-50">
-              {saving ? "Importando..." : "Importar extras"}
+              {saving ? "Importando..." : `Importar extras`}
             </button>
           </div>
         </div>
@@ -325,12 +319,15 @@ function ExtrasImportTab() {
         <SuccessResult
           lines={[
             `${saveResult.servicesCreated} servicios creados para ${saveResult.matched} aviones`,
+            saveResult.datesProcessed && saveResult.datesProcessed.length > 1
+              ? `Fechas: ${saveResult.datesProcessed.join(", ")}`
+              : null,
             saveResult.pendingCreated && saveResult.pendingCreated.length > 0
-              ? `${saveResult.pendingCreated.length} vuelos creados como pendientes (no estaban en orden del dia): ${saveResult.pendingCreated.join(", ")}`
+              ? `${saveResult.pendingCreated.length} vuelos creados como pendientes: ${saveResult.pendingCreated.join(", ")}`
               : null,
           ]}
           onReset={() => { setResult(null); setSaveResult(null); setError(""); }}
-          resetLabel="Importar otro Excel"
+          resetLabel="Importar mas Excels"
         />
       )}
     </>
