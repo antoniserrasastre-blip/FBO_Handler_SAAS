@@ -264,6 +264,13 @@ export default function HomePage() {
                   >
                     Servicios (CSV)
                   </button>
+                  <div className="mx-2 my-1 border-t border-gray-100" />
+                  <button
+                    onClick={() => window.open("/api/export/blank-declaration", "_blank")}
+                    className="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    Declaracion en blanco
+                  </button>
                 </div>
               </div>
             )}
