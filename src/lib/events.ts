@@ -2,7 +2,7 @@
 // Each mutation broadcasts an event; connected SSE clients receive it instantly.
 
 export type FlightEvent = {
-  type: "flight_updated" | "flight_created" | "flight_deleted" | "service_updated" | "service_created" | "service_deleted";
+  type: "flight_updated" | "flight_created" | "flight_deleted" | "service_updated" | "service_created" | "service_deleted" | "passenger_updated" | "crew_updated" | "lost_item_updated";
   flightId: string;
   userId?: string;
   userName?: string;

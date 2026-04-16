@@ -150,6 +150,59 @@ export const PAX_STATES = PAX_DEP_STATES;
 export type PaxState = PaxDepState;
 export const PAX_STATE_LABELS = PAX_DEP_STATE_LABELS;
 
+// --- v0.3: Passenger statuses ---
+
+export const PASSENGER_STATUSES = ["CONFIRMED", "NO_SHOW", "ADDED"] as const;
+export type PassengerStatus = (typeof PASSENGER_STATUSES)[number];
+
+export const PASSENGER_STATUS_CONFIG: Record<PassengerStatus, { label: string; bg: string; text: string }> = {
+  CONFIRMED: { label: "Confirmado", bg: "bg-green-100", text: "text-green-700" },
+  NO_SHOW: { label: "No-show", bg: "bg-red-100", text: "text-red-700" },
+  ADDED: { label: "Anadido", bg: "bg-blue-100", text: "text-blue-700" },
+};
+
+// --- v0.3: Crew roles ---
+
+export const CREW_ROLES = ["CAPTAIN", "FIRST_OFFICER", "CABIN_CREW", "OTHER"] as const;
+export type CrewRole = (typeof CREW_ROLES)[number];
+
+export const CREW_ROLE_LABELS: Record<CrewRole, string> = {
+  CAPTAIN: "Comandante",
+  FIRST_OFFICER: "Copiloto",
+  CABIN_CREW: "TCP",
+  OTHER: "Otro",
+};
+
+// --- v0.3: Lost & Found ---
+
+export const LOST_ITEM_STATES = ["FOUND", "CLAIMED", "DELIVERED"] as const;
+export type LostItemState = (typeof LOST_ITEM_STATES)[number];
+
+export const LOST_ITEM_STATE_CONFIG: Record<LostItemState, { label: string; bg: string; text: string }> = {
+  FOUND: { label: "Encontrado", bg: "bg-amber-100", text: "text-amber-700" },
+  CLAIMED: { label: "Reclamado", bg: "bg-blue-100", text: "text-blue-700" },
+  DELIVERED: { label: "Entregado", bg: "bg-green-100", text: "text-green-700" },
+};
+
+export const LOST_ITEM_LOCATIONS = ["AIRCRAFT", "LOUNGE", "RAMP"] as const;
+export type LostItemLocation = (typeof LOST_ITEM_LOCATIONS)[number];
+
+export const LOST_ITEM_LOCATION_LABELS: Record<LostItemLocation, string> = {
+  AIRCRAFT: "Avion",
+  LOUNGE: "Sala",
+  RAMP: "Pista",
+};
+
+// --- v0.3: Direction ---
+
+export const DIRECTIONS = ["ARRIVAL", "DEPARTURE"] as const;
+export type Direction = (typeof DIRECTIONS)[number];
+
+export const DIRECTION_LABELS: Record<Direction, string> = {
+  ARRIVAL: "Llegada",
+  DEPARTURE: "Salida",
+};
+
 // Roles
 export const ROLES = ["ADMIN", "SUPERVISOR", "HANDLER", "VIEWER"] as const;
 export type Role = (typeof ROLES)[number];

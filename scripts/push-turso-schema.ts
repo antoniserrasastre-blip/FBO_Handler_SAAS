@@ -104,6 +104,54 @@ const statements = [
   )`,
   `CREATE INDEX IF NOT EXISTS "EventLog_flightId_idx" ON "EventLog"("flightId")`,
   `CREATE INDEX IF NOT EXISTS "EventLog_userId_idx" ON "EventLog"("userId")`,
+
+  `CREATE TABLE IF NOT EXISTS "Passenger" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "flightId" TEXT NOT NULL,
+    "direction" TEXT NOT NULL,
+    "fullName" TEXT NOT NULL,
+    "gender" TEXT,
+    "nationality" TEXT,
+    "passportNumber" TEXT,
+    "dateOfBirth" TEXT,
+    "status" TEXT NOT NULL DEFAULT 'CONFIRMED',
+    "corrections" TEXT,
+    "verified" INTEGER NOT NULL DEFAULT 0,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL,
+    CONSTRAINT "Passenger_flightId_fkey" FOREIGN KEY ("flightId") REFERENCES "Flight" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+  )`,
+  `CREATE INDEX IF NOT EXISTS "Passenger_flightId_idx" ON "Passenger"("flightId")`,
+
+  `CREATE TABLE IF NOT EXISTS "CrewMember" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "flightId" TEXT NOT NULL,
+    "direction" TEXT NOT NULL,
+    "fullName" TEXT NOT NULL,
+    "nationality" TEXT,
+    "passportNumber" TEXT,
+    "dateOfBirth" TEXT,
+    "role" TEXT NOT NULL DEFAULT 'OTHER',
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL,
+    CONSTRAINT "CrewMember_flightId_fkey" FOREIGN KEY ("flightId") REFERENCES "Flight" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+  )`,
+  `CREATE INDEX IF NOT EXISTS "CrewMember_flightId_idx" ON "CrewMember"("flightId")`,
+
+  `CREATE TABLE IF NOT EXISTS "LostItem" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "flightId" TEXT NOT NULL,
+    "description" TEXT NOT NULL,
+    "location" TEXT NOT NULL,
+    "state" TEXT NOT NULL DEFAULT 'FOUND',
+    "foundAt" TEXT,
+    "claimedAt" TEXT,
+    "deliveredAt" TEXT,
+    "claimedBy" TEXT,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "LostItem_flightId_fkey" FOREIGN KEY ("flightId") REFERENCES "Flight" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+  )`,
+  `CREATE INDEX IF NOT EXISTS "LostItem_flightId_idx" ON "LostItem"("flightId")`,
 ];
 
 async function main() {

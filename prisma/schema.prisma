@@ -90,6 +90,9 @@ model Flight {
 
   services       Service[]
   eventLogs      EventLog[]
+  passengers     Passenger[]
+  crewMembers    CrewMember[]
+  lostItems      LostItem[]
 
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
@@ -112,6 +115,57 @@ model Service {
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  @@index([flightId])
+}
+
+model Passenger {
+  id             String   @id @default(cuid())
+  flightId       String
+  flight         Flight   @relation(fields: [flightId], references: [id], onDelete: Cascade)
+  direction      String   // ARRIVAL | DEPARTURE
+  fullName       String
+  gender         String?  // M | F
+  nationality    String?
+  passportNumber String?
+  dateOfBirth    String?
+  status         String   @default("CONFIRMED") // CONFIRMED | NO_SHOW | ADDED
+  corrections    String?
+  verified       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([flightId])
+}
+
+model CrewMember {
+  id             String   @id @default(cuid())
+  flightId       String
+  flight         Flight   @relation(fields: [flightId], references: [id], onDelete: Cascade)
+  direction      String   // ARRIVAL | DEPARTURE
+  fullName       String
+  nationality    String?
+  passportNumber String?
+  dateOfBirth    String?
+  role           String   @default("OTHER") // CAPTAIN | FIRST_OFFICER | CABIN_CREW | OTHER
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([flightId])
+}
+
+model LostItem {
+  id          String   @id @default(cuid())
+  flightId    String
+  flight      Flight   @relation(fields: [flightId], references: [id], onDelete: Cascade)
+  description String
+  location    String   // AIRCRAFT | LOUNGE | RAMP
+  state       String   @default("FOUND") // FOUND | CLAIMED | DELIVERED
+  foundAt     String?
+  claimedAt   String?
+  deliveredAt String?
+  claimedBy   String?
+  createdAt   DateTime @default(now())
 
   @@index([flightId])
 }
