@@ -47,6 +47,7 @@ import { ServiceIcon, ArrivedIcon, DeliveredIcon, ChevronUp, ChevronDown, CloseI
 import { ArrowRight, Trash2, Users } from "lucide-react";
 import { ServiceBadges } from "./ServiceCheckbox";
 import { PassengerCrewModal } from "./PassengerCrewModal";
+import { getOperatorName } from "@/lib/operators";
 import { Direction } from "@/types";
 
 type FlightWithRelations = Flight & {
@@ -111,6 +112,9 @@ export const FlightCard = memo(function FlightCard({
                 <span className="text-base font-bold text-gray-900 sm:text-lg">{flight.registration}</span>
                 <span className="text-xs text-gray-500 sm:text-sm">{flight.aircraftType}</span>
                 <span className="text-xs text-gray-400 sm:text-sm">{flight.callsign}</span>
+                {(() => { const opName = getOperatorName(flight.callsign); return opName !== "Privado" ? (
+                  <span className="rounded bg-indigo-50 px-1 py-0.5 text-[10px] font-medium text-indigo-600 sm:px-1.5 sm:text-xs">{opName}</span>
+                ) : null; })()}
                 {flight.parking && (
                   <span className="rounded bg-gray-100 px-1 py-0.5 text-[10px] font-medium text-gray-600 sm:px-1.5 sm:text-xs">
                     {flight.parking}

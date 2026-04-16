@@ -11,6 +11,7 @@ import { ToastContainer, ToastMessage } from "@/components/Toast";
 import { useEventStream } from "@/hooks/useEventStream";
 import { FlightEvent } from "@/lib/events";
 import { ChevronDown } from "@/components/Icons";
+import { SearchBar } from "@/components/SearchBar";
 
 type FlightWithRelations = Flight & {
   services: Service[];
@@ -28,6 +29,7 @@ export default function HomePage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [flights, setFlights] = useState<FlightWithRelations[]>([]);
+  const [filteredFlights, setFilteredFlights] = useState<FlightWithRelations[]>([]);
   const [loading, setLoading] = useState(true);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const toastIdRef = useRef(0);
@@ -286,11 +288,23 @@ export default function HomePage() {
       {isToday && <TurnaroundAlerts flights={flights} />}
 
       <main className="mx-auto max-w-7xl px-3 py-3 sm:px-4 sm:py-4">
+        {/* Search bar */}
+        {flights.length > 0 && (
+          <SearchBar
+            flights={flights}
+            onFilteredFlights={setFilteredFlights}
+            resultCount={filteredFlights.length}
+            totalCount={flights.length}
+          />
+        )}
+
         {/* Action bar */}
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2 sm:mb-4">
           <h2 className="text-xs font-medium text-gray-500 sm:text-sm">
-            {flights.length} vuelo{flights.length !== 1 ? "s" : ""}
-            {isToday ? " hoy" : ""}
+            {filteredFlights.length === flights.length
+              ? `${flights.length} vuelo${flights.length !== 1 ? "s" : ""}${isToday ? " hoy" : ""}`
+              : `${filteredFlights.length} de ${flights.length} vuelos`
+            }
           </h2>
           <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
             {flights.length > 0 && (
@@ -364,9 +378,13 @@ export default function HomePage() {
               </button>
             )}
           </div>
+        ) : filteredFlights.length === 0 ? (
+          <div className="rounded-lg border-2 border-dashed border-gray-200 p-8 text-center">
+            <p className="text-gray-400 text-sm">Ningun vuelo coincide con la busqueda</p>
+          </div>
         ) : (
           <div className="space-y-3">
-            {flights.map((flight) => (
+            {filteredFlights.map((flight) => (
               <FlightCard
                 key={flight.id}
                 flight={flight}
