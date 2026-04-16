@@ -42,7 +42,7 @@ import {
   LOST_ITEM_LOCATION_LABELS,
   LostItemLocation,
 } from "@/types";
-import { ServiceIcon, ArrivedIcon, DeliveredIcon, ChevronUp, ChevronDown, CloseIcon, LostItemIcon } from "./Icons";
+import { ServiceIcon, ArrivedIcon, DeliveredIcon, ChevronUp, ChevronDown, CloseIcon, LostItemIcon, PdfIcon, ExcelIcon } from "./Icons";
 import { ArrowRight, Trash2, Users } from "lucide-react";
 import { ServiceBadges } from "./ServiceCheckbox";
 import { PassengerCrewModal } from "./PassengerCrewModal";
@@ -464,6 +464,40 @@ export function FlightCard({
                       ))}
                     </div>
                   )}
+                </div>
+              </Section>
+
+              {/* Export buttons */}
+              <Section title="Exportar vuelo">
+                <div className="flex flex-wrap gap-1.5">
+                  <a
+                    href={`/api/export/flight/${flight.id}/pdf?direction=ARRIVAL`}
+                    target="_blank"
+                    className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2 py-1 text-[10px] font-medium text-gray-600 hover:bg-gray-50"
+                  >
+                    <PdfIcon size={10} /> PDF Llegada
+                  </a>
+                  <a
+                    href={`/api/export/flight/${flight.id}/pdf?direction=DEPARTURE`}
+                    target="_blank"
+                    className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2 py-1 text-[10px] font-medium text-gray-600 hover:bg-gray-50"
+                  >
+                    <PdfIcon size={10} /> PDF Salida
+                  </a>
+                  <a
+                    href={`/api/export/flight/${flight.id}/excel`}
+                    target="_blank"
+                    className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2 py-1 text-[10px] font-medium text-gray-600 hover:bg-gray-50"
+                  >
+                    <ExcelIcon size={10} /> Excel
+                  </a>
+                  <a
+                    href={`/api/export/blank-declaration?flightId=${flight.id}`}
+                    target="_blank"
+                    className="inline-flex items-center gap-1 rounded-md border border-dashed border-gray-200 px-2 py-1 text-[10px] font-medium text-gray-400 hover:bg-gray-50 hover:text-gray-600"
+                  >
+                    <PdfIcon size={10} /> En blanco
+                  </a>
                 </div>
               </Section>
 
