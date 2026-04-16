@@ -430,43 +430,94 @@ const gendecData: GenDecEntry[] = [
   },
 ];
 
+// Normalize registration: uppercase, no dashes, no spaces
+function normalizeReg(reg: string): string {
+  return reg.toUpperCase().replace(/[-\s]/g, "");
+}
+
 async function main() {
   // Find 13 April DaySheet
   const targetDate = new Date(2026, 3, 13); // April = month 3
   targetDate.setHours(0, 0, 0, 0);
 
-  const daySheet = await prisma.daySheet.findUnique({ where: { date: targetDate } });
+  let daySheet = await prisma.daySheet.findUnique({ where: { date: targetDate } });
   if (!daySheet) {
-    console.log("No DaySheet for 13/04/2026. Run seed-from-docs.ts first.");
-    return;
+    daySheet = await prisma.daySheet.create({ data: { date: targetDate } });
+    console.log("Created DaySheet for 13/04/2026");
   }
 
-  const flights = await prisma.flight.findMany({
-    where: { daySheetId: daySheet.id },
-    include: { passengers: true, crewMembers: true },
+  // Load flights from target day + neighboring days (pernoctas)
+  const prevDate = new Date(targetDate); prevDate.setDate(prevDate.getDate() - 1);
+  const nextDate = new Date(targetDate); nextDate.setDate(nextDate.getDate() + 1);
+
+  const allFlights = await prisma.flight.findMany({
+    where: {
+      daySheet: { date: { in: [prevDate, targetDate, nextDate] } },
+    },
+    include: { passengers: true, crewMembers: true, daySheet: true },
   });
 
-  // Build lookup by registration (with and without dash)
-  const flightByReg = new Map<string, typeof flights[0]>();
-  for (const f of flights) {
-    flightByReg.set(f.registration.toUpperCase(), f);
-    flightByReg.set(f.registration.replace(/-/g, "").toUpperCase(), f);
+  // Build lookup: normalized reg → flight (prefer target day, then neighbors)
+  const flightByNormReg = new Map<string, typeof allFlights[0]>();
+  // First pass: neighbor days (lower priority)
+  for (const f of allFlights) {
+    if (f.daySheet.date.getTime() !== targetDate.getTime()) {
+      const norm = normalizeReg(f.registration);
+      if (!flightByNormReg.has(norm)) flightByNormReg.set(norm, f);
+    }
+  }
+  // Second pass: target day (higher priority — overwrites neighbors)
+  for (const f of allFlights) {
+    if (f.daySheet.date.getTime() === targetDate.getTime()) {
+      flightByNormReg.set(normalizeReg(f.registration), f);
+    }
+  }
+
+  // Also index by callsign (normalized) for fallback matching
+  const flightByCallsign = new Map<string, typeof allFlights[0]>();
+  for (const f of allFlights) {
+    if (f.daySheet.date.getTime() === targetDate.getTime()) {
+      flightByCallsign.set(f.callsign.toUpperCase().replace(/[*\s]/g, ""), f);
+    }
   }
 
   let crewCreated = 0;
   let paxCreated = 0;
   let matched = 0;
-  let skipped = 0;
+  let created = 0;
 
   for (const entry of gendecData) {
-    const reg = entry.registration.toUpperCase();
-    const regNoDash = reg.replace(/-/g, "");
-    const flight = flightByReg.get(reg) || flightByReg.get(regNoDash);
+    const normReg = normalizeReg(entry.registration);
 
+    let flight = flightByNormReg.get(normReg) || null;
+
+    // Fallback: try callsign match if a callsign was provided in the data
     if (!flight) {
-      console.log(`  ✗ ${entry.registration} (${entry.direction}): flight not found`);
-      skipped++;
-      continue;
+      // Try finding by registration substring (e.g., DB has "CSLTE" and we search "CS-LTE")
+      for (const [key, f] of flightByNormReg) {
+        if (key === normReg || normalizeReg(f.registration) === normReg) {
+          flight = f;
+          break;
+        }
+      }
+    }
+
+    // Still not found: create a placeholder flight on this DaySheet
+    if (!flight) {
+      const placeholder = await prisma.flight.create({
+        data: {
+          daySheetId: daySheet.id,
+          callsign: "---",
+          registration: entry.registration,
+          aircraftType: "---",
+          state: "EXPECTED",
+        },
+        include: { passengers: true, crewMembers: true, daySheet: true },
+      });
+      flightByNormReg.set(normReg, placeholder);
+      flight = placeholder;
+      created++;
+      console.log(`  + ${entry.registration}: created placeholder flight`);
     }
 
     // Skip if already has crew/pax for this direction
@@ -514,7 +565,7 @@ async function main() {
     console.log(`  ✓ ${entry.registration} (${entry.direction}): ${entry.crew.length} crew, ${entry.passengers.length} pax`);
   }
 
-  console.log(`\nGenDec seed complete: ${matched} flights matched, ${crewCreated} crew, ${paxCreated} pax created, ${skipped} not found`);
+  console.log(`\nGenDec seed complete: ${matched} flights matched, ${created} placeholders created, ${crewCreated} crew, ${paxCreated} pax`);
 }
 
 main()
