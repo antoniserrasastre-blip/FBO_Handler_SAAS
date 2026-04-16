@@ -266,6 +266,19 @@ export default function HomePage() {
                   </button>
                   <div className="mx-2 my-1 border-t border-gray-100" />
                   <button
+                    onClick={() => window.open(`/api/export/daily/pdf?date=${date.toISOString().slice(0, 10)}`, "_blank")}
+                    className="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    PDF Diario (AENA)
+                  </button>
+                  <button
+                    onClick={() => window.open(`/api/export/daily/excel?date=${date.toISOString().slice(0, 10)}`, "_blank")}
+                    className="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    Excel Diario
+                  </button>
+                  <div className="mx-2 my-1 border-t border-gray-100" />
+                  <button
                     onClick={() => window.open("/api/export/blank-declaration", "_blank")}
                     className="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
                   >
