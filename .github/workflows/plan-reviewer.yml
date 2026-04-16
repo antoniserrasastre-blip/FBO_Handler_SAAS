@@ -5,7 +5,7 @@ on:
     branches: ["**"]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   review:
@@ -148,7 +148,7 @@ jobs:
       - name: Post review as commit comment
         if: steps.gather.outputs.skip != 'true'
         env:
-          GH_TOKEN: ${{ secrets.THE_GITHUB_TOKEN_CUSTOM }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           REVIEW=$(cat /tmp/review_output.txt)
           COMMIT_SHA="${{ github.sha }}"
