@@ -43,8 +43,10 @@ import {
   LostItemLocation,
 } from "@/types";
 import { ServiceIcon, ArrivedIcon, DeliveredIcon, ChevronUp, ChevronDown, CloseIcon, LostItemIcon } from "./Icons";
-import { ArrowRight, Trash2 } from "lucide-react";
+import { ArrowRight, Trash2, Users } from "lucide-react";
 import { ServiceBadges } from "./ServiceCheckbox";
+import { PassengerCrewModal } from "./PassengerCrewModal";
+import { Direction } from "@/types";
 
 type FlightWithRelations = Flight & {
   services: Service[];
@@ -78,6 +80,7 @@ export function FlightCard({
   readOnly = false,
 }: FlightCardProps) {
   const [expanded, setExpanded] = useState(false);
+  const [paxModal, setPaxModal] = useState<{ direction: Direction } | null>(null);
   const stateConfig = FLIGHT_STATE_CONFIG[flight.state as FlightState] || FLIGHT_STATE_CONFIG.EXPECTED;
 
   const stateProgress: Record<string, number> = { EXPECTED: 0, ON_GROUND: 33, BOARDING: 66, DISPATCHED: 100 };
@@ -231,7 +234,14 @@ export function FlightCard({
               </Section>
 
               {/* Arrival Crew */}
-              <Section title="Tripulacion">
+              <Section title={
+                <span className="flex items-center gap-1.5">
+                  Tripulacion
+                  <button onClick={() => setPaxModal({ direction: "ARRIVAL" })} className="rounded p-0.5 text-blue-400 hover:bg-blue-100 hover:text-blue-600" title="Ver nombres crew/pax llegada">
+                    <Users size={11} />
+                  </button>
+                </span>
+              }>
                 <div className="space-y-2">
                   <div className="flex gap-4">
                     <NumberField label="Est." value={flight.crewArrival} onChange={(v) => onUpdate(flight.id, { crewArrival: v })} />
@@ -530,7 +540,14 @@ export function FlightCard({
               </Section>
 
               {/* Departure Crew */}
-              <Section title="Tripulacion">
+              <Section title={
+                <span className="flex items-center gap-1.5">
+                  Tripulacion
+                  <button onClick={() => setPaxModal({ direction: "DEPARTURE" })} className="rounded p-0.5 text-orange-400 hover:bg-orange-100 hover:text-orange-600" title="Ver nombres crew/pax salida">
+                    <Users size={11} />
+                  </button>
+                </span>
+              }>
                 <div className="space-y-2">
                   <div className="flex gap-4">
                     <NumberField label="Est." value={flight.crewDeparture} onChange={(v) => onUpdate(flight.id, { crewDeparture: v })} />
@@ -637,6 +654,17 @@ export function FlightCard({
             </div>
           )}
         </div>
+      )}
+
+      {/* Passenger/Crew Modal */}
+      {paxModal && (
+        <PassengerCrewModal
+          isOpen={!!paxModal}
+          onClose={() => setPaxModal(null)}
+          flightId={flight.id}
+          direction={paxModal.direction}
+          flightLabel={`${flight.callsign} (${flight.registration})`}
+        />
       )}
     </div>
   );

@@ -85,6 +85,8 @@ export default function HomePage() {
           service_created: "añadio servicio",
           service_deleted: "elimino servicio",
           lost_item_updated: "objeto olvidado",
+          passenger_updated: "pasajero actualizado",
+          crew_updated: "tripulante actualizado",
         };
         const action = typeLabels[event.type] || event.type;
         addToast(`${action}${event.detail ? `: ${event.detail}` : ""}`, event.userName, "info");
