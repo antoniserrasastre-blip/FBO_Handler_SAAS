@@ -5,26 +5,40 @@ import { prisma } from "@/lib/db";
 import { parseCybermaxPdf, parseDate } from "@/lib/pdfParser";
 import { eventBus } from "@/lib/events";
 
-// POST /api/import — parse a Cybermax PDF
-// Returns parsed flights for preview (doesn't save yet)
+// POST /api/import — parse one or more Cybermax PDFs
+// Returns combined parsed flights for preview (doesn't save yet)
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const formData = await req.formData();
-  const file = formData.get("pdf") as File | null;
-  if (!file) {
+  const files = formData.getAll("pdf") as File[];
+  if (!files.length) {
     return NextResponse.json({ error: "No se envio ningun archivo PDF" }, { status: 400 });
   }
 
-  try {
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const result = await parseCybermaxPdf(buffer);
-    return NextResponse.json(result);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Error procesando PDF";
-    return NextResponse.json({ error: message, flights: [], errors: [message] }, { status: 500 });
+  const allFlights: Awaited<ReturnType<typeof parseCybermaxPdf>>["flights"] = [];
+  const allErrors: string[] = [];
+  let date = "";
+
+  for (const file of files) {
+    try {
+      const buffer = Buffer.from(await file.arrayBuffer());
+      const result = await parseCybermaxPdf(buffer);
+      if (!date && result.date) date = result.date;
+      allFlights.push(...result.flights);
+      if (result.errors?.length) allErrors.push(...result.errors.map((e) => `[${file.name}] ${e}`));
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "Error procesando PDF";
+      allErrors.push(`[${file.name}] ${msg}`);
+    }
   }
+
+  if (!allFlights.length && allErrors.length) {
+    return NextResponse.json({ error: allErrors.join("; "), flights: [], errors: allErrors }, { status: 500 });
+  }
+
+  return NextResponse.json({ date, flights: allFlights, errors: allErrors });
 }
 
 // PUT /api/import — confirm and save parsed flights

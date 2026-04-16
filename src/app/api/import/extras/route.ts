@@ -5,21 +5,38 @@ import { prisma } from "@/lib/db";
 import { parseExtrasExcel } from "@/lib/excelParser";
 import { eventBus } from "@/lib/events";
 
-// POST /api/import/extras — parse an Excel extras file
+// POST /api/import/extras — parse one or more Excel extras files
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const formData = await req.formData();
-  const file = formData.get("xlsx") as File | null;
-  if (!file) {
+  const files = formData.getAll("xlsx") as File[];
+  if (!files.length) {
     return NextResponse.json({ error: "No se envio archivo Excel" }, { status: 400 });
   }
 
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const result = parseExtrasExcel(buffer);
+  const allExtras: ReturnType<typeof parseExtrasExcel>["extras"] = [];
+  const allErrors: string[] = [];
+  let date = "";
 
-  return NextResponse.json(result);
+  for (const file of files) {
+    try {
+      const result = parseExtrasExcel(Buffer.from(await file.arrayBuffer()));
+      if (!date && result.date) date = result.date;
+      allExtras.push(...result.extras);
+      if (result.errors?.length) allErrors.push(...result.errors.map((e: string) => `[${file.name}] ${e}`));
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "Error procesando Excel";
+      allErrors.push(`[${file.name}] ${msg}`);
+    }
+  }
+
+  if (!allExtras.length && allErrors.length) {
+    return NextResponse.json({ error: allErrors.join("; "), extras: [], errors: allErrors }, { status: 500 });
+  }
+
+  return NextResponse.json({ date, extras: allExtras, errors: allErrors });
 }
 
 // PUT /api/import/extras — confirm and save extras to flights

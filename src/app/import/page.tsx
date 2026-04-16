@@ -86,10 +86,10 @@ function PdfImportTab() {
   const [error, setError] = useState("");
   const [selectedFlights, setSelectedFlights] = useState<Set<number>>(new Set());
 
-  async function handleFileUpload(file: File) {
+  async function handleFileUpload(files: File[]) {
     setError(""); setResult(null); setSaveResult(null); setParsing(true);
     const formData = new FormData();
-    formData.append("pdf", file);
+    for (const f of files) formData.append("pdf", f);
     try {
       const res = await fetch("/api/import", { method: "POST", body: formData });
       if (!res.ok) { setError((await res.json()).error || "Error"); return; }
@@ -127,11 +127,11 @@ function PdfImportTab() {
         <UploadArea
           accept=".pdf,.PDF"
           icon={<PdfIcon size={40} className="text-gray-300" />}
-          label="Arrastra el PDF de Cybermax o selecciona archivo"
-          sublabel="Los vuelos existentes se actualizan automaticamente"
+          label="Arrastra los PDF de Cybermax o selecciona archivos"
+          sublabel="Puedes subir varios a la vez — los vuelos existentes se actualizan automaticamente"
           loading={parsing}
-          loadingText="Procesando PDF..."
-          onFile={(f) => handleFileUpload(f)}
+          loadingText="Procesando PDFs..."
+          onFiles={(files) => handleFileUpload(files)}
           inputRef={fileInputRef}
         />
       )}
@@ -227,16 +227,15 @@ function ExtrasImportTab() {
       .catch(() => {});
   });
 
-  async function handleFileUpload(file: File) {
+  async function handleFileUpload(files: File[]) {
     setError(""); setResult(null); setSaveResult(null); setParsing(true);
     const formData = new FormData();
-    formData.append("xlsx", file);
+    for (const f of files) formData.append("xlsx", f);
     try {
       const res = await fetch("/api/import/extras", { method: "POST", body: formData });
       if (!res.ok) { setError((await res.json()).error || "Error"); return; }
       const data: ExcelParseResult = await res.json();
       setResult(data);
-      // Auto-set target date from Excel if it's a valid YYYY-MM-DD
       if (data.date && /^\d{4}-\d{2}-\d{2}$/.test(data.date)) {
         setTargetDate(data.date);
       }
@@ -263,11 +262,11 @@ function ExtrasImportTab() {
         <UploadArea
           accept=".xlsx,.xls"
           icon={<ExcelIcon size={40} className="text-gray-300" />}
-          label="Arrastra el Excel de extras o selecciona archivo"
-          sublabel="Los servicios se asocian a cada avion por matricula"
+          label="Arrastra los Excel de extras o selecciona archivos"
+          sublabel="Puedes subir varios a la vez — los servicios se asocian a cada avion por matricula"
           loading={parsing}
-          loadingText="Procesando Excel..."
-          onFile={(f) => handleFileUpload(f)}
+          loadingText="Procesando Excels..."
+          onFiles={(files) => handleFileUpload(files)}
           inputRef={fileInputRef}
         />
       )}
@@ -339,17 +338,17 @@ function ExtrasImportTab() {
 }
 
 // ======= Shared UI Components =======
-function UploadArea({ accept, icon, label, sublabel, loading, loadingText, onFile, inputRef }: {
+function UploadArea({ accept, icon, label, sublabel, loading, loadingText, onFiles, inputRef }: {
   accept: string; icon: React.ReactNode; label: string; sublabel: string;
   loading: boolean; loadingText: string;
-  onFile: (f: File) => void; inputRef: React.RefObject<HTMLInputElement | null>;
+  onFiles: (files: File[]) => void; inputRef: React.RefObject<HTMLInputElement | null>;
 }) {
   return (
     <div
       className="rounded-xl border-2 border-dashed border-gray-300 bg-white p-12 text-center transition-colors hover:border-blue-400"
       onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add("border-blue-400", "bg-blue-50"); }}
       onDragLeave={(e) => { e.currentTarget.classList.remove("border-blue-400", "bg-blue-50"); }}
-      onDrop={(e) => { e.preventDefault(); e.currentTarget.classList.remove("border-blue-400", "bg-blue-50"); const f = e.dataTransfer.files[0]; if (f) onFile(f); }}
+      onDrop={(e) => { e.preventDefault(); e.currentTarget.classList.remove("border-blue-400", "bg-blue-50"); const files = Array.from(e.dataTransfer.files); if (files.length) onFiles(files); }}
     >
       {loading ? (
         <div className="text-gray-500"><div className="mb-2 text-lg">{loadingText}</div></div>
@@ -358,10 +357,10 @@ function UploadArea({ accept, icon, label, sublabel, loading, loadingText, onFil
           <div className="mb-4 flex justify-center">{icon}</div>
           <p className="text-gray-600">
             {label.split(" o ")[0]} o{" "}
-            <button onClick={() => inputRef.current?.click()} className="font-medium text-blue-600 hover:text-blue-500">selecciona un archivo</button>
+            <button onClick={() => inputRef.current?.click()} className="font-medium text-blue-600 hover:text-blue-500">selecciona archivos</button>
           </p>
           <p className="mt-2 text-xs text-gray-400">{sublabel}</p>
-          <input ref={inputRef} type="file" accept={accept} className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); }} />
+          <input ref={inputRef} type="file" accept={accept} multiple className="hidden" onChange={(e) => { const files = Array.from(e.target.files || []); if (files.length) onFiles(files); e.target.value = ""; }} />
         </>
       )}
     </div>
