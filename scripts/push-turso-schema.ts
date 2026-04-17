@@ -155,6 +155,12 @@ const statements = [
   `CREATE INDEX IF NOT EXISTS "LostItem_flightId_idx" ON "LostItem"("flightId")`,
 ];
 
+// ALTER TABLE migrations for existing DBs — ignored if column exists
+const migrations = [
+  `ALTER TABLE "Flight" ADD COLUMN "notes" TEXT`,
+  `ALTER TABLE "Service" ADD COLUMN "scheduledAt" TEXT`,
+];
+
 async function main() {
   console.log("Connecting to Turso...");
   for (const sql of statements) {
@@ -166,6 +172,21 @@ async function main() {
       console.error(`  ✗ Error on ${tableName}: ${err.message}`);
     }
   }
+
+  console.log("\nApplying migrations...");
+  for (const sql of migrations) {
+    try {
+      await client.execute(sql);
+      console.log(`  ✓ Migrated: ${sql.slice(0, 60)}`);
+    } catch (err: any) {
+      if (err.message?.includes("duplicate column")) {
+        console.log(`  ⊘ Skipped (already exists): ${sql.slice(0, 60)}`);
+      } else {
+        console.error(`  ✗ Migration error: ${err.message}`);
+      }
+    }
+  }
+
   console.log("\nDone! Schema pushed to Turso.");
 }
 
