@@ -18,6 +18,7 @@ import { QuickAddFlight } from "@/components/QuickAddFlight";
 import { useOverdueAlert } from "@/hooks/useOverdueAlert";
 import { Volume2, VolumeX, FileCheck2, Printer } from "lucide-react";
 import { ShiftHandover } from "@/components/ShiftHandover";
+import { detectParkingConflicts } from "@/lib/parkingConflicts";
 
 type FlightWithRelations = Flight & {
   services: Service[];
@@ -67,6 +68,7 @@ export default function HomePage() {
 
   const allServices = useMemo(() => flights.flatMap((f) => f.services), [flights]);
   const overdueCount = useOverdueAlert(allServices, soundEnabled && isToday);
+  const parkingConflicts = useMemo(() => detectParkingConflicts(flights), [flights]);
 
   const fetchFlights = useCallback(async () => {
     try {
@@ -557,6 +559,15 @@ export default function HomePage() {
                   onDeleteLostItem={handleDeleteLostItem}
                   isSelected={selectedFlightId === flight.id}
                   onSelect={setSelectedFlightId}
+                  onBadgeClick={setSearchQuery}
+                  parkingConflict={(() => {
+                    const conflictIds = parkingConflicts.get(flight.id);
+                    if (!conflictIds?.length) return null;
+                    return conflictIds
+                      .map((id) => flights.find((f) => f.id === id)?.registration)
+                      .filter(Boolean)
+                      .join(", ");
+                  })()}
                   readOnly={false}
                 />
               </div>

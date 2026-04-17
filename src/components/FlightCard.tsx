@@ -72,6 +72,8 @@ interface FlightCardProps {
   onDeleteLostItem: (itemId: string) => void;
   isSelected?: boolean;
   onSelect?: (id: string) => void;
+  onBadgeClick?: (searchTerm: string) => void;
+  parkingConflict?: string | null;
   readOnly?: boolean;
 }
 
@@ -87,6 +89,8 @@ export const FlightCard = memo(function FlightCard({
   onDeleteLostItem,
   isSelected = false,
   onSelect,
+  onBadgeClick,
+  parkingConflict,
   readOnly = false,
 }: FlightCardProps) {
   const [expanded, setExpanded] = useState(false);
@@ -118,14 +122,47 @@ export const FlightCard = memo(function FlightCard({
             </span>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                <span className="text-base font-bold text-gray-900 sm:text-lg">{flight.registration}</span>
+                <span
+                  className="cursor-pointer text-base font-bold text-gray-900 hover:bg-yellow-50 hover:text-blue-700 sm:text-lg"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigator.clipboard?.writeText(flight.registration);
+                  }}
+                  title="Click para copiar matricula"
+                >
+                  {flight.registration}
+                </span>
                 <span className="text-xs text-gray-500 sm:text-sm">{flight.aircraftType}</span>
-                <span className="text-xs text-gray-400 sm:text-sm">{flight.callsign}</span>
+                <span
+                  className="cursor-pointer text-xs text-gray-400 hover:text-blue-600 sm:text-sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigator.clipboard?.writeText(flight.callsign);
+                  }}
+                  title="Click para copiar indicativo"
+                >
+                  {flight.callsign}
+                </span>
                 {(() => { const opName = getOperatorName(flight.callsign); return opName !== "Privado" ? (
-                  <span className="rounded bg-indigo-50 px-1 py-0.5 text-[10px] font-medium text-indigo-600 sm:px-1.5 sm:text-xs">{opName}</span>
+                  <span
+                    className="cursor-pointer rounded bg-indigo-50 px-1 py-0.5 text-[10px] font-medium text-indigo-600 hover:bg-indigo-100 sm:px-1.5 sm:text-xs"
+                    onClick={(e) => { e.stopPropagation(); onBadgeClick?.(opName.toLowerCase()); }}
+                    title={`Filtrar por ${opName}`}
+                  >
+                    {opName}
+                  </span>
                 ) : null; })()}
                 {flight.parking && (
-                  <span className="rounded bg-gray-100 px-1 py-0.5 text-[10px] font-medium text-gray-600 sm:px-1.5 sm:text-xs">
+                  <span
+                    className={`cursor-pointer rounded px-1 py-0.5 text-[10px] font-medium sm:px-1.5 sm:text-xs ${
+                      parkingConflict
+                        ? "bg-red-100 text-red-700 ring-1 ring-red-400 hover:bg-red-200"
+                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    }`}
+                    onClick={(e) => { e.stopPropagation(); onBadgeClick?.(flight.parking!); }}
+                    title={parkingConflict ? `Conflicto con ${parkingConflict}` : `Filtrar por parking ${flight.parking}`}
+                  >
+                    {parkingConflict && <span className="mr-0.5">&#9888;</span>}
                     {flight.parking}
                   </span>
                 )}
@@ -770,7 +807,11 @@ export const FlightCard = memo(function FlightCard({
     </div>
   );
 }, (prev, next) => {
-  return prev.flight === next.flight && prev.readOnly === next.readOnly && prev.isSelected === next.isSelected;
+  return prev.flight === next.flight
+    && prev.readOnly === next.readOnly
+    && prev.isSelected === next.isSelected
+    && prev.onBadgeClick === next.onBadgeClick
+    && prev.parkingConflict === next.parkingConflict;
 });
 
 // --- Helper sub-components ---

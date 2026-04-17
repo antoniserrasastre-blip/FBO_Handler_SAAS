@@ -170,7 +170,7 @@ export function SearchBar({ flights, onFilteredFlights, resultCount, totalCount,
     }
   }, [flights, onFilteredFlights, onQueryChange]);
 
-  // Recompute when flights change but query stays
+  // Recompute when flights or query change (query may change from external setQuery)
   useMemo(() => {
     if (!query.trim()) {
       onFilteredFlights(flights);
@@ -178,7 +178,7 @@ export function SearchBar({ flights, onFilteredFlights, resultCount, totalCount,
       onFilteredFlights(flights.filter((f) => flightMatchesQuery(f, query)));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [flights]);
+  }, [flights, query]);
 
   const isFiltered = query.trim().length > 0;
 
