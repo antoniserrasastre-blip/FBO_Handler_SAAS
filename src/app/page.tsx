@@ -14,6 +14,7 @@ import { ChevronDown } from "@/components/Icons";
 import { SearchBar } from "@/components/SearchBar";
 import { ShortcutsHelp } from "@/components/ShortcutsHelp";
 import { PendingServicesPanel } from "@/components/PendingServicesPanel";
+import { QuickAddFlight } from "@/components/QuickAddFlight";
 
 type FlightWithRelations = Flight & {
   services: Service[];
@@ -34,6 +35,7 @@ export default function HomePage() {
   const [filteredFlights, setFilteredFlights] = useState<FlightWithRelations[]>([]);
   const [selectedFlightId, setSelectedFlightId] = useState<string | null>(null);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(true);
@@ -446,7 +448,7 @@ export default function HomePage() {
               Importar PDF
             </button>
             <button
-              onClick={() => router.push("/flights/new")}
+              onClick={() => setShowQuickAdd(true)}
               className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-blue-500 sm:px-4 sm:py-2 sm:text-sm"
             >
               + Nuevo vuelo
@@ -454,15 +456,25 @@ export default function HomePage() {
           </div>
         </div>
 
+        {/* Quick add form */}
+        {showQuickAdd && (
+          <QuickAddFlight
+            date={date}
+            onCreated={() => { setShowQuickAdd(false); fetchFlights(); addToast("Vuelo creado", undefined, "success"); }}
+            onCancel={() => setShowQuickAdd(false)}
+            onError={(msg) => addToast(msg, undefined, "warning")}
+          />
+        )}
+
         {/* Flight list */}
         {flights.length === 0 ? (
           <div className="rounded-lg border-2 border-dashed border-gray-200 p-12 text-center">
             <p className="text-gray-500">
               {isToday ? "No hay vuelos para hoy." : "No hay datos para este dia."}
             </p>
-            {isToday && (
+            {isToday && !showQuickAdd && (
               <button
-                onClick={() => router.push("/flights/new")}
+                onClick={() => setShowQuickAdd(true)}
                 className="mt-3 text-sm font-medium text-blue-600 hover:text-blue-500"
               >
                 Crear primer vuelo
