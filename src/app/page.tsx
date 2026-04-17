@@ -202,8 +202,10 @@ export default function HomePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type, customName, reference, target }),
       });
-      if (res.ok) fetchFlights();
-      else addToast("Error al anadir servicio", undefined, "warning", () => handleAddService(flightId, type, customName, reference, target));
+      if (res.ok) {
+        fetchFlights();
+        addToast(`Servicio anadido`, undefined, "success");
+      } else addToast("Error al anadir servicio", undefined, "warning", () => handleAddService(flightId, type, customName, reference, target));
     } catch {
       addToast("Sin conexion — servicio no anadido", undefined, "warning", () => handleAddService(flightId, type, customName, reference, target));
     }
@@ -212,8 +214,10 @@ export default function HomePage() {
   const handleDeleteFlight = async (id: string) => {
     try {
       const res = await fetch(`/api/flights/${id}`, { method: "DELETE" });
-      if (res.ok) fetchFlights();
-      else addToast("Error al eliminar vuelo", undefined, "warning");
+      if (res.ok) {
+        fetchFlights();
+        addToast("Vuelo eliminado", undefined, "success");
+      } else addToast("Error al eliminar vuelo", undefined, "warning");
     } catch {
       addToast("Sin conexion — vuelo no eliminado", undefined, "warning");
     }
@@ -222,8 +226,10 @@ export default function HomePage() {
   const handleDeleteService = async (serviceId: string) => {
     try {
       const res = await fetch(`/api/services/${serviceId}`, { method: "DELETE" });
-      if (res.ok) fetchFlights();
-      else addToast("Error al eliminar servicio", undefined, "warning");
+      if (res.ok) {
+        fetchFlights();
+        addToast("Servicio eliminado", undefined, "success");
+      } else addToast("Error al eliminar servicio", undefined, "warning");
     } catch {
       addToast("Sin conexion — servicio no eliminado", undefined, "warning");
     }
@@ -236,8 +242,10 @@ export default function HomePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ description, location }),
       });
-      if (res.ok) fetchFlights();
-      else addToast("Error al registrar objeto", undefined, "warning");
+      if (res.ok) {
+        fetchFlights();
+        addToast(`Objeto registrado: ${description}`, undefined, "success");
+      } else addToast("Error al registrar objeto", undefined, "warning");
     } catch {
       addToast("Sin conexion — objeto no registrado", undefined, "warning");
     }
@@ -346,6 +354,13 @@ export default function HomePage() {
         case "/":
           e.preventDefault();
           searchInputRef.current?.focus();
+          break;
+        case "n":
+        case "N":
+          if (!showQuickAdd) {
+            e.preventDefault();
+            setShowQuickAdd(true);
+          }
           break;
         case "?":
           setShowShortcuts((prev) => !prev);

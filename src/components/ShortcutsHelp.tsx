@@ -10,6 +10,7 @@ const SHORTCUTS = [
   { key: "C", action: "Avanzar primer catering pendiente" },
   { key: "S", action: "Avanzar primer servicio pendiente" },
   { key: "/", action: "Enfocar barra de busqueda" },
+  { key: "N", action: "Crear nuevo vuelo" },
   { key: "Esc", action: "Limpiar busqueda / cerrar modal" },
   { key: "?", action: "Mostrar esta ayuda" },
 ];
