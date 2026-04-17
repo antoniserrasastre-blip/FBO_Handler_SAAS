@@ -51,6 +51,7 @@ import { getOperatorName, findOperator } from "@/lib/operators";
 import { getTemplatesForOperator } from "@/lib/serviceTemplates";
 import { isServiceOverdue } from "@/lib/overdue";
 import { TurnaroundCountdown } from "./TurnaroundCountdown";
+import { QuickTimeEdit } from "./QuickTimeEdit";
 import { Direction } from "@/types";
 
 type FlightWithRelations = Flight & {
@@ -138,12 +139,20 @@ export const FlightCard = memo(function FlightCard({
                 <span className="text-gray-400">LLEG</span>
                 <span className="font-medium">{flight.origin || "----"}</span>
                 {flight.arrivalDate && <span className="text-[10px] text-gray-400">{flight.arrivalDate}</span>}
-                <span className="text-gray-400">{flight.eta || "--:--"}</span>
+                {readOnly ? (
+                  <span className="text-gray-400">{flight.eta || "--:--"}</span>
+                ) : (
+                  <QuickTimeEdit value={flight.eta} onSave={(v) => onUpdate(flight.id, { eta: v })} className="text-gray-500" />
+                )}
                 <ArrowRight size={12} className="shrink-0 text-gray-300" />
                 <span className="text-gray-400">SAL</span>
                 <span className="font-medium">{flight.destination || "----"}</span>
                 {flight.departureDate && <span className="text-[10px] text-gray-400">{flight.departureDate}</span>}
-                <span className="text-gray-400">{flight.etd || "--:--"}</span>
+                {readOnly ? (
+                  <span className="text-gray-400">{flight.etd || "--:--"}</span>
+                ) : (
+                  <QuickTimeEdit value={flight.etd} onSave={(v) => onUpdate(flight.id, { etd: v })} className="text-gray-500" />
+                )}
                 <TurnaroundCountdown etd={flight.etd} flightState={flight.state} />
               </div>
             </div>
