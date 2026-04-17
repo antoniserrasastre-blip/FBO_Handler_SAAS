@@ -25,14 +25,69 @@ const QUICK_FILTERS = [
   { label: "VistaJet", query: "vistajet" },
 ] as const;
 
-// Search tokens and what they match
+// Search with boolean operators:
+// - Space = AND (default): "fuel netjets" = fuel AND netjets
+// - "or" keyword = OR: "catering or prensa"
+// - "!" prefix or "not" keyword = NOT: "!dispatched" or "not dispatched"
+// - Quoted strings: "catering aire" treated as single token
 function flightMatchesQuery(flight: FlightWithRelations, query: string): boolean {
   const q = query.toLowerCase().trim();
   if (!q) return true;
 
-  // Split into tokens — ALL must match (AND logic)
-  const tokens = q.split(/\s+/).filter(Boolean);
-  return tokens.every((token) => matchesSingleToken(flight, token));
+  // Tokenize respecting quoted strings
+  const tokens = tokenizeQuery(q);
+  return evaluateTokens(flight, tokens);
+}
+
+function tokenizeQuery(q: string): string[] {
+  const result: string[] = [];
+  const regex = /"([^"]+)"|(\S+)/g;
+  let m;
+  while ((m = regex.exec(q)) !== null) {
+    result.push(m[1] || m[2]);
+  }
+  return result;
+}
+
+// Evaluate tokens with OR and NOT support
+function evaluateTokens(flight: FlightWithRelations, tokens: string[]): boolean {
+  // Pre-process: merge "not X" into "!X", drop "and" keyword
+  const merged: string[] = [];
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (t === "and" || t === "y" || t === "&") continue;
+    if ((t === "not" || t === "no") && i + 1 < tokens.length) {
+      merged.push("!" + tokens[i + 1]);
+      i++;
+      continue;
+    }
+    merged.push(t);
+  }
+
+  // Split into OR groups
+  const orGroups: string[][] = [[]];
+  for (const tok of merged) {
+    if (tok === "or" || tok === "o" || tok === "|") {
+      orGroups.push([]);
+    } else {
+      orGroups[orGroups.length - 1].push(tok);
+    }
+  }
+
+  // Any OR group must match (AND within each group)
+  return orGroups.some((group) =>
+    group.every((tok) => {
+      let negate = false;
+      let clean = tok;
+      if (clean.startsWith("!") || clean.startsWith("-")) {
+        negate = true;
+        clean = clean.slice(1);
+      }
+      if (!clean) return true;
+      const match = matchesSingleToken(flight, clean);
+      return negate ? !match : match;
+    })
+  );
 }
 
 function matchesSingleToken(flight: FlightWithRelations, token: string): boolean {
@@ -136,7 +191,7 @@ export function SearchBar({ flights, onFilteredFlights, resultCount, totalCount,
           type="text"
           value={query}
           onChange={(e) => handleQueryChange(e.target.value)}
-          placeholder="Buscar: fuel, netjets, policia, calzos, matricula... ( / )"
+          placeholder='Buscar: fuel netjets, !dispatched, "catering aire", or prensa... ( / )'
           className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-20 text-sm text-gray-700 placeholder-gray-400 shadow-sm focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
         />
         {isFiltered && (
