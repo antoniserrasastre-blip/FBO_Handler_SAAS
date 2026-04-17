@@ -42,6 +42,9 @@ function matchesSingleToken(flight: FlightWithRelations, token: string): boolean
   if (flight.aircraftType.toLowerCase().includes(token)) return true;
   if (flight.parking?.toLowerCase().includes(token)) return true;
 
+  // --- Notes ---
+  if (flight.notes?.toLowerCase().includes(token)) return true;
+
   // --- Flight state ---
   const stateConfig = FLIGHT_STATE_CONFIG[flight.state as FlightState];
   if (stateConfig?.label.toLowerCase().includes(token)) return true;

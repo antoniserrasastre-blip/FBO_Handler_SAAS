@@ -44,7 +44,7 @@ import {
   LostItemLocation,
 } from "@/types";
 import { ServiceIcon, ArrivedIcon, DeliveredIcon, ChevronUp, ChevronDown, CloseIcon, LostItemIcon, PdfIcon, ExcelIcon } from "./Icons";
-import { ArrowRight, Trash2, Users } from "lucide-react";
+import { ArrowRight, Trash2, Users, StickyNote } from "lucide-react";
 import { ServiceBadges } from "./ServiceCheckbox";
 import { PassengerCrewModal } from "./PassengerCrewModal";
 import { getOperatorName, findOperator } from "@/lib/operators";
@@ -132,6 +132,11 @@ export const FlightCard = memo(function FlightCard({
                 {isOvernight && (
                   <span className="rounded bg-purple-100 px-1 py-0.5 text-[10px] font-medium text-purple-600 sm:px-1.5 sm:text-xs">
                     PERNOCTA
+                  </span>
+                )}
+                {flight.notes && (
+                  <span className="inline-flex items-center gap-0.5 rounded bg-amber-100 px-1 py-0.5 text-[10px] font-medium text-amber-700" title={flight.notes}>
+                    <StickyNote size={10} /> Nota
                   </span>
                 )}
               </div>
@@ -499,6 +504,19 @@ export const FlightCard = memo(function FlightCard({
                     </div>
                   )}
                 </div>
+              </Section>
+
+              {/* Notes */}
+              <Section title={
+                <span className="flex items-center gap-1.5">
+                  <StickyNote size={12} />
+                  Notas
+                </span>
+              }>
+                <NotesField
+                  value={flight.notes || ""}
+                  onSave={(v) => onUpdate(flight.id, { notes: v || null } as Partial<Flight>)}
+                />
               </Section>
 
               {/* Export buttons */}
@@ -896,6 +914,24 @@ function LastModifiedBadge({ log }: { log: EventLog & { user: { name: string } |
     <span className="shrink-0 whitespace-nowrap text-[10px] text-gray-400">
       {log.user?.name || "Sistema"} · {log.action.length > 30 ? log.action.slice(0, 30) + "..." : log.action} · {time}
     </span>
+  );
+}
+
+function NotesField({ value, onSave }: { value: string; onSave: (v: string) => void }) {
+  const [local, setLocal] = useState(value);
+  const [dirty, setDirty] = useState(false);
+
+  if (!dirty && local !== value) setLocal(value);
+
+  return (
+    <textarea
+      value={local}
+      onChange={(e) => { setLocal(e.target.value); setDirty(true); }}
+      onBlur={() => { if (dirty && local !== value) onSave(local); setDirty(false); }}
+      placeholder="Observaciones (VIP, copiloto entrenamiento, etc.)"
+      rows={2}
+      className="block w-full resize-y rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+    />
   );
 }
 

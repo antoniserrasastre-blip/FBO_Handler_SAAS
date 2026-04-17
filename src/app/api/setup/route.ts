@@ -46,6 +46,7 @@ export async function GET() {
       `ALTER TABLE "Flight" ADD COLUMN "paxArrivalReal" INTEGER`,
       `ALTER TABLE "Flight" ADD COLUMN "paxDepartureReal" INTEGER`,
       `ALTER TABLE "Flight" ADD COLUMN "linkedFlightId" TEXT`,
+      `ALTER TABLE "Flight" ADD COLUMN "notes" TEXT`,
       `ALTER TABLE "Service" ADD COLUMN "target" TEXT`,
     ];
     for (const sql of migrations) {

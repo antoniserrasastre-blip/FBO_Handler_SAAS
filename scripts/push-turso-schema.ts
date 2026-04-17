@@ -69,6 +69,7 @@ const statements = [
     "paxArrivalReal" INTEGER,
     "paxDepartureReal" INTEGER,
     "linkedFlightId" TEXT,
+    "notes" TEXT,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" DATETIME NOT NULL,
     CONSTRAINT "Flight_daySheetId_fkey" FOREIGN KEY ("daySheetId") REFERENCES "DaySheet" ("id") ON DELETE CASCADE ON UPDATE CASCADE

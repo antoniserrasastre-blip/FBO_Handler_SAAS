@@ -88,6 +88,9 @@ model Flight {
   // Overnight link: if this flight is a departure copy of an arrival on another day
   linkedFlightId String?
 
+  // Free-text notes / observations
+  notes          String?
+
   services       Service[]
   eventLogs      EventLog[]
   passengers     Passenger[]
