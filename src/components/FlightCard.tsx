@@ -49,6 +49,7 @@ import { ServiceBadges } from "./ServiceCheckbox";
 import { PassengerCrewModal } from "./PassengerCrewModal";
 import { getOperatorName, findOperator } from "@/lib/operators";
 import { getTemplatesForOperator } from "@/lib/serviceTemplates";
+import { isServiceOverdue } from "@/lib/overdue";
 import { Direction } from "@/types";
 
 type FlightWithRelations = Flight & {
@@ -451,9 +452,15 @@ export const FlightCard = memo(function FlightCard({
                   </div>
                   {flight.services.length > 0 && (
                     <div className="mt-2 space-y-1">
-                      {flight.services.map((service) => (
-                        <div key={service.id} className="flex items-center justify-between gap-2 text-xs text-gray-500">
+                      {flight.services.map((service) => {
+                        const overdue = isServiceOverdue(service);
+                        return (
+                        <div
+                          key={service.id}
+                          className={`flex items-center justify-between gap-2 text-xs text-gray-500 ${overdue ? "overdue-pulse rounded border border-red-300 px-1.5 py-1" : ""}`}
+                        >
                           <span className="flex min-w-0 items-center gap-1">
+                            {overdue && <span className="shrink-0 text-red-600" title="Retrasado">&#9888;</span>}
                             <ServiceIcon type={service.type} size={12} className="shrink-0 text-gray-400" />
                             {service.type === "CUSTOM" ? service.customName : SERVICE_LABELS[service.type as ServiceType]}{" "}
                             {service.target && (
@@ -476,7 +483,8 @@ export const FlightCard = memo(function FlightCard({
                             </button>
                           </div>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>

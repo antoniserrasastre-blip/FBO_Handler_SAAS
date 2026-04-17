@@ -15,6 +15,8 @@ import { SearchBar } from "@/components/SearchBar";
 import { ShortcutsHelp } from "@/components/ShortcutsHelp";
 import { PendingServicesPanel } from "@/components/PendingServicesPanel";
 import { QuickAddFlight } from "@/components/QuickAddFlight";
+import { useOverdueAlert } from "@/hooks/useOverdueAlert";
+import { Volume2, VolumeX } from "lucide-react";
 
 type FlightWithRelations = Flight & {
   services: Service[];
@@ -37,6 +39,7 @@ export default function HomePage() {
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [soundEnabled, setSoundEnabled] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(true);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -59,6 +62,9 @@ export default function HomePage() {
     const today = getToday();
     return date.getTime() === today.getTime();
   }, [date]);
+
+  const allServices = useMemo(() => flights.flatMap((f) => f.services), [flights]);
+  const overdueCount = useOverdueAlert(allServices, soundEnabled && isToday);
 
   const fetchFlights = useCallback(async () => {
     try {
@@ -400,6 +406,18 @@ export default function HomePage() {
             }
           </h2>
           <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+            {overdueCount > 0 && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-1 text-xs font-bold text-red-700 overdue-pulse">
+                &#9888; {overdueCount} retrasado{overdueCount !== 1 ? "s" : ""}
+              </span>
+            )}
+            <button
+              onClick={() => setSoundEnabled(!soundEnabled)}
+              className="rounded-lg border border-gray-300 p-1.5 text-gray-600 hover:bg-gray-50"
+              title={soundEnabled ? "Desactivar sonido" : "Activar sonido de alertas"}
+            >
+              {soundEnabled ? <Volume2 size={14} /> : <VolumeX size={14} />}
+            </button>
             {flights.length > 0 && (
               <div className="relative group">
                 <button className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 sm:px-3 sm:py-2 sm:text-sm">
