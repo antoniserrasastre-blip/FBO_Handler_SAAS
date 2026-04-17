@@ -16,7 +16,8 @@ import { ShortcutsHelp } from "@/components/ShortcutsHelp";
 import { PendingServicesPanel } from "@/components/PendingServicesPanel";
 import { QuickAddFlight } from "@/components/QuickAddFlight";
 import { useOverdueAlert } from "@/hooks/useOverdueAlert";
-import { Volume2, VolumeX } from "lucide-react";
+import { Volume2, VolumeX, FileCheck2 } from "lucide-react";
+import { ShiftHandover } from "@/components/ShiftHandover";
 
 type FlightWithRelations = Flight & {
   services: Service[];
@@ -40,6 +41,7 @@ export default function HomePage() {
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [soundEnabled, setSoundEnabled] = useState(false);
+  const [showHandover, setShowHandover] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(true);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -411,6 +413,15 @@ export default function HomePage() {
                 &#9888; {overdueCount} retrasado{overdueCount !== 1 ? "s" : ""}
               </span>
             )}
+            {flights.length > 0 && (
+              <button
+                onClick={() => setShowHandover(true)}
+                className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 sm:px-3 sm:py-2 sm:text-sm"
+                title="Resumen para pasar turno"
+              >
+                <FileCheck2 size={14} /> Traspaso
+              </button>
+            )}
             <button
               onClick={() => setSoundEnabled(!soundEnabled)}
               className="rounded-lg border border-gray-300 p-1.5 text-gray-600 hover:bg-gray-50"
@@ -528,6 +539,7 @@ export default function HomePage() {
       </main>
 
       <ShortcutsHelp isOpen={showShortcuts} onClose={() => setShowShortcuts(false)} />
+      <ShiftHandover isOpen={showHandover} onClose={() => setShowHandover(false)} flights={flights} date={date} />
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
