@@ -37,6 +37,13 @@ export async function PATCH(
   if (body.paxDepTransportState && body.paxDepTransportState !== existing.paxDepTransportState) changes.push(`Transporte → ${body.paxDepTransportState}`);
   if (body.crewArrLocation && body.crewArrLocation !== existing.crewArrLocation) changes.push(`Crew lleg. → ${body.crewArrLocation}`);
   if (body.crewDepLocation && body.crewDepLocation !== existing.crewDepLocation) changes.push(`Crew sal. → ${body.crewDepLocation}`);
+  if (body.eta !== undefined && body.eta !== existing.eta) changes.push(`ETA: ${existing.eta || "--"} → ${body.eta || "--"}`);
+  if (body.etd !== undefined && body.etd !== existing.etd) changes.push(`ETD: ${existing.etd || "--"} → ${body.etd || "--"}`);
+  if (body.tobt !== undefined && body.tobt !== existing.tobt) changes.push(`TOBT: ${existing.tobt || "--"} → ${body.tobt || "--"}`);
+  if (body.parking !== undefined && body.parking !== existing.parking) changes.push(`Parking: ${existing.parking || "--"} → ${body.parking || "--"}`);
+  if (body.origin !== undefined && body.origin !== existing.origin) changes.push(`Origen: ${existing.origin || "--"} → ${body.origin || "--"}`);
+  if (body.destination !== undefined && body.destination !== existing.destination) changes.push(`Destino: ${existing.destination || "--"} → ${body.destination || "--"}`);
+  if (body.notes !== undefined && body.notes !== existing.notes) changes.push(body.notes ? `Nota actualizada` : `Nota eliminada`);
 
   if (changes.length > 0) {
     await prisma.eventLog.create({
