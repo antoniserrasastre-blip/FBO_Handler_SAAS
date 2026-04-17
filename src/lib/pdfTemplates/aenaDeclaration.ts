@@ -3,6 +3,18 @@
 // Uses pdfkit for coordinate-based drawing on A4 pages
 
 import PDFDocument from "pdfkit";
+import fs from "fs";
+import path from "path";
+
+// Logo path (resolved at runtime) — null if not found
+const LOGO_PATH = (() => {
+  try {
+    const p = path.join(process.cwd(), "public", "branding", "mallorcair-footer.png");
+    return fs.existsSync(p) ? p : null;
+  } catch {
+    return null;
+  }
+})();
 
 export interface CrewEntry {
   fullName: string;
@@ -170,7 +182,17 @@ function drawSignatureBlock(doc: PDFKit.PDFDocument) {
   doc.text("Firma:", MARGIN + 6, y + 36);
 
   doc.text("Sello Agente Handling", MARGIN + halfW + 6, y + 6);
-  doc.text("MALLORCAIR S.L.", MARGIN + halfW + 6, y + 22);
+
+  // Mallorcair logo on signature block (right side)
+  if (LOGO_PATH) {
+    try {
+      doc.image(LOGO_PATH, MARGIN + halfW + 6, y + 18, { height: 28, width: halfW - 12, fit: [halfW - 12, 28], align: "center" });
+    } catch {
+      doc.text("MALLORCAIR FBO", MARGIN + halfW + 6, y + 22);
+    }
+  } else {
+    doc.text("MALLORCAIR FBO", MARGIN + halfW + 6, y + 22);
+  }
 
   // Legal footer
   doc.fontSize(5).fillColor("#9CA3AF").text(
