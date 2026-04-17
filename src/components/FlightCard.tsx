@@ -50,6 +50,7 @@ import { PassengerCrewModal } from "./PassengerCrewModal";
 import { getOperatorName, findOperator } from "@/lib/operators";
 import { getTemplatesForOperator } from "@/lib/serviceTemplates";
 import { isServiceOverdue } from "@/lib/overdue";
+import { TurnaroundCountdown } from "./TurnaroundCountdown";
 import { Direction } from "@/types";
 
 type FlightWithRelations = Flight & {
@@ -143,6 +144,7 @@ export const FlightCard = memo(function FlightCard({
                 <span className="font-medium">{flight.destination || "----"}</span>
                 {flight.departureDate && <span className="text-[10px] text-gray-400">{flight.departureDate}</span>}
                 <span className="text-gray-400">{flight.etd || "--:--"}</span>
+                <TurnaroundCountdown etd={flight.etd} flightState={flight.state} />
               </div>
             </div>
           </div>
