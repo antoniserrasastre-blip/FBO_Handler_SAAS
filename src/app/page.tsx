@@ -16,7 +16,7 @@ import { ShortcutsHelp } from "@/components/ShortcutsHelp";
 import { PendingServicesPanel } from "@/components/PendingServicesPanel";
 import { QuickAddFlight } from "@/components/QuickAddFlight";
 import { useOverdueAlert } from "@/hooks/useOverdueAlert";
-import { Volume2, VolumeX, FileCheck2 } from "lucide-react";
+import { Volume2, VolumeX, FileCheck2, Printer } from "lucide-react";
 import { ShiftHandover } from "@/components/ShiftHandover";
 
 type FlightWithRelations = Flight & {
@@ -401,6 +401,9 @@ export default function HomePage() {
       <PendingServicesPanel flights={flights} onQuickFilter={setSearchQuery} />
 
       <main className="mx-auto max-w-7xl px-3 py-3 sm:px-4 sm:py-4">
+        <div className="print-header">
+          MALLORCAIR FBO — Orden del dia {date.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+        </div>
         {/* Search bar */}
         {flights.length > 0 && (
           <SearchBar
@@ -427,6 +430,15 @@ export default function HomePage() {
               <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-1 text-xs font-bold text-red-700 overdue-pulse">
                 &#9888; {overdueCount} retrasado{overdueCount !== 1 ? "s" : ""}
               </span>
+            )}
+            {flights.length > 0 && (
+              <button
+                onClick={() => window.print()}
+                className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 sm:px-3 sm:py-2 sm:text-sm"
+                title="Imprimir hoja del dia"
+              >
+                <Printer size={14} /> Imprimir
+              </button>
             )}
             {flights.length > 0 && (
               <button
