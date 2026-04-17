@@ -47,7 +47,8 @@ import { ServiceIcon, ArrivedIcon, DeliveredIcon, ChevronUp, ChevronDown, CloseI
 import { ArrowRight, Trash2, Users } from "lucide-react";
 import { ServiceBadges } from "./ServiceCheckbox";
 import { PassengerCrewModal } from "./PassengerCrewModal";
-import { getOperatorName } from "@/lib/operators";
+import { getOperatorName, findOperator } from "@/lib/operators";
+import { getTemplatesForOperator } from "@/lib/serviceTemplates";
 import { Direction } from "@/types";
 
 type FlightWithRelations = Flight & {
@@ -440,11 +441,14 @@ export const FlightCard = memo(function FlightCard({
               <Section title="Servicios / Extras">
                 <div className="space-y-2">
                   <ServiceBadges services={flight.services} onToggle={onServiceToggle} />
-                  <AddServiceRow
-                    flightId={flight.id}
-                    existingTypes={flight.services.map((s) => s.type)}
-                    onAdd={onAddService}
-                  />
+                  <div className="flex flex-wrap items-start gap-2">
+                    <AddServiceRow
+                      flightId={flight.id}
+                      existingTypes={flight.services.map((s) => s.type)}
+                      onAdd={onAddService}
+                    />
+                    <ServiceTemplateDropdown flightId={flight.id} callsign={flight.callsign} onAdd={onAddService} />
+                  </div>
                   {flight.services.length > 0 && (
                     <div className="mt-2 space-y-1">
                       {flight.services.map((service) => (
@@ -873,6 +877,58 @@ function LastModifiedBadge({ log }: { log: EventLog & { user: { name: string } |
     <span className="shrink-0 whitespace-nowrap text-[10px] text-gray-400">
       {log.user?.name || "Sistema"} · {log.action.length > 30 ? log.action.slice(0, 30) + "..." : log.action} · {time}
     </span>
+  );
+}
+
+function ServiceTemplateDropdown({
+  flightId,
+  callsign,
+  onAdd,
+}: {
+  flightId: string;
+  callsign: string;
+  onAdd: (flightId: string, type: string, customName?: string, reference?: string, target?: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const operator = findOperator(callsign);
+  const templates = getTemplatesForOperator(operator?.icao || null);
+
+  if (templates.length === 0) return null;
+
+  const applyTemplate = (items: { type: string; customName?: string; target?: string; origin?: string; reference?: string }[]) => {
+    for (const item of items) {
+      onAdd(flightId, item.type, item.customName, item.reference, item.target);
+    }
+    setOpen(false);
+  };
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className="rounded-md border border-dashed border-indigo-300 bg-indigo-50/50 px-2 py-1 text-xs text-indigo-600 hover:border-indigo-400 hover:bg-indigo-50"
+        title={`Plantillas${operator ? " para " + operator.name : ""}`}
+      >
+        + Plantilla
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute left-0 top-full z-20 mt-1 w-64 rounded-lg border bg-white py-1 shadow-lg">
+            {templates.map((tpl) => (
+              <button
+                key={tpl.id}
+                onClick={() => applyTemplate(tpl.items)}
+                className="block w-full px-3 py-2 text-left hover:bg-gray-50"
+              >
+                <div className="text-xs font-semibold text-gray-800">{tpl.label}</div>
+                <div className="text-[10px] text-gray-500">{tpl.description}</div>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
