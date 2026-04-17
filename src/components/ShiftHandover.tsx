@@ -28,13 +28,13 @@ export function ShiftHandover({ isOpen, onClose, flights, date }: ShiftHandoverP
     const dispatched = flights.filter((f) => f.state === "DISPATCHED");
     const fuelPending = flights.filter((f) => f.state !== "DISPATCHED" && (f.fuelState === "REQUESTED" || f.fuelState === "NOT_REQUESTED"));
     const pendingServices = flights.flatMap((f) =>
-      f.services.filter((s) => s.state !== "DELIVERED").map((s) => ({ flight: f, service: s }))
+      (f.services || []).filter((s) => s.state !== "DELIVERED").map((s) => ({ flight: f, service: s }))
     );
     const overdueServices = flights.flatMap((f) =>
-      f.services.filter(isServiceOverdue).map((s) => ({ flight: f, service: s }))
+      (f.services || []).filter(isServiceOverdue).map((s) => ({ flight: f, service: s }))
     );
     const openLostItems = flights.flatMap((f) =>
-      f.lostItems.filter((li) => li.state !== "DELIVERED").map((li) => ({ flight: f, item: li }))
+      (f.lostItems || []).filter((li) => li.state !== "DELIVERED").map((li) => ({ flight: f, item: li }))
     );
     const policiaNeeded = flights.filter((f) => f.state !== "DISPATCHED" && getRequiredAuthorities(f.origin).policia);
 

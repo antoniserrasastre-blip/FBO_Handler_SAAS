@@ -66,7 +66,7 @@ export default function HomePage() {
     return date.getTime() === today.getTime();
   }, [date]);
 
-  const allServices = useMemo(() => flights.flatMap((f) => f.services), [flights]);
+  const allServices = useMemo(() => flights.flatMap((f) => f.services || []), [flights]);
   const overdueCount = useOverdueAlert(allServices, soundEnabled && isToday);
   const parkingConflicts = useMemo(() => detectParkingConflicts(flights), [flights]);
 
@@ -176,7 +176,7 @@ export default function HomePage() {
     setFlights((prev) =>
       prev.map((f) => ({
         ...f,
-        services: f.services.map((s) =>
+        services: (f.services || []).map((s) =>
           s.id === serviceId ? { ...s, state: newState } : s
         ),
       }))
@@ -257,7 +257,7 @@ export default function HomePage() {
     setFlights((prev) =>
       prev.map((f) => ({
         ...f,
-        lostItems: f.lostItems.map((li) =>
+        lostItems: (f.lostItems || []).map((li) =>
           li.id === itemId ? { ...li, state: newState } : li
         ),
       }))
@@ -342,14 +342,14 @@ export default function HomePage() {
         case "c":
         case "C":
           if (selected) {
-            const catering = selected.services.find((s) => s.type === "CATERING" && SVC_NEXT[s.state]);
+            const catering = (selected.services || []).find((s) => s.type === "CATERING" && SVC_NEXT[s.state]);
             if (catering) handleServiceToggle(catering.id, SVC_NEXT[catering.state]);
           }
           break;
         case "s":
         case "S":
           if (selected) {
-            const svc = selected.services.find((s) => SVC_NEXT[s.state]);
+            const svc = (selected.services || []).find((s) => SVC_NEXT[s.state]);
             if (svc) handleServiceToggle(svc.id, SVC_NEXT[svc.state]);
           }
           break;
