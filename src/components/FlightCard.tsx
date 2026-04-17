@@ -465,6 +465,20 @@ export const FlightCard = memo(function FlightCard({
                       onAdd={onAddService}
                     />
                     <ServiceTemplateDropdown flightId={flight.id} callsign={flight.callsign} onAdd={onAddService} />
+                    {flight.services.some((s) => s.state !== "DELIVERED") && (
+                      <button
+                        onClick={() => {
+                          const pending = flight.services.filter((s) => s.state !== "DELIVERED");
+                          if (window.confirm(`Marcar ${pending.length} servicio${pending.length !== 1 ? "s" : ""} como entregado${pending.length !== 1 ? "s" : ""}?`)) {
+                            for (const s of pending) onServiceToggle(s.id, "DELIVERED");
+                          }
+                        }}
+                        className="rounded-md border border-green-200 bg-green-50 px-2 py-1 text-xs font-medium text-green-700 hover:border-green-300 hover:bg-green-100"
+                        title="Marcar todos los servicios como entregados"
+                      >
+                        &#10003; Todos entregados
+                      </button>
+                    )}
                   </div>
                   {flight.services.length > 0 && (
                     <div className="mt-2 space-y-1">
