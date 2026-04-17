@@ -91,7 +91,12 @@ function looksLikeRegistration(val: string): boolean {
 
 function isRegistration(val: string): boolean {
   const v = val.trim().toUpperCase();
-  const cleaned = v.replace(/\s*[-*(].*$/, "").replace(/\s+\d+$/, "");
+  // Strip suffixes: /1, /2 (legs), /P, /C (target), spaces+digits, dashes, parens
+  const cleaned = v
+    .replace(/\s*\/\s*[A-Z0-9]+$/i, "")  // strip /1, /2, /P, /C
+    .replace(/\s*[*(].*$/, "")             // strip * and parens
+    .replace(/\s+\d+$/, "")                // strip trailing space+digits
+    .trim();
   // Allow registrations starting with digit (9H-xxx, 5A-xxx, 4X-xxx, etc.)
   if (!/^[A-Z0-9][A-Z0-9]{3,6}$/i.test(cleaned)) return false;
   if (/^\d{4,}$/.test(cleaned)) return false; // pure numbers are not registrations
