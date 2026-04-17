@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Flight, Service, LostItem, EventLog } from "@prisma/client";
 import { getRequiredAuthorities } from "@/lib/countries";
 import { isServiceOverdue } from "@/lib/overdue";
+import { isFarFromGA } from "@/lib/parkingStands";
 import { ChevronDown, ChevronUp } from "./Icons";
 import { AlertTriangle } from "lucide-react";
 
@@ -33,6 +34,7 @@ export function PendingServicesPanel({ flights, onQuickFilter }: PendingServices
     guardaCivil: flights.filter((f) => f.state !== "DISPATCHED" && getRequiredAuthorities(f.origin).guardaCivil).length,
     overdue: flights.reduce((count, f) => count + (f.services || []).filter((s) => isServiceOverdue(s)).length, 0),
     extrasPending: activeFuelo.filter((f) => (f.services || []).some((s) => s.state === "PENDING")).length,
+    farFromGA: activeFuelo.filter((f) => isFarFromGA(f.parking)).length,
   };
 
   const totalIssues = counts.fuelPending + counts.cateringPending + counts.toiletPending + counts.overdue;
@@ -48,6 +50,7 @@ export function PendingServicesPanel({ flights, onQuickFilter }: PendingServices
     { label: "Extras pendientes", count: counts.extrasPending, query: "pendiente" },
     { label: "Policia necesaria", count: counts.policia, query: "policia" },
     { label: "Guardia Civil", count: counts.guardaCivil, query: "civil" },
+    { label: "Lejos del FBO", count: counts.farFromGA, query: "lejos", color: "text-orange-600" },
     { label: "Servicios retrasados", count: counts.overdue, query: "extras", color: "text-red-600" },
   ].filter((item) => item.count > 0);
 

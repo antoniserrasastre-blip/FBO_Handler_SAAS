@@ -52,6 +52,7 @@ import { getTemplatesForOperator } from "@/lib/serviceTemplates";
 import { isServiceOverdue } from "@/lib/overdue";
 import { TurnaroundCountdown } from "./TurnaroundCountdown";
 import { QuickTimeEdit } from "./QuickTimeEdit";
+import { checkCompatibility, getStandDescription, isFarFromGA } from "@/lib/parkingStands";
 import { Direction } from "@/types";
 
 type FlightWithRelations = Flight & {
@@ -152,20 +153,34 @@ export const FlightCard = memo(function FlightCard({
                     {opName}
                   </span>
                 ) : null; })()}
-                {flight.parking && (
-                  <span
-                    className={`cursor-pointer rounded px-1 py-0.5 text-[10px] font-medium sm:px-1.5 sm:text-xs ${
-                      parkingConflict
-                        ? "bg-red-100 text-red-700 ring-1 ring-red-400 hover:bg-red-200"
-                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                    }`}
-                    onClick={(e) => { e.stopPropagation(); onBadgeClick?.(flight.parking!); }}
-                    title={parkingConflict ? `Conflicto con ${parkingConflict}` : `Filtrar por parking ${flight.parking}`}
-                  >
-                    {parkingConflict && <span className="mr-0.5">&#9888;</span>}
-                    {flight.parking}
-                  </span>
-                )}
+                {flight.parking && (() => {
+                  const compat = checkCompatibility(flight.aircraftType, flight.parking);
+                  const farFromGA = isFarFromGA(flight.parking);
+                  const desc = getStandDescription(flight.parking);
+                  let badgeClass = "bg-gray-100 text-gray-600 hover:bg-gray-200";
+                  let tip = `Filtrar por parking ${flight.parking} — ${desc}`;
+                  if (parkingConflict) {
+                    badgeClass = "bg-red-100 text-red-700 ring-1 ring-red-400 hover:bg-red-200";
+                    tip = `Conflicto con ${parkingConflict}`;
+                  } else if (compat.severity === "error") {
+                    badgeClass = "bg-red-100 text-red-700 ring-1 ring-red-400 hover:bg-red-200";
+                    tip = compat.message || tip;
+                  } else if (farFromGA) {
+                    badgeClass = "bg-orange-100 text-orange-700 ring-1 ring-orange-300 hover:bg-orange-200";
+                    tip = `${desc} — lejos del GA apron`;
+                  }
+                  return (
+                    <span
+                      className={`cursor-pointer rounded px-1 py-0.5 text-[10px] font-medium sm:px-1.5 sm:text-xs ${badgeClass}`}
+                      onClick={(e) => { e.stopPropagation(); onBadgeClick?.(flight.parking!); }}
+                      title={tip}
+                    >
+                      {(parkingConflict || compat.severity === "error") && <span className="mr-0.5">&#9888;</span>}
+                      {farFromGA && !parkingConflict && compat.severity !== "error" && <span className="mr-0.5">&#8599;</span>}
+                      {flight.parking}
+                    </span>
+                  );
+                })()}
                 {isOvernight && (
                   <span className="rounded bg-purple-100 px-1 py-0.5 text-[10px] font-medium text-purple-600 sm:px-1.5 sm:text-xs">
                     PERNOCTA

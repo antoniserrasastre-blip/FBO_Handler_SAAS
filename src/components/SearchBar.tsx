@@ -4,6 +4,7 @@ import { useState, useMemo, useCallback } from "react";
 import { Flight, Service, LostItem, EventLog } from "@prisma/client";
 import { findOperator } from "@/lib/operators";
 import { getRequiredAuthorities } from "@/lib/countries";
+import { isFarFromGA } from "@/lib/parkingStands";
 import { FLIGHT_STATE_CONFIG, FlightState } from "@/types";
 import { CloseIcon } from "./Icons";
 import { Search } from "lucide-react";
@@ -21,6 +22,7 @@ const QUICK_FILTERS = [
   { label: "Catering", query: "catering" },
   { label: "Policia", query: "policia" },
   { label: "Pernocta", query: "pernocta" },
+  { label: "Lejos del FBO", query: "lejos" },
   { label: "NetJets", query: "netjets" },
   { label: "VistaJet", query: "vistajet" },
 ] as const;
@@ -140,6 +142,9 @@ function matchesSingleToken(flight: FlightWithRelations, token: string): boolean
 
   // --- Overnight ---
   if ((token === "pernocta" || token === "overnight") && flight.arrivalDate && flight.departureDate && flight.arrivalDate !== flight.departureDate) return true;
+
+  // --- Far from GA apron ---
+  if ((token === "lejos" || token === "remoto" || token === "remote") && isFarFromGA(flight.parking)) return true;
 
   // --- Lost items ---
   if ((token === "objetos" || token === "lost") && (flight.lostItems || []).some((li) => li.state !== "DELIVERED")) return true;
