@@ -2,21 +2,39 @@
 
 ## Objetivo
 
-Añadir una sección de ayuda dentro de la app que muestre el contenido del
-documento `docs/MANUAL FILTRO 2026.pdf` estructurado y buscable, para que el
-personal de filtro pueda consultarlo en turno sin abrir el PDF.
+Añadir una sección de ayuda dentro de la app que agregue el contenido de los
+documentos operativos de MALLORCAIR en una vista estructurada y buscable, para
+que el personal de filtro pueda consultarlos en turno sin abrir PDFs sueltos.
 
-**Fuente de verdad:** `docs/MANUAL FILTRO 2026.pdf` (21 páginas). El contenido
-se transcribe una vez a TypeScript; el PDF queda como referencia histórica.
+**Fuentes de verdad** (en `docs/`):
+
+| Documento | Uso en la app |
+|-----------|---------------|
+| `MANUAL FILTRO 2026.pdf` | Grueso del contenido (22 secciones operativas) |
+| `PROCEDIMIENTO OPERATIVO PASO A PASO SOP_EQUIPAJE CONTROLADO ESP.pdf` | Sección propia `sop-equipaje` (procedimiento formal MLR-OPS-BAG-01 V1.00) |
+| `Hoja_Control_Equipaje_Bodega_Mallorcair ESP.pdf` + `Hold_Baggage_Control_Sheet_Mallorcair ENG.pdf` | Referencia dentro de `sop-equipaje` — mostrar estructura de la hoja (Fecha / Nº Vuelo / Destino / Matrícula / Total bultos / Filtro parcial-final / Pista parcial-final / firmas) |
+| `Condiciones de uso aparcamiento abonados PMI.pdf` | Sección propia `aparcamiento-pmi` (15 normas Aena) |
+
+El contenido se transcribe una vez a TypeScript; los PDFs quedan como
+referencia histórica. No se parsean en runtime.
+
+**Fuera del alcance del help (aunque estén en `docs/`):**
+
+- `FORMATO INFORMACIÓN MALLORCAIR.doc` — formulario PRL (se rellena por
+  empleado, no es contenido de consulta operativa).
+- `image002.png` — activo gráfico embebido, no documento.
+- Daily PDFs / Excels de extras — inputs de parser, no documentación.
 
 ## Prioridades
 
-1. **Apertura** (turno mañana) — crítico para el primer uso, debe quedar
-   destacado y abierto por defecto.
-2. Resto de secciones (Sandwich, Cierre, Hojas Maletas, Conducta, Uniformidad,
+1. **Apertura** (turno mañana) — crítico para el primer uso, destacado y
+   abierto por defecto.
+2. **SOP Equipaje Controlado** — procedimiento formal con firmas obligatorias;
+   la gente lo consulta en cada salida con pax.
+3. Resto de secciones (Sandwich, Cierre, Hojas Maletas, Conducta, Uniformidad,
    Atención Cliente, Atención Tripulación, Equipaje, Transporte, Coche,
    Catering, Vajillas, Extras, Policía/Guardia Civil, Llegadas, Salidas/Trablisa,
-   Filtro-Oficina, Crossroads, Gendecs, NetJets, TimeAir).
+   Filtro-Oficina, Crossroads, Gendecs, NetJets, TimeAir, Aparcamiento PMI).
 
 ## Archivos a crear
 
@@ -84,6 +102,9 @@ sin inventar ni resumir en exceso — son instrucciones operativas.
 | `gendecs` | Gendecs | p.15-19 | Sección larga, dividir en sub-headings |
 | `netjets` | NetJets | p.20 | Ojo con ID alemanes |
 | `timeair` | TimeAir / TIE | p.21 | Flujo click here → download |
+| `sop-equipaje` | SOP Equipaje Controlado | `SOP_EQUIPAJE CONTROLADO ESP.pdf` | `highlight: true` (2ª prioridad). Fases Filtro (parcial/final) + Pista (parcial/final), cambios última hora, total final, registro en Cyber, 3 firmas obligatorias, 4 normas fundamentales. subtitle: "MLR-OPS-BAG-01 V1.00" |
+| `hojas-control-equipaje` | Hojas de control de equipaje (plantilla) | `Hoja_Control_Equipaje_Bodega_Mallorcair ESP.pdf` + `Hold_Baggage_Control_Sheet_Mallorcair ENG.pdf` | Sub-sección dentro de `sop-equipaje` o independiente. Describe campos de la plantilla física: Fecha, Nº Vuelo, Destino, Matrícula, Total bultos, Filtro parcial/final, Pista parcial/final, Totales pista, 3 firmas (Filtro/Pista/Comandante) con nombre + hora |
+| `aparcamiento-pmi` | Aparcamiento empleados PMI | `Condiciones de uso aparcamiento abonados PMI.pdf` | 15 normas Aena. Puntos clave: abono nominativo/personal/intransferible, jornada laboral solamente, estancia máx 2 días (7 para tripulaciones), un aeropuerto único, sanciones escaladas (3 meses → 6 meses → indefinido). Emails: `gestion-parking.pmi@easparking.com`, `pmi.com.aparcamientos@aena.es` |
 
 Callouts obligatorios (tone `danger` o `warning`):
 
@@ -92,6 +113,10 @@ Callouts obligatorios (tone `danger` o `warning`):
 - Armas → documentación a Guardia Civil, pistero entra con el pax.
 - Copiar-pegar VJH / VJT / NetJets → formato "extraño", casilla por casilla.
 - Móvil sin permiso → no permitido.
+- SOP Equipaje: si filtro parcial ≠ filtro final → `danger` "detener proceso".
+- SOP Equipaje: si pista final no coincide → `danger` "NO cargar".
+- SOP Equipaje: no autorizar salida con discrepancias (norma fundamental).
+- Aparcamiento PMI: abono nominativo e intransferible, sanciones progresivas.
 
 ## UI/UX
 
@@ -136,6 +161,10 @@ consultará en turno desde el móvil.
 - [ ] Todas las secciones listadas arriba están presentes con su contenido
       transcrito del PDF.
 - [ ] Callouts obligatorios visibles con el tono correcto.
+- [ ] `sop-equipaje` aparece como 2ª sección destacada (después de Apertura)
+      con badge propio y todas las fases/normas/firmas.
+- [ ] `aparcamiento-pmi` incluye los emails de contacto como bloques de texto
+      copiables (no hace falta link activo).
 
 ## Fuera de alcance
 
