@@ -170,3 +170,13 @@ npm run db:reset         # Hard reset local DB + reseed
 - PWA-ready
 
 **Not yet implemented**: WebSocket upgrade (currently SSE, in-memory — doesn't scale across Vercel instances), external API integrations (FlightRadar, ESIA).
+
+## Tracking de progreso
+
+El fichero `ROADMAP.md` de la raíz es la fuente de verdad del estado del proyecto. Mi dashboard personal lo lee remotamente.
+
+Reglas:
+- Al completar una tarea, marca su checkbox en `ROADMAP.md` (`- [ ]` → `- [x]`) en el mismo commit que la cierra. No en un commit aparte.
+- Al abrir una fase nueva o reestructurar, edita `ROADMAP.md` primero y commitea antes de tocar código.
+- Mantén el formato: headers `##` para fases, checkboxes con indentación de 2 espacios para sub-tareas. No uses headers `###` dentro de fases — sub-estructura va en checkboxes anidados.
+- No añadas JSON, YAML frontmatter ni status files paralelos. El markdown es suficiente.
