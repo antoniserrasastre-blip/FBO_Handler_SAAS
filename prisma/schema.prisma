@@ -88,6 +88,13 @@ model Flight {
   // Overnight link: if this flight is a departure copy of an arrival on another day
   linkedFlightId String?
 
+  // Payment tracking for flights without contract (callsign with trailing "*")
+  // Must pay before departure; DISPATCHED should warn (non-blocking) if not PAID.
+  paymentRequired Boolean  @default(false)
+  paymentState    String   @default("N_A") // N_A | PENDING | PAID
+  paymentMarkedAt DateTime?
+  paymentMarkedBy String?
+
   // Free-text notes / observations
   notes          String?
 

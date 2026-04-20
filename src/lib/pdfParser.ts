@@ -28,6 +28,10 @@ export interface ParsedFlight {
   destination: string;
   departureDate: string;
   etd: string;
+  // Departure callsign with trailing "*" marks a flight that has no contract
+  // and must pay before departure. Kept separately from callsigns so display
+  // code can decide whether to show it.
+  paymentRequired: boolean;
 }
 
 export interface ParseResult {
@@ -306,12 +310,13 @@ function parseFlightBlock(
     /^([A-Z][A-Z0-9*]+?)(\d{2}\/\d{2}\/\d{2})(\d{2}:\d{2})$/
   );
   if (depDateMatch) {
-    departureCallsign = depDateMatch[1].replace(/\*$/, "");
+    departureCallsign = depDateMatch[1];
     inlineDepDate = depDateMatch[2];
     inlineDepTime = depDateMatch[3];
   } else {
-    departureCallsign = rest.replace(/\*$/, "");
+    departureCallsign = rest;
   }
+  const paymentRequired = departureCallsign.endsWith("*");
 
   // Parse the date line for any missing dates/times
   let arrDate = inlineArrDate;
@@ -355,6 +360,7 @@ function parseFlightBlock(
     destination,
     departureDate: depDate,
     etd: depTime,
+    paymentRequired,
   };
 }
 

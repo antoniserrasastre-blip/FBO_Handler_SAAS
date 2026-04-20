@@ -17,9 +17,20 @@ export async function PATCH(
   const existing = await prisma.flight.findUnique({ where: { id } });
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+  // Auto-stamp paymentMarkedAt/By when paymentState transitions to PAID.
+  const data: Record<string, unknown> = { ...body };
+  if (
+    body.paymentState &&
+    body.paymentState !== existing.paymentState &&
+    body.paymentState === "PAID"
+  ) {
+    data.paymentMarkedAt = new Date();
+    data.paymentMarkedBy = session.user.name || session.user.email || session.user.id;
+  }
+
   const flight = await prisma.flight.update({
     where: { id },
-    data: body,
+    data,
     include: {
       services: { orderBy: { createdAt: "asc" } },
     },
@@ -44,6 +55,7 @@ export async function PATCH(
   if (body.origin !== undefined && body.origin !== existing.origin) changes.push(`Origen: ${existing.origin || "--"} → ${body.origin || "--"}`);
   if (body.destination !== undefined && body.destination !== existing.destination) changes.push(`Destino: ${existing.destination || "--"} → ${body.destination || "--"}`);
   if (body.notes !== undefined && body.notes !== existing.notes) changes.push(body.notes ? `Nota actualizada` : `Nota eliminada`);
+  if (body.paymentState && body.paymentState !== existing.paymentState) changes.push(`Pago: ${existing.paymentState} → ${body.paymentState}`);
 
   if (changes.length > 0) {
     await prisma.eventLog.create({

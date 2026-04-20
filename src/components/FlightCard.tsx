@@ -153,6 +153,27 @@ export const FlightCard = memo(function FlightCard({
                     {opName}
                   </span>
                 ) : null; })()}
+                {flight.paymentRequired && flight.paymentState !== "PAID" && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (!window.confirm("Marcar vuelo como PAGADO?")) return;
+                      onUpdate(flight.id, { paymentState: "PAID" });
+                    }}
+                    className="cursor-pointer rounded bg-orange-100 px-1 py-0.5 text-[10px] font-bold uppercase text-orange-700 ring-1 ring-orange-300 hover:bg-orange-200 sm:px-1.5 sm:text-xs"
+                    title="Sin contrato: marcar como pagado antes de despacho"
+                  >
+                    Pago *
+                  </button>
+                )}
+                {flight.paymentRequired && flight.paymentState === "PAID" && (
+                  <span
+                    className="rounded bg-green-100 px-1 py-0.5 text-[10px] font-medium text-green-700 sm:px-1.5 sm:text-xs"
+                    title={flight.paymentMarkedBy ? `Pagado por ${flight.paymentMarkedBy}` : "Pagado"}
+                  >
+                    Pagado
+                  </span>
+                )}
                 {flight.parking && (() => {
                   const compat = checkCompatibility(flight.aircraftType, flight.parking);
                   const farFromGA = isFarFromGA(flight.parking);

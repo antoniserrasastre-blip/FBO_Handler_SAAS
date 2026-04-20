@@ -107,6 +107,9 @@ export async function PUT(req: NextRequest) {
       crewDeparture: f.crewDeparture || 0,
       paxArrival: f.paxArrival || 0,
       paxDeparture: f.paxDeparture || 0,
+      paymentRequired: f.paymentRequired,
+      // Seed paymentState only on create; updates preserve whatever user set.
+      ...(existing ? {} : { paymentState: f.paymentRequired ? "PENDING" : "N_A" }),
     };
 
     let flightId: string;
@@ -153,6 +156,8 @@ export async function PUT(req: NextRequest) {
             crewDeparture: f.crewDeparture || 0,
             paxArrival: f.paxArrival || 0,
             paxDeparture: f.paxDeparture || 0,
+            paymentRequired: f.paymentRequired,
+            paymentState: f.paymentRequired ? "PENDING" : "N_A",
             linkedFlightId: flightId,
           },
         });

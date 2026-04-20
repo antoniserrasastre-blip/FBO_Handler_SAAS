@@ -65,12 +65,12 @@ Vista secundaria inspirada en CyberMAX. Barras horizontales por vuelo (llegada -
 
 Los callsigns con `*` marcan vuelos sin contrato que deben pagar antes de despacho. Hoy es solo convencion en el texto; convertirlo en workflow trackeable.
 
-- [ ] Verificar que `pdfParser.ts` preserva el `*` en el callsign
-- [ ] Campo `Flight.paymentRequired` derivado del `*` (migracion auto desde callsigns existentes)
-- [ ] Campo `Flight.paymentState` (`N_A` | `PENDING` | `PAID`)
-- [ ] Badge visual naranja en `FlightCard` si `paymentRequired && !PAID`
-- [ ] Badge en fila de vista compacta
-- [ ] Accion "Marcar pagado" con EventLog + timestamp + usuario
+- [x] Parser conserva el `*` (antes lo stripeaba) y expone `paymentRequired`
+- [x] Campo `Flight.paymentRequired` poblado desde el import
+- [x] Campo `Flight.paymentState` (`N_A` | `PENDING` | `PAID`) + `paymentMarkedAt` + `paymentMarkedBy`
+- [x] Badge visual naranja en `FlightCard` si `paymentRequired && !PAID`
+- [x] Accion "Marcar pagado" (PATCH paymentState con auto-stamp de Marked/At/By) + EventLog
+- [ ] Badge en fila de vista compacta (depende de `/dia`)
 - [ ] Warning (no bloqueante) al transicionar a `DISPATCHED` sin pago
 - [ ] Filtro "Pendientes de pago" en dashboard y vista compacta
 
