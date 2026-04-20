@@ -137,6 +137,7 @@ scripts/
 - Path alias: `@/*` maps to `src/*`
 - UI text: **Spanish** (matching handlers' working language)
 - Code/comments: English
+- **Block-level annotations REQUIRED** (DECISIONS-PENDING #9, firmada 2026-04-20): this project overrides the default "minimal comments" policy. In all new or modified code, include clear block-level comments explaining **what** each block does (functions, hooks, components, API handlers, non-trivial logic) — not only the *why*. Reason: MALLORCAIR team must be able to read the code without Claude present.
 - Components: PascalCase files (`FlightCard.tsx`)
 - Database fields: camelCase (Prisma convention)
 - All state constants, labels, and colors centralized in `src/types/index.ts`

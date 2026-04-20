@@ -11,63 +11,130 @@
 
 ---
 
-## Estado del `main` post-v0.2
+## HOTFIX urgente — Zona horaria y fechas (previo a v0.3 normal)
 
-El `main` lleva mejoras desplegadas después de cerrar v0.2 que
-**no están narradas en `CHANGELOG.md`** todavía. Material visible
-para el handler:
+Bug triple detectado en apuntes del humano el 2026-04-20.
+**Bloquea v0.3**: no se firma sprint nuevo con esto vivo —
+viola P1 (cero vuelo perdido) en cada turno.
 
-- Countdown en vivo del ETD en la tarjeta colapsada.
-- Conflicto de parking con registro AIP oficial.
-- Badges click-to-copy y click-to-filter.
-- Página de métricas con KPIs operativos.
-- Edición inline de ETA/ETD sin expandir tarjeta.
-- Notas libres por vuelo.
-- Atajo teclado `N` para vuelo nuevo.
-- Botón "Todos entregados" para marcar servicios en bloque.
-- Búsqueda con operadores booleanos.
-- Toasts de éxito en crear/borrar vuelo.
-- Vista imprimible con botón "Imprimir".
+### Síntomas reportados
 
-**Decisión del Director**: no se narra en CHANGELOG suelto. Se
-consolida en la entrada del próximo release visible (sprint
-`/dia` o primer sprint cerrado de v0.3). Razón: v0.2 cerró hace
-horas, partir la historia en v0.2.1 añade ruido narrativo sin
-ganar claridad para MALLORCAIR.
+- **Día -1 al refrescar**: vuelo con ETA 00:15 UTC se muestra
+  en el día anterior (porque `new Date("...Z").toISOString()`
+  normaliza a UTC y el slice de fecha local retrocede).
+- **Notificaciones 1h desfasadas desde el cambio de horario de
+  verano**: los cálculos no respetan UTC+1 / UTC+2 según fecha
+  (España cambió a CEST el 2026-03-29).
+- **Vuelos desaparecidos**: los de madrugada no se listan en
+  "hoy" — consecuencia directa de la normalización UTC.
+
+### Tareas del hotfix
+
+- [ ] Centralizar toda conversión de fecha/hora en
+      `src/lib/time.ts` (nuevo). Usar `date-fns-tz` o
+      equivalente con zona fija `Europe/Madrid`.
+- [ ] Reemplazar usos directos de `new Date()` y
+      `toISOString().slice(0,10)` sobre fechas de vuelo por
+      helpers del nuevo módulo.
+- [ ] Normalizar el cálculo de "fecha del día operativo" en
+      `DaySheet`: la fecha que firma el día es la del calendario
+      **local de Palma**, no la UTC.
+- [ ] Revisar filtros de renderizado (`page.tsx`, hooks de
+      selección de día) para que usen la fecha local.
+- [ ] Revisar lógica de notificaciones / countdown ETD para
+      que calcule deltas en hora local con DST dinámico.
+- [ ] Test manual con reloj forzado en DevTools:
+      - Vuelo ETA 00:15 del 20-abril debe aparecer en "hoy"
+        cuando el reloj local marca 06:00 del 20-abril.
+      - Countdown de un vuelo ETD 14:30 debe mostrar tiempo
+        correcto tanto en CEST (hoy) como simulado en CET.
+
+### Criterio de cierre
+
+El mismo PDF importado a las 00:00 y a las 23:59 del mismo día
+produce la misma lista de vuelos en el panel (§O1 aplicado a
+fechas, no solo a parseo).
+
+**Sin firma de producto**: es bug fix técnico, no decisión de
+UX. El Director lo escolta pero no firma nada — el ingeniero
+actúa de inmediato.
 
 ---
 
-## v0.3 — Fase activa
+## v0.3 — Fase activa (tras el hotfix)
 
-**Objetivo de versión**: que el handler de mañana tenga, además
-del panel de tarjetas, una vista densa de su turno y el primer
-bloque de control de equipaje sobre etiquetas Dymo.
+**Objetivo de versión**: vista `/dia` + control de equipaje
+Dymo + pulido de tarjeta expandida. Con decisiones #1-#7, #9
+firmadas el 2026-04-20, arranca implementación.
 
-### Bloques de trabajo
+### Bloque A — Pulido tarjeta expandida (base para `/dia`)
 
-- [ ] **Vista `/dia`** — ruta separada del dashboard. Spec
-      pendiente de firma en `DECISIONS-PENDING.md` #2.
-- [ ] **Control de equipaje con etiquetas Dymo** — spec en
-      `specs/baggage-control.md`. Firma de técnica de impresión
-      en `DECISIONS-PENDING.md` #3.
-- [ ] **Marcador visual de callsign con `*`** (sin contrato).
-      Spec en `DECISIONS-PENDING.md` #4.
-- [ ] **Confirmación al "Despachar" vuelo** — método a firmar
-      en `DECISIONS-PENDING.md` #1.
-- [ ] **Sección Ayuda con Manual de Filtro 2026**. Referencia
-      ya commiteada (`docs/MANUAL_FILTRO...`).
+Prerrequisito: hotfix TZ cerrado.
 
-### Bloqueos activos sobre v0.3
+- [ ] **#6 · Reordenar sección equipaje LLEGADA**:
+      En avión → Descargadas → Entregadas → Bodega (+/-) →
+      Cabina (+/-). Mapeo a `paxArrBagsState`,
+      `paxArrBagsChecked`, `paxArrBagsCabin`. Sin migración.
+- [ ] **#6 caveat · Sección equipaje SALIDA**: orden paralelo
+      adaptado al flujo físico inverso
+      (`NOT_ARRIVED`/`TAGGED`/`SENT_TO_AIRCRAFT`). Si los
+      labels en español generan duda, anotar #10 en
+      `DECISIONS-PENDING.md` y esperar firma.
+- [ ] **#7 · Render condicional LLEGADA/SALIDA en overnight**:
+      si `linkedFlightId != null` y fechas difieren, ocultar
+      columna SALIDA, expandir LLEGADA, añadir botón
+      "Ver salida" inline (solo lectura, fetch en vivo del
+      vuelo linkado).
+- [ ] **#4 · Marcador icono € en callsign con `*`**: icono
+      permanente + copy "Sin contrato — cobrar al despacho"
+      al expandir.
+- [ ] **#1 · Long-press 600ms en "Despachar"**: label
+      secundario "Mantén pulsado" visible los primeros 7
+      días de uso por usuario, luego oculto.
 
-Cuatro decisiones en `DECISIONS-PENDING.md` (#1, #2, #3, #4)
-siguen `ABIERTA`. Sin firma humana no arranca el sprint
-correspondiente. Prioridad de firma según Director:
+### Bloque B — Orden de renderizado
 
-1. #4 (marcador `*`) — tocar rampa activa, riesgo facturación.
-2. #1 (confirmación despachar) — tocar rampa activa, riesgo tap
-   accidental.
-3. #3 (Dymo técnica) — bloquea sprint de equipaje.
-4. #2 (`/dia` separada vs reemplazo) — bloquea sprint `/dia`.
+- [ ] **#5 · Orden por inmediatez operativa con toggle**:
+      default = próximo evento ascendente, no-despachados
+      primero, despachados al final. Toggle a "orden PDF" en
+      cabecera. **Sin reordenamiento asíncrono** — el orden
+      se congela al cargar día y se recalcula solo en refresh
+      manual o cambio de fecha.
+
+### Bloque C — Vista `/dia`
+
+- [ ] **#2 · Ruta separada `/dia`**: dashboard actual sigue
+      como vista por defecto. `/dia` es vista densa tipo
+      "Orden del día digital", reutilizando la `FlightCard` ya
+      pulida en Bloque A.
+
+### Bloque D — Control de equipaje Dymo
+
+- [ ] **#3 · Impresión `window.print()` + CSS `@page`** con
+      preset 89×36 / 89×28. Spec en `specs/baggage-control.md`
+      (verificar existencia).
+- [ ] Componente `<LabelPrintButton />` en FlightCard.
+- [ ] Playtest PMI 7 días. Si fricción, reabrir #3 con
+      opción B (Dymo Connect local).
+
+### Bloque E — Sección Ayuda
+
+- [ ] Página `/ayuda` con Manual de Filtro 2026 (ya
+      commiteado en `docs/`).
+
+### Orden de ataque firmado
+
+Hotfix TZ → Bloque A → Bloque B → Bloque C → Bloque D → Bloque E.
+Razón: dolor del handler primero (A), luego estabilidad del
+listado (B), luego nueva vista que reutiliza todo lo anterior
+(C), luego features adicionales (D, E).
+
+### Bloqueos abiertos
+
+- **#8 · Nombre del producto "sirvici"**: espera firma humana
+  directa (brand/naming no es Director call). No bloquea el
+  sprint técnico pero bloquea cualquier comunicación a
+  MALLORCAIR que implique marca.
 
 ---
 
