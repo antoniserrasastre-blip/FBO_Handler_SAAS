@@ -16,12 +16,12 @@
 ## Help section — Manual de Filtro
 
 - [x] Spec (`specs/filter-help-section.md`)
-- [ ] `src/lib/manualContent.ts` with 23 transcribed sections
-- [ ] `src/app/ayuda/page.tsx` (collapsible + search + highlighted "Apertura")
-- [ ] `Ayuda` button in `DaySummary.tsx` header
-- [ ] SOP Equipaje Controlado section
-- [ ] Aparcamiento PMI section
-- [ ] Manual callouts (danger/warning) for critical rules
+- [x] `src/lib/manualContent.ts` with 26 transcribed sections
+- [x] `src/app/ayuda/page.tsx` (collapsible + search + highlighted "Apertura")
+- [x] `Ayuda` button in `DaySummary.tsx` header
+- [x] SOP Equipaje Controlado section
+- [x] Aparcamiento PMI section
+- [x] Manual callouts (danger/warning) for critical rules
 
 ## Baggage control + Dymo labels
 

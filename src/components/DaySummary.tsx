@@ -115,6 +115,13 @@ export function DaySummary({ flights, date, connected, isToday = true, onDateCha
               </span>
             )}
             <button
+              onClick={() => router.push("/ayuda")}
+              className="rounded-md bg-orange-100 px-2 py-1 text-xs font-medium text-orange-700 hover:bg-orange-200"
+              title="Manual de filtro"
+            >
+              Ayuda
+            </button>
+            <button
               onClick={() => router.push("/historico")}
               className="hidden rounded-md bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-200 sm:block"
             >
