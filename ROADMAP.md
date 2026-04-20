@@ -41,13 +41,13 @@
 
 Inspiracion: export Excel-a-PDF que CyberMAX genera hoy. Tabla densa de un vistazo, una fila por vuelo con toda la info operativa. Pagina aparte (NO el dashboard principal).
 
-- [ ] Ruta `/dia` con tabla densa: callsign, matricula, ruta, horas llegada/salida, parking, crew/pax, servicios resumidos, estado, notas
-- [ ] Fila compacta optimizada para densidad (no tarjetas)
-- [ ] Color de fondo por estado (alterno + acento segun state)
-- [ ] Filtros: estado, compania, terminal, pendientes
-- [ ] Ordenacion por columna
-- [ ] CSS `@page landscape` para impresion A4/A3 directa
-- [ ] Exportar a PDF (reusar `pdfkit`) y a Excel (`xlsx`)
+- [x] Ruta `/dia` con tabla densa: callsign, matricula, tipo, ruta, horas, parking, crew/pax, servicios, estado, pago, notas
+- [x] Fila compacta optimizada para densidad (no tarjetas)
+- [x] Color de fondo por estado
+- [x] Filtros iniciales: todos / pendientes / pago pendiente
+- [ ] Ordenacion por columna (por defecto ordena por hora)
+- [x] CSS `@page landscape` scoped a /dia via layout
+- [ ] Exportar a PDF/Excel directo (de momento via dialogo imprimir -> guardar PDF)
 
 ## Gantt / Timeline view
 
@@ -70,7 +70,7 @@ Los callsigns con `*` marcan vuelos sin contrato que deben pagar antes de despac
 - [x] Campo `Flight.paymentState` (`N_A` | `PENDING` | `PAID`) + `paymentMarkedAt` + `paymentMarkedBy`
 - [x] Badge visual naranja en `FlightCard` si `paymentRequired && !PAID`
 - [x] Accion "Marcar pagado" (PATCH paymentState con auto-stamp de Marked/At/By) + EventLog
-- [ ] Badge en fila de vista compacta (depende de `/dia`)
+- [x] Badge en fila de vista compacta (`/dia`)
 - [ ] Warning (no bloqueante) al transicionar a `DISPATCHED` sin pago
 - [ ] Filtro "Pendientes de pago" en dashboard y vista compacta
 
