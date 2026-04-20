@@ -116,9 +116,20 @@ export async function PUT(req: NextRequest) {
 
   let matched = 0;
   let servicesCreated = 0;
+  let servicesSkipped = 0;
   const notFound: string[] = [];
   const pendingCreated: string[] = [];
   const datesProcessed = new Set<string>();
+
+  type ServiceRow = {
+    type: string;
+    customName: string | null;
+    reference: string | null;
+    target: string | null;
+  };
+  function keyOf(s: ServiceRow): string {
+    return `${s.type}|${s.customName ?? ""}|${s.reference ?? ""}|${s.target ?? ""}`;
+  }
 
   for (const [dateStr, dateExtras] of byDate) {
     datesProcessed.add(dateStr);
@@ -156,14 +167,48 @@ export async function PUT(req: NextRequest) {
 
       matched++;
 
+      // Count existing services per natural key to enforce idempotency
+      // (re-uploading the same Excel must not duplicate services).
+      const existingByKey = new Map<string, number>();
+      const existingServices = (resolvedFlight as { services?: ServiceRow[] }).services ?? [];
+      for (const s of existingServices) {
+        const k = keyOf({
+          type: s.type,
+          customName: s.customName ?? null,
+          reference: s.reference ?? null,
+          target: s.target ?? null,
+        });
+        existingByKey.set(k, (existingByKey.get(k) || 0) + 1);
+      }
+
+      let flightInserted = 0;
+      let flightSkipped = 0;
+
       for (const svc of extra.services) {
         if (!svc.name || svc.name.length < 2) continue;
-        for (let i = 0; i < (svc.quantity || 1); i++) {
+        const customName =
+          svc.type === "CUSTOM"
+            ? svc.name
+            : svc.name !== svc.type
+              ? svc.name
+              : null;
+        const rowKey = keyOf({
+          type: svc.type,
+          customName,
+          reference: svc.reference || null,
+          target: svc.target || null,
+        });
+        const already = existingByKey.get(rowKey) || 0;
+        const wanted = svc.quantity || 1;
+        const toInsert = Math.max(0, wanted - already);
+        const skipped = wanted - toInsert;
+
+        for (let i = 0; i < toInsert; i++) {
           await prisma.service.create({
             data: {
               flightId: resolvedFlight.id,
               type: svc.type,
-              customName: svc.type === "CUSTOM" ? svc.name : (svc.name !== svc.type ? svc.name : null),
+              customName,
               state: "PENDING",
               reference: svc.reference || null,
               target: svc.target || null,
@@ -171,15 +216,26 @@ export async function PUT(req: NextRequest) {
             },
           });
           servicesCreated++;
+          flightInserted++;
         }
+
+        if (skipped > 0) {
+          servicesSkipped += skipped;
+          flightSkipped += skipped;
+        }
+
+        existingByKey.set(rowKey, already + toInsert);
       }
 
-      if (!wasCreated) {
+      if (!wasCreated && (flightInserted > 0 || flightSkipped > 0)) {
+        const parts: string[] = [];
+        if (flightInserted) parts.push(`${flightInserted} nuevos`);
+        if (flightSkipped) parts.push(`${flightSkipped} duplicados ignorados`);
         await prisma.eventLog.create({
           data: {
             flightId: resolvedFlight.id,
             userId: session.user.id,
-            action: `Extras importados desde Excel (${extra.services.length})`,
+            action: `Extras importados desde Excel (${parts.join(", ")})`,
           },
         });
       }
@@ -187,18 +243,23 @@ export async function PUT(req: NextRequest) {
   }
 
   const dateList = Array.from(datesProcessed).sort().join(", ");
+  const summary =
+    servicesSkipped > 0
+      ? `Extras: ${servicesCreated} nuevos, ${servicesSkipped} duplicados ignorados (${matched} vuelos, ${dateList})`
+      : `Extras: ${servicesCreated} servicios para ${matched} vuelos (${dateList})`;
   eventBus.emit({
     type: "service_created",
     flightId: "import-extras",
     userId: session.user.id,
     userName: session.user.name || undefined,
-    detail: `Extras: ${servicesCreated} servicios para ${matched} vuelos (${dateList})`,
+    detail: summary,
     timestamp: new Date().toISOString(),
   });
 
   return NextResponse.json({
     matched,
     servicesCreated,
+    servicesSkipped,
     notFound,
     pendingCreated,
     datesProcessed: Array.from(datesProcessed).sort(),

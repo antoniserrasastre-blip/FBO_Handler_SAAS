@@ -78,11 +78,11 @@ Los callsigns con `*` marcan vuelos sin contrato que deben pagar antes de despac
 
 Hoy re-subir el mismo Excel duplica los servicios. Prevenir con clave natural y resumen explicito post-import.
 
-- [ ] Definir clave natural del servicio: `flightId + type + reference + target + customName`
-- [ ] `POST /api/import/extras` comprueba existencia antes de insertar
-- [ ] Estrategia: insertar si no existe, skip si identico, actualizar si mismo key pero distinto state/origin
-- [ ] Response del import: `{ inserted, skipped, updated }` con lista detallada
-- [ ] UI del import muestra el resumen en pantalla antes de confirmar guardar
+- [x] Definir clave natural del servicio: `flightId + type + reference + target + customName`
+- [x] `PUT /api/import/extras` comprueba existencia antes de insertar
+- [x] Estrategia: insertar si no existe, skip si identico (v1 sin "update")
+- [x] Response del import: `{ servicesCreated, servicesSkipped }` con EventLog detallado por vuelo
+- [x] UI del import muestra el resumen de duplicados ignorados
 - [ ] Hash SHA256 del fichero -> warning "ya importado el X por Y" si se repite
 - [ ] Tests: subir mismo Excel 2 veces -> no duplica; subir Excel modificado -> actualiza sin duplicar
 - [ ] Aplicar misma logica al import de PDF (orden del dia)

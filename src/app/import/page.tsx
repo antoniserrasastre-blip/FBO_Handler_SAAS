@@ -212,7 +212,7 @@ function ExtrasImportTab() {
   const [parsing, setParsing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<ExcelParseResult | null>(null);
-  const [saveResult, setSaveResult] = useState<{ matched: number; servicesCreated: number; notFound: string[]; pendingCreated?: string[]; datesProcessed?: string[] } | null>(null);
+  const [saveResult, setSaveResult] = useState<{ matched: number; servicesCreated: number; servicesSkipped?: number; notFound: string[]; pendingCreated?: string[]; datesProcessed?: string[] } | null>(null);
   const [error, setError] = useState("");
 
   async function handleFileUpload(files: File[]) {
@@ -319,6 +319,9 @@ function ExtrasImportTab() {
         <SuccessResult
           lines={[
             `${saveResult.servicesCreated} servicios creados para ${saveResult.matched} aviones`,
+            saveResult.servicesSkipped && saveResult.servicesSkipped > 0
+              ? `${saveResult.servicesSkipped} duplicados ignorados (ya existian)`
+              : null,
             saveResult.datesProcessed && saveResult.datesProcessed.length > 1
               ? `Fechas: ${saveResult.datesProcessed.join(", ")}`
               : null,
