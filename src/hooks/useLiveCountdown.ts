@@ -26,7 +26,10 @@ function calcMinutes(targetTime: string | null | undefined): number | null {
   const match = targetTime.match(/^(\d{1,2}):(\d{2})$/);
   if (!match) return null;
   const targetMinutes = parseInt(match[1]) * 60 + parseInt(match[2]);
+  
   const now = new Date();
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  // Use UTC hours/minutes because targetTime is always Zulu in aviation
+  const currentMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
+  
   return targetMinutes - currentMinutes;
 }

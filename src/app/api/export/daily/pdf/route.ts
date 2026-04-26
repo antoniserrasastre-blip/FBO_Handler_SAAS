@@ -12,8 +12,8 @@ export async function GET(req: NextRequest) {
   const dateParam = req.nextUrl.searchParams.get("date");
   if (!dateParam) return NextResponse.json({ error: "Parametro date requerido" }, { status: 400 });
 
-  const date = new Date(dateParam);
-  date.setHours(0, 0, 0, 0);
+  const [y, m, d] = dateParam.split("-").map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0));
 
   const daySheet = await prisma.daySheet.findUnique({ where: { date } });
   if (!daySheet) return NextResponse.json({ error: "No hay datos para esta fecha" }, { status: 404 });

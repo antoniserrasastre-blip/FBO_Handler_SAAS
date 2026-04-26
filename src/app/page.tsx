@@ -27,35 +27,30 @@ type FlightWithRelations = Flight & {
 };
 
 function getToday() {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d;
+  // Get current date/time in Spain
+  const now = new Date();
+  const spainTime = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Europe/Madrid",
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+  }).format(now);
+  
+  const [mm, dd, yyyy] = spainTime.split("/").map(Number);
+  // Return midnight UTC for that specific day in Spain
+  return new Date(Date.UTC(yyyy, mm - 1, dd, 0, 0, 0, 0));
 }
 
 export default function HomePage() {
-  const { data: session, status } = useSession();
-  const router = useRouter();
-  const [flights, setFlights] = useState<FlightWithRelations[]>([]);
-  const [filteredFlights, setFilteredFlights] = useState<FlightWithRelations[]>([]);
-  const [selectedFlightId, setSelectedFlightId] = useState<string | null>(null);
-  const [showShortcuts, setShowShortcuts] = useState(false);
-  const [showQuickAdd, setShowQuickAdd] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [soundEnabled, setSoundEnabled] = useState(false);
-  const [showHandover, setShowHandover] = useState(false);
-  const searchInputRef = useRef<HTMLInputElement>(null);
-  const [loading, setLoading] = useState(true);
-  const [toasts, setToasts] = useState<ToastMessage[]>([]);
-  const toastIdRef = useRef(0);
+  // ... (rest of state)
   const [date, setDate] = useState(() => {
-    // Check if history page set a specific date
     if (typeof window !== "undefined") {
       const viewDate = sessionStorage.getItem("viewDate");
       if (viewDate) {
         sessionStorage.removeItem("viewDate");
         const d = new Date(viewDate);
-        d.setHours(0, 0, 0, 0);
-        return d;
+        // Normalize to midnight UTC
+        return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0));
       }
     }
     return getToday();
@@ -72,7 +67,9 @@ export default function HomePage() {
 
   const fetchFlights = useCallback(async () => {
     try {
-      const res = await fetch(`/api/flights?date=${date.toISOString()}`);
+      // Send as YYYY-MM-DD string to avoid timezone parsing issues on backend
+      const dateStr = date.toISOString().split("T")[0];
+      const res = await fetch(`/api/flights?date=${dateStr}`);
       if (res.ok) {
         const data = await res.json();
         setFlights(data.flights);

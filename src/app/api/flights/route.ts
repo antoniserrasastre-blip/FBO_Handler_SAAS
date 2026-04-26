@@ -10,8 +10,22 @@ export async function GET(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const dateParam = req.nextUrl.searchParams.get("date");
-  const date = dateParam ? new Date(dateParam) : new Date();
-  date.setHours(0, 0, 0, 0);
+  let date: Date;
+  
+  if (dateParam) {
+    // Expecting YYYY-MM-DD
+    const [y, m, d] = dateParam.split("-").map(Number);
+    date = new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0));
+  } else {
+    // Current date in Spain
+    const now = new Date();
+    const spainTime = new Intl.DateTimeFormat("en-US", {
+      timeZone: "Europe/Madrid",
+      year: "numeric", month: "numeric", day: "numeric"
+    }).format(now);
+    const [mm, dd, yyyy] = spainTime.split("/").map(Number);
+    date = new Date(Date.UTC(yyyy, mm - 1, dd, 0, 0, 0, 0));
+  }
 
   // Find or create day sheet
   let daySheet = await prisma.daySheet.findUnique({ where: { date } });
@@ -37,10 +51,22 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
-  const { date, ...flightData } = body;
+  const { date: dateParam, ...flightData } = body;
 
-  const targetDate = date ? new Date(date) : new Date();
-  targetDate.setHours(0, 0, 0, 0);
+  let targetDate: Date;
+  if (dateParam) {
+    // If it's ISO string or YYYY-MM-DD
+    const d = new Date(dateParam);
+    targetDate = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0));
+  } else {
+    const now = new Date();
+    const spainTime = new Intl.DateTimeFormat("en-US", {
+      timeZone: "Europe/Madrid",
+      year: "numeric", month: "numeric", day: "numeric"
+    }).format(now);
+    const [mm, dd, yyyy] = spainTime.split("/").map(Number);
+    targetDate = new Date(Date.UTC(yyyy, mm - 1, dd, 0, 0, 0, 0));
+  }
 
   // Find or create day sheet
   let daySheet = await prisma.daySheet.findUnique({ where: { date: targetDate } });

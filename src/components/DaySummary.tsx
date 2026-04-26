@@ -45,16 +45,19 @@ export function DaySummary({ flights, date, connected, isToday = true, onDateCha
   function goDay(offset: number) {
     if (!onDateChange) return;
     const d = new Date(date);
-    d.setDate(d.getDate() + offset);
-    d.setHours(0, 0, 0, 0);
-    onDateChange(d);
+    d.setUTCDate(d.getUTCDate() + offset);
+    onDateChange(new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0)));
   }
 
   function goToday() {
     if (!onDateChange) return;
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    onDateChange(d);
+    const now = new Date();
+    const spainTime = new Intl.DateTimeFormat("en-US", {
+      timeZone: "Europe/Madrid",
+      year: "numeric", month: "numeric", day: "numeric"
+    }).format(now);
+    const [mm, dd, yyyy] = spainTime.split("/").map(Number);
+    onDateChange(new Date(Date.UTC(yyyy, mm - 1, dd, 0, 0, 0, 0)));
   }
 
   return (
@@ -80,9 +83,7 @@ export function DaySummary({ flights, date, connected, isToday = true, onDateCha
                 onChange={(e) => {
                   if (!onDateChange || !e.target.value) return;
                   const [y, m, d] = e.target.value.split("-").map(Number);
-                  const newDate = new Date(y, m - 1, d);
-                  newDate.setHours(0, 0, 0, 0);
-                  onDateChange(newDate);
+                  onDateChange(new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0)));
                 }}
                 className="rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-700 sm:px-2 sm:text-sm cursor-pointer border-none focus:outline-none focus:ring-1 focus:ring-blue-400"
               />

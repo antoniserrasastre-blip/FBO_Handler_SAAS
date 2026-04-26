@@ -358,11 +358,10 @@ function parseFlightBlock(
   };
 }
 
-/** Convert a DD/MM/YY date string to a JS Date at midnight */
+/** Convert a DD/MM/YY date string to a JS Date at midnight UTC */
 export function parseDate(ddmmyy: string): Date {
   const [dd, mm, yy] = ddmmyy.split("/").map(Number);
   const year = yy < 50 ? 2000 + yy : 1900 + yy;
-  const d = new Date(year, mm - 1, dd);
-  d.setHours(0, 0, 0, 0);
-  return d;
+  // Create the date in UTC to avoid local timezone offsets
+  return new Date(Date.UTC(year, mm - 1, dd, 0, 0, 0, 0));
 }
