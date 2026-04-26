@@ -92,11 +92,25 @@ export async function parseCybermaxPdf(buffer: Buffer): Promise<ParseResult> {
 
     // Check if this is a flight data line (contains LEPA)
     if (line.includes("LEPA") && FLIGHT_LINE_RE.test(line)) {
-      // Look ahead for a date line
+      // Look ahead for a date line, skipping potential headers/footers in between
+      // (happens at page breaks)
       let dateLine = "";
-      if (i + 1 < lines.length && isDateLine(lines[i + 1])) {
-        dateLine = lines[i + 1];
-        i++; // Skip the date line
+      for (let j = i + 1; j < Math.min(i + 10, lines.length); j++) {
+        const nextLine = lines[j];
+        if (isDateLine(nextLine)) {
+          dateLine = nextLine;
+          i = j; // Advance main loop to avoid processing the date line as something else
+          break;
+        }
+        // If we hit another flight data line, the current flight didn't have a date line below
+        if (nextLine.includes("LEPA") && FLIGHT_LINE_RE.test(nextLine)) {
+          break;
+        }
+        // If it's not a header/footer and not a date line, it's something else, stop looking
+        if (!isHeaderOrFooter(nextLine) && !isDateLine(nextLine)) {
+          // This allows skipping headers but stopping at actual data or other noise
+          if (nextLine.trim().length > 0) break;
+        }
       }
       flightBlocks.push({ dataLine: line, dateLine });
     }

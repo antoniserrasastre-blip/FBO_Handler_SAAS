@@ -67,13 +67,18 @@ export async function PUT(req: NextRequest) {
 
   // Cache of existing flights per daySheet for dedup
   const existingCache = new Map<string, Map<string, { id: string }>>();
-  async function getExistingByReg(daySheetId: string) {
+  async function getExistingKeyed(daySheetId: string) {
     if (!existingCache.has(daySheetId)) {
       const flights = await prisma.flight.findMany({
         where: { daySheetId },
-        select: { id: true, registration: true },
+        select: { id: true, registration: true, eta: true, etd: true },
       });
-      existingCache.set(daySheetId, new Map(flights.map((f) => [f.registration, f])));
+      // Key format: "REGISTRATION|ETA" or "REGISTRATION|ETD" if ETA is missing
+      const flightMap = new Map(flights.map((f) => {
+        const key = `${f.registration}|${f.eta || f.etd || "00:00"}`;
+        return [key, f];
+      }));
+      existingCache.set(daySheetId, flightMap);
     }
     return existingCache.get(daySheetId)!;
   }
@@ -90,8 +95,9 @@ export async function PUT(req: NextRequest) {
       ? primaryDaySheet
       : await getOrCreateDaySheet(flightDate);
 
-    const existingByReg = await getExistingByReg(daySheet.id);
-    const existing = existingByReg.get(f.registration);
+    const existingByKey = await getExistingKeyed(daySheet.id);
+    const flightKey = `${f.registration}|${f.eta || f.etd || "00:00"}`;
+    const existing = existingByKey.get(flightKey);
 
     const flightData = {
       callsign: f.callsign,
@@ -124,7 +130,7 @@ export async function PUT(req: NextRequest) {
         data: { flightId: flight.id, userId: session.user.id, action: "Importado desde PDF", details: `${f.callsign} (${f.registration})` },
       });
       flightId = flight.id;
-      existingByReg.set(f.registration, { id: flightId });
+      existingByKey.set(flightKey, { id: flightId });
       created++;
     }
 
@@ -133,9 +139,10 @@ export async function PUT(req: NextRequest) {
     if (depDate !== arrDate) {
       const depDateObj = parseDate(depDate);
       const depDaySheet = await getOrCreateDaySheet(depDateObj);
-      const depExisting = await getExistingByReg(depDaySheet.id);
+      const depExisting = await getExistingKeyed(depDaySheet.id);
+      const depKey = `${f.registration}|${f.eta || f.etd || "00:00"}`;
 
-      if (!depExisting.has(f.registration)) {
+      if (!depExisting.has(depKey)) {
         const depFlight = await prisma.flight.create({
           data: {
             daySheetId: depDaySheet.id,
@@ -159,7 +166,7 @@ export async function PUT(req: NextRequest) {
         await prisma.eventLog.create({
           data: { flightId: depFlight.id, userId: session.user.id, action: "Pernocta creada desde PDF", details: `${f.callsign} (${f.registration})` },
         });
-        depExisting.set(f.registration, { id: depFlight.id });
+        depExisting.set(depKey, { id: depFlight.id });
         linked++;
       }
     }
