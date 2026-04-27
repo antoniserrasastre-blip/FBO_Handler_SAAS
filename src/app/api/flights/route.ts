@@ -4,6 +4,8 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { eventBus } from "@/lib/events";
 
+import { getSpainToday } from "@/lib/time";
+
 // GET /api/flights?date=YYYY-MM-DD
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -17,14 +19,7 @@ export async function GET(req: NextRequest) {
     const [y, m, d] = dateParam.split("-").map(Number);
     date = new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0));
   } else {
-    // Current date in Spain
-    const now = new Date();
-    const spainTime = new Intl.DateTimeFormat("en-US", {
-      timeZone: "Europe/Madrid",
-      year: "numeric", month: "numeric", day: "numeric"
-    }).format(now);
-    const [mm, dd, yyyy] = spainTime.split("/").map(Number);
-    date = new Date(Date.UTC(yyyy, mm - 1, dd, 0, 0, 0, 0));
+    date = getSpainToday();
   }
 
   // Find or create day sheet
@@ -59,13 +54,7 @@ export async function POST(req: NextRequest) {
     const d = new Date(dateParam);
     targetDate = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0));
   } else {
-    const now = new Date();
-    const spainTime = new Intl.DateTimeFormat("en-US", {
-      timeZone: "Europe/Madrid",
-      year: "numeric", month: "numeric", day: "numeric"
-    }).format(now);
-    const [mm, dd, yyyy] = spainTime.split("/").map(Number);
-    targetDate = new Date(Date.UTC(yyyy, mm - 1, dd, 0, 0, 0, 0));
+    targetDate = getSpainToday();
   }
 
   // Find or create day sheet

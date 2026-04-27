@@ -26,38 +26,53 @@ type FlightWithRelations = Flight & {
   eventLogs: (EventLog & { user: { name: string } | null })[];
 };
 
-function getToday() {
-  // Get current date/time in Spain
-  const now = new Date();
-  const spainTime = new Intl.DateTimeFormat("en-US", {
-    timeZone: "Europe/Madrid",
-    year: "numeric",
-    month: "numeric",
-    day: "numeric",
-  }).format(now);
-  
-  const [mm, dd, yyyy] = spainTime.split("/").map(Number);
-  // Return midnight UTC for that specific day in Spain
-  return new Date(Date.UTC(yyyy, mm - 1, dd, 0, 0, 0, 0));
-}
+import { getSpainToday, dateToSqlString } from "@/lib/time";
+
+export const dynamic = "force-dynamic";
+
+type FlightWithRelations = Flight & {
+  services: Service[];
+  lostItems: LostItem[];
+  eventLogs: (EventLog & { user: { name: string } | null })[];
+};
 
 export default function HomePage() {
-  // ... (rest of state)
-  const [date, setDate] = useState(() => {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+  const [flights, setFlights] = useState<FlightWithRelations[]>([]);
+  const [filteredFlights, setFilteredFlights] = useState<FlightWithRelations[]>([]);
+  const [selectedFlightId, setSelectedFlightId] = useState<string | null>(null);
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showQuickAdd, setShowQuickAdd] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [soundEnabled, setSoundEnabled] = useState(false);
+  const [showHandover, setShowHandover] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const [loading, setLoading] = useState(true);
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const toastIdRef = useRef(0);
+  
+  // Initialize with a safe date for SSR, will be corrected in useEffect
+  const [date, setDate] = useState(() => getSpainToday());
+
+  // Handle client-side hydration to ensure the date is always fresh on load
+  useEffect(() => {
     if (typeof window !== "undefined") {
       const viewDate = sessionStorage.getItem("viewDate");
       if (viewDate) {
         sessionStorage.removeItem("viewDate");
         const d = new Date(viewDate);
         // Normalize to midnight UTC
-        return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0));
+        setDate(new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0)));
+      } else {
+        // Re-calculate today on the client to fix server-side UTC lag
+        setDate(getSpainToday());
       }
     }
-    return getToday();
-  });
+  }, []);
 
   const isToday = useMemo(() => {
-    const today = getToday();
+    const today = getSpainToday();
     return date.getTime() === today.getTime();
   }, [date]);
 
@@ -67,8 +82,8 @@ export default function HomePage() {
 
   const fetchFlights = useCallback(async () => {
     try {
-      // Send as YYYY-MM-DD string to avoid timezone parsing issues on backend
-      const dateStr = date.toISOString().split("T")[0];
+      // Use helper to send clean YYYY-MM-DD
+      const dateStr = dateToSqlString(date);
       const res = await fetch(`/api/flights?date=${dateStr}`);
       if (res.ok) {
         const data = await res.json();
@@ -377,6 +392,32 @@ export default function HomePage() {
     window.open(`/api/export?date=${dateStr}&type=${type}`, "_blank");
   };
 
+  // --- Movement counts for the selected day ---
+  const movementStats = useMemo(() => {
+    const dateStr = date.toISOString().slice(0, 10);
+    const day = date.getUTCDate();
+    const month = date.getUTCMonth() + 1;
+    const shortDate = `${String(day).padStart(2, "0")}/${String(month).padStart(2, "0")}`;
+
+    let arrivals = 0;
+    let departures = 0;
+
+    flights.forEach((f) => {
+      // It's an arrival today if arrivalDate matches shortDate OR if arrivalDate is missing (assumed today)
+      // but only if it actually has an ETA
+      if (f.eta && (!f.arrivalDate || f.arrivalDate === shortDate)) {
+        arrivals++;
+      }
+      // It's a departure today if departureDate matches shortDate OR if departureDate is missing (assumed today)
+      // but only if it actually has an ETD
+      if (f.etd && (!f.departureDate || f.departureDate === shortDate)) {
+        departures++;
+      }
+    });
+
+    return { arrivals, departures };
+  }, [flights, date]);
+
   if (status === "loading" || loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -420,8 +461,8 @@ export default function HomePage() {
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2 sm:mb-4">
           <h2 className="text-xs font-medium text-gray-500 sm:text-sm">
             {filteredFlights.length === flights.length
-              ? `${flights.length} vuelo${flights.length !== 1 ? "s" : ""}${isToday ? " hoy" : ""}`
-              : `${filteredFlights.length} de ${flights.length} vuelos`
+              ? `${flights.length} aviones (${movementStats.arrivals} llegadas + ${movementStats.departures} salidas)`
+              : `${filteredFlights.length} de ${flights.length} aviones`
             }
           </h2>
           <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
