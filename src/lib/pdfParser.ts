@@ -12,6 +12,11 @@
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const pdf = require("pdf-parse");
 
+import { getAllStands } from "./parkingStands";
+
+// Pre-calculate a set of all valid parking IDs for fast lookup
+const VALID_PARKINGS = new Set(getAllStands().map(s => s.id.toUpperCase()));
+
 export interface ParsedFlight {
   callsign: string;
   origin: string;
@@ -260,19 +265,33 @@ function parseFlightBlock(
   const crewStr = slashParts[1]; // e.g. "22" = crew_arr "2" + crew_dep "2"
   let rest = slashParts.slice(2).join("/"); // remainder after second "/"
 
-  // Split parking from pax_arr: if parking ends with a letter (e.g., "156B0"),
-  // the letter marks end of parking. Otherwise, last 1-3 digits are pax_arr.
+  // Split parking from pax_arr: 
+  // Strategy: The string is something like "20513" or "113".
+  // Try longest possible parking ID matches from the known LEPA stands list.
   let parking = "";
   let paxArrival = 0;
-  const letterParkingMatch = parkingPax.match(/^(\d+[A-Z])(\d+)$/);
-  if (letterParkingMatch) {
-    parking = letterParkingMatch[1];
-    paxArrival = parseInt(letterParkingMatch[2], 10);
-  } else {
-    // All digits: parking is typically 2-4 digits, pax_arr is last 1-3 digits.
-    // Heuristic: try splitting so parking is 2-4 chars. Start with pax being last 1 digit.
-    parking = parkingPax.slice(0, -1);
-    paxArrival = parseInt(parkingPax.slice(-1), 10);
+
+  // Try prefixes of length 4 down to 1
+  let found = false;
+  for (let len = Math.min(4, parkingPax.length); len >= 1; len--) {
+    const candidate = parkingPax.slice(0, len).toUpperCase();
+    if (VALID_PARKINGS.has(candidate)) {
+      parking = candidate;
+      paxArrival = parseInt(parkingPax.slice(len), 10) || 0;
+      found = true;
+      break;
+    }
+  }
+
+  if (!found) {
+    // Fallback if no known parking found: assume last 1-2 digits are pax
+    if (parkingPax.length > 3) {
+      parking = parkingPax.slice(0, -2);
+      paxArrival = parseInt(parkingPax.slice(-2), 10) || 0;
+    } else {
+      parking = parkingPax.slice(0, -1);
+      paxArrival = parseInt(parkingPax.slice(-1), 10) || 0;
+    }
   }
 
   // Split crew_arr and crew_dep: each is typically 1 digit (crew 1-9)
