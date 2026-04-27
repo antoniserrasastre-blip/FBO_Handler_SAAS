@@ -28,13 +28,22 @@ export async function GET(req: NextRequest) {
     daySheet = await prisma.daySheet.create({ data: { date } });
   }
 
-  const flights = await prisma.flight.findMany({
+  const rawFlights = await prisma.flight.findMany({
     where: { daySheetId: daySheet.id },
     include: {
       services: { orderBy: { createdAt: "asc" } },
       lostItems: { orderBy: { createdAt: "asc" } },
     },
-    orderBy: { eta: "asc" },
+  });
+
+  // Sort by the most relevant time for that day:
+  // - Flights with ETA sort by arrival time
+  // - Flights without ETA (pure departures or pernoctas leaving that day) sort by ETD
+  // - Flights with no time at all go last
+  const flights = rawFlights.sort((a, b) => {
+    const ta = a.eta || a.etd || "99:99";
+    const tb = b.eta || b.etd || "99:99";
+    return ta.localeCompare(tb);
   });
 
   return NextResponse.json({ daySheet, flights });

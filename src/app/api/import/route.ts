@@ -66,16 +66,16 @@ export async function PUT(req: NextRequest) {
   const primaryDaySheet = await getOrCreateDaySheet(targetDate);
 
   // Cache of existing flights per daySheet for dedup
+  // Key format: "CALLSIGN|ARRIVAL_DATE" — callsign identifies the movement, date scopes it to the day
   const existingCache = new Map<string, Map<string, { id: string }>>();
   async function getExistingKeyed(daySheetId: string) {
     if (!existingCache.has(daySheetId)) {
       const flights = await prisma.flight.findMany({
         where: { daySheetId },
-        select: { id: true, registration: true, eta: true, etd: true },
+        select: { id: true, callsign: true, arrivalDate: true },
       });
-      // Key format: "REGISTRATION|ETA" or "REGISTRATION|ETD" if ETA is missing
       const flightMap = new Map(flights.map((f) => {
-        const key = `${f.registration}|${f.eta || f.etd || "00:00"}`;
+        const key = `${f.callsign}|${f.arrivalDate || ""}`;
         return [key, f];
       }));
       existingCache.set(daySheetId, flightMap);
@@ -96,7 +96,7 @@ export async function PUT(req: NextRequest) {
       : await getOrCreateDaySheet(flightDate);
 
     const existingByKey = await getExistingKeyed(daySheet.id);
-    const flightKey = `${f.registration}|${f.eta || f.etd || "00:00"}`;
+    const flightKey = `${f.callsign}|${f.arrivalDate || date}`;
     const existing = existingByKey.get(flightKey);
 
     const flightData = {
@@ -140,7 +140,7 @@ export async function PUT(req: NextRequest) {
       const depDateObj = parseDate(depDate);
       const depDaySheet = await getOrCreateDaySheet(depDateObj);
       const depExisting = await getExistingKeyed(depDaySheet.id);
-      const depKey = `${f.registration}|${f.eta || f.etd || "00:00"}`;
+      const depKey = `${f.callsign}|${f.arrivalDate || date}`;
 
       if (!depExisting.has(depKey)) {
         const depFlight = await prisma.flight.create({

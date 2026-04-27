@@ -57,8 +57,6 @@ const AIRCRAFT_TYPES = new Set([
   "TBM7", "TBM8", "TBM9",
 ]);
 
-const DATE_RE = /(\d{2})\/(\d{2})\/(\d{2})/;
-const TIME_RE = /(\d{2}):(\d{2})/;
 const DATE_TIME_RE = /(\d{2}\/\d{2}\/\d{2})(\d{2}:\d{2})/;
 
 // Main regex for a flight data line. Uses LEPA as anchor.
@@ -116,11 +114,20 @@ export async function parseCybermaxPdf(buffer: Buffer): Promise<ParseResult> {
     }
   }
 
-  // Parse each flight block
+  // Parse each flight block, deduplicating by callsign+arrivalDate
+  // (same callsign can appear in both LLEGADAS and SALIDAS PDF sections)
+  const seenCallsigns = new Set<string>();
+
   for (const block of flightBlocks) {
     try {
       const flight = parseFlightBlock(block.dataLine, block.dateLine, sheetDate);
-      if (flight) flights.push(flight);
+      if (flight) {
+        const dedupKey = `${flight.callsign}|${flight.arrivalDate}`;
+        if (!seenCallsigns.has(dedupKey)) {
+          seenCallsigns.add(dedupKey);
+          flights.push(flight);
+        }
+      }
     } catch (e) {
       errors.push(`Error parsing line: ${block.dataLine.slice(0, 60)}... — ${e}`);
     }
