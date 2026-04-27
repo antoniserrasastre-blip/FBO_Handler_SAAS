@@ -1,5 +1,5 @@
 // Parser for the Cybermax "Orden del día" PDF format.
-// Optimized for multipage and robust parsing using slash-anchors.
+// Optimized for multipage and robust parsing using slash-anchors and line accumulation.
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const pdf = require("pdf-parse");
@@ -53,8 +53,6 @@ const AIRCRAFT_TYPES = new Set([
   "TBM7", "TBM8", "TBM9",
 ]);
 
-const DATE_TIME_RE = /(\d{2}\/\d{2}\/\d{2})(\d{2}:\d{2})/;
-
 export async function parseCybermaxPdf(buffer: Buffer): Promise<ParseResult> {
   const data = await pdf(buffer);
   const text: string = data.text;
@@ -62,7 +60,7 @@ export async function parseCybermaxPdf(buffer: Buffer): Promise<ParseResult> {
   const errors: string[] = [];
   const flights: ParsedFlight[] = [];
 
-  // Extract the day sheet date (appears in header as Día DD/MM/YY)
+  // Extract the day sheet date
   let sheetDate = "";
   const dateMatch = text.match(/(?:Día|Dia)\s+(\d{2}\/\d{2}\/\d{2})/i);
   if (dateMatch) {
@@ -76,21 +74,36 @@ export async function parseCybermaxPdf(buffer: Buffer): Promise<ParseResult> {
     const line = lines[i];
     if (isHeaderOrFooter(line)) continue;
 
-    // A flight line is anchored by "LEPA"
+    // Start accumulation if we find LEPA
     if (line.includes("LEPA")) {
+      let combinedData = line;
       let dateLine = "";
-      // Look ahead for the date/time line (may skip headers between pages)
-      for (let j = i + 1; j < Math.min(i + 10, lines.length); j++) {
-        const nextLine = lines[j];
-        if (isDateLine(nextLine)) {
-          dateLine = nextLine;
-          i = j;
+      
+      // Look ahead to see if the flight data continues (we need 2 slashes)
+      let j = i + 1;
+      let slashesFound = (combinedData.match(/\//g) || []).length;
+      
+      while (j < lines.length && slashesFound < 2 && j < i + 4) {
+        const next = lines[j];
+        if (isHeaderOrFooter(next) || next.includes("LEPA") || isDateLine(next)) break;
+        combinedData += " " + next;
+        slashesFound = (combinedData.match(/\//g) || []).length;
+        j++;
+      }
+
+      // Now look for the separate date/time line
+      for (let k = j; k < Math.min(j + 5, lines.length); k++) {
+        const potentialDate = lines[k];
+        if (isDateLine(potentialDate)) {
+          dateLine = potentialDate;
+          j = k + 1; // Advance the outer pointer
           break;
         }
-        if (nextLine.includes("LEPA")) break;
-        if (!isHeaderOrFooter(nextLine) && nextLine.trim().length > 0) break;
+        if (isHeaderOrFooter(potentialDate) || potentialDate.includes("LEPA")) break;
       }
-      flightBlocks.push({ dataLine: line, dateLine });
+      
+      flightBlocks.push({ dataLine: combinedData, dateLine });
+      i = j - 1; // Sync outer loop
     }
   }
 
@@ -99,7 +112,7 @@ export async function parseCybermaxPdf(buffer: Buffer): Promise<ParseResult> {
       const flight = parseFlightBlock(block.dataLine, block.dateLine, sheetDate);
       if (flight) flights.push(flight);
     } catch (e) {
-      errors.push(`Error parsing: ${block.dataLine.slice(0, 40)}... - ${e}`);
+      errors.push(`Error parsing flight: ${e}`);
     }
   }
 
@@ -123,21 +136,22 @@ function isHeaderOrFooter(line: string): boolean {
 }
 
 function isDateLine(line: string): boolean {
+  // A date line has one or more DD/MM/YY HH:MM and nothing else
   const stripped = line.replace(/\d{2}\/\d{2}\/\d{2}\s*\d{2}:\d{2}/g, "").trim();
-  return stripped === "" && (line.includes("/") || line.includes(":"));
+  return stripped === "" && (line.includes("/") && line.includes(":"));
 }
 
 function parseFlightBlock(dataLine: string, dateLine: string, sheetDate: string): ParsedFlight | null {
-  // 1. Split by "LEPA" as the main anchor
-  const parts = dataLine.split(/\s+LEPA\s+/);
-  if (parts.length < 2) return null;
+  // 1. Flexible split by "LEPA"
+  const lepaMatch = dataLine.match(/(.*)LEPA(.*)/);
+  if (!lepaMatch) return null;
 
-  const leftSide = parts[0].trim();
-  const rightSide = parts[1].trim();
+  const leftSide = lepaMatch[1].trim();
+  const rightSide = lepaMatch[2].trim();
 
-  // 2. Parse Left Side: [Callsign] [Origin] [InlineDate]? [InlineTime]? [Registration] [Type]
+  // 2. Left Side: [Callsign] [Origin] [InlineDate]? [InlineTime]? [Registration] [Type]
   const leftTokens = leftSide.split(/\s+/);
-  if (leftTokens.length < 3) return null;
+  if (leftTokens.length < 2) return null;
 
   const callsign = leftTokens[0];
   let aircraftType = "";
@@ -146,28 +160,33 @@ function parseFlightBlock(dataLine: string, dateLine: string, sheetDate: string)
   let inlineArrDate = "";
   let inlineArrTime = "";
 
-  // Identify type and registration by working backwards from the end of the left side
-  // The last token is almost always the aircraft type
-  const lastToken = leftTokens[leftTokens.length - 1];
-  if (AIRCRAFT_TYPES.has(lastToken)) {
-    aircraftType = lastToken;
-    registration = leftTokens[leftTokens.length - 2];
-    // Remaining tokens: Origin + maybe Date/Time
-    const midTokens = leftTokens.slice(1, -2);
-    origin = midTokens[0];
-    if (midTokens.length >= 3) {
-      inlineArrDate = midTokens[1];
-      inlineArrTime = midTokens[2];
+  // Identify type (looking for known aircraft types from the end)
+  let typeIdx = -1;
+  for (let i = leftTokens.length - 1; i >= 0; i--) {
+    if (AIRCRAFT_TYPES.has(leftTokens[i])) {
+      typeIdx = i;
+      break;
+    }
+  }
+
+  if (typeIdx !== -1) {
+    aircraftType = leftTokens[typeIdx];
+    registration = leftTokens[typeIdx - 1] || "";
+    origin = leftTokens[1]; // simplified assumption
+    // Check if there are date/time tokens between origin and registration
+    if (typeIdx > 3) {
+       // Typically: Callsign Origin Date Time Registration Type
+       inlineArrDate = leftTokens[2];
+       inlineArrTime = leftTokens[3];
     }
   } else {
-    // Fallback if type is unknown: assume last token is type anyway
-    aircraftType = lastToken;
-    registration = leftTokens[leftTokens.length - 2];
+    // Fallback
+    aircraftType = leftTokens[leftTokens.length - 1];
+    registration = leftTokens[leftTokens.length - 2] || "";
     origin = leftTokens[1];
   }
 
-  // 3. Parse Right Side: [Parking]? [CrewArr] / [CrewDep] [PaxArr] / [PaxDep] [DepCallsign] [Dest] [Date]? [Time]?
-  // Use slashes as anchors
+  // 3. Right Side: [Parking]? [CrewArr] / [CrewDep] [PaxArr] / [PaxDep] [DepCallsign] [Dest] [Date]? [Time]?
   const slashParts = rightSide.split(/\s*\/\s*/);
   if (slashParts.length < 3) return null;
 
@@ -193,7 +212,7 @@ function parseFlightBlock(dataLine: string, dateLine: string, sheetDate: string)
     inlineDepTime = seg3Tokens[4];
   }
 
-  // 4. Handle Date Line for Arr/Dep times
+  // 4. Time consolidation
   let arrDate = inlineArrDate;
   let arrTime = inlineArrTime;
   let depDate = inlineDepDate;
@@ -205,7 +224,6 @@ function parseFlightBlock(dataLine: string, dateLine: string, sheetDate: string)
       if (!arrTime) { arrDate = matches[0][1]; arrTime = matches[0][2]; }
       if (!depTime) { depDate = matches[1][1]; depTime = matches[1][2]; }
     } else if (matches.length === 1) {
-      // Logic: if the flight has no arrival info yet, this is arrival. Else departure.
       if (!arrTime) { arrDate = matches[0][1]; arrTime = matches[0][2]; }
       else if (!depTime) { depDate = matches[0][1]; depTime = matches[0][2]; }
     }
