@@ -1,5 +1,5 @@
 // Parser for the Cybermax "Orden del día" PDF format.
-// Optimized for multipage and robust parsing using slash-anchors and line accumulation.
+// Optimized for multipage and robust parsing using non-greedy anchors and token joining.
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const pdf = require("pdf-parse");
@@ -39,12 +39,13 @@ const AIRCRAFT_TYPES = new Set([
   "B744", "B748", "B752", "B753", "B762", "B763", "B764", "B772", "B773", "B77L", "B77W", "B788", "B789",
   "BE20", "BE40", "BE9L", "BE36", "BE58",
   "C25A", "C25B", "C25C", "C25M", "C500", "C510", "C525", "C550", "C560", "C56X", "C650", "C680", "C68A", "C700", "C750",
+  "CJ1", "CJ2", "CJ3", "CJ4",
   "CL30", "CL35", "CL60", "CL64", "CL65",
   "CRJ1", "CRJ2", "CRJ7", "CRJ9",
   "E135", "E145", "E170", "E175", "E190", "E195", "E290", "E295",
   "E35L", "E50P", "E55P", "E545",
   "F2TH", "F900", "FA50", "FA7X", "FA8X",
-  "G150", "G200", "G280", "GA5C", "GA6C", "GALX", "GL5T", "GL6T", "GL7T", "GLEX", "GLF4", "GLF5", "GLF6",
+  "G150", "G200", "G280", "GA5C", "GA6C", "GALX", "GL5T", "GL6T", "GL7T", "GLF3", "GLF4", "GLF5", "GLF6", "GLEX",
   "H25B", "H25C", "HA4T", "HDJT",
   "LJ35", "LJ40", "LJ45", "LJ55", "LJ60", "LJ75",
   "P180", "PA46", "PC12", "PC24",
@@ -72,14 +73,15 @@ export async function parseCybermaxPdf(buffer: Buffer): Promise<ParseResult> {
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    if (isHeaderOrFooter(line)) continue;
+    // EXCEPTION: If line has LEPA and a slash, it's NEVER a header/footer
+    if (!(line.includes("LEPA") && line.includes("/"))) {
+      if (isHeaderOrFooter(line)) continue;
+    }
 
-    // Start accumulation if we find LEPA
     if (line.includes("LEPA")) {
       let combinedData = line;
       let dateLine = "";
       
-      // Look ahead to see if the flight data continues (we need 2 slashes)
       let j = i + 1;
       let slashesFound = (combinedData.match(/\//g) || []).length;
       
@@ -91,19 +93,18 @@ export async function parseCybermaxPdf(buffer: Buffer): Promise<ParseResult> {
         j++;
       }
 
-      // Now look for the separate date/time line
       for (let k = j; k < Math.min(j + 5, lines.length); k++) {
         const potentialDate = lines[k];
         if (isDateLine(potentialDate)) {
           dateLine = potentialDate;
-          j = k + 1; // Advance the outer pointer
+          j = k + 1;
           break;
         }
         if (isHeaderOrFooter(potentialDate) || potentialDate.includes("LEPA")) break;
       }
       
       flightBlocks.push({ dataLine: combinedData, dateLine });
-      i = j - 1; // Sync outer loop
+      i = j - 1;
     }
   }
 
@@ -112,7 +113,7 @@ export async function parseCybermaxPdf(buffer: Buffer): Promise<ParseResult> {
       const flight = parseFlightBlock(block.dataLine, block.dateLine, sheetDate);
       if (flight) flights.push(flight);
     } catch (e) {
-      errors.push(`Error parsing flight: ${e}`);
+      errors.push(`Error parsing flight block: ${e}`);
     }
   }
 
@@ -120,6 +121,7 @@ export async function parseCybermaxPdf(buffer: Buffer): Promise<ParseResult> {
 }
 
 function isHeaderOrFooter(line: string): boolean {
+  if (line.includes("LEPA") && line.includes("/")) return false;
   return (
     line.startsWith("LLEGADAS") ||
     line.startsWith("SALIDAS") ||
@@ -136,20 +138,19 @@ function isHeaderOrFooter(line: string): boolean {
 }
 
 function isDateLine(line: string): boolean {
-  // A date line has one or more DD/MM/YY HH:MM and nothing else
   const stripped = line.replace(/\d{2}\/\d{2}\/\d{2}\s*\d{2}:\d{2}/g, "").trim();
   return stripped === "" && (line.includes("/") && line.includes(":"));
 }
 
 function parseFlightBlock(dataLine: string, dateLine: string, sheetDate: string): ParsedFlight | null {
-  // 1. Flexible split by "LEPA"
-  const lepaMatch = dataLine.match(/(.*)LEPA(.*)/);
+  // 1. Non-greedy split by "LEPA" to handle round-trips
+  const lepaMatch = dataLine.match(/(.*?)LEPA(.*)/);
   if (!lepaMatch) return null;
 
   const leftSide = lepaMatch[1].trim();
   const rightSide = lepaMatch[2].trim();
 
-  // 2. Left Side: [Callsign] [Origin] [InlineDate]? [InlineTime]? [Registration] [Type]
+  // 2. Left Side tokens
   const leftTokens = leftSide.split(/\s+/);
   if (leftTokens.length < 2) return null;
 
@@ -160,7 +161,6 @@ function parseFlightBlock(dataLine: string, dateLine: string, sheetDate: string)
   let inlineArrDate = "";
   let inlineArrTime = "";
 
-  // Identify type (looking for known aircraft types from the end)
   let typeIdx = -1;
   for (let i = leftTokens.length - 1; i >= 0; i--) {
     if (AIRCRAFT_TYPES.has(leftTokens[i])) {
@@ -172,39 +172,38 @@ function parseFlightBlock(dataLine: string, dateLine: string, sheetDate: string)
   if (typeIdx !== -1) {
     aircraftType = leftTokens[typeIdx];
     registration = leftTokens[typeIdx - 1] || "";
-    origin = leftTokens[1]; // simplified assumption
-    // Check if there are date/time tokens between origin and registration
+    origin = leftTokens[1];
     if (typeIdx > 3) {
-       // Typically: Callsign Origin Date Time Registration Type
        inlineArrDate = leftTokens[2];
        inlineArrTime = leftTokens[3];
     }
   } else {
-    // Fallback
     aircraftType = leftTokens[leftTokens.length - 1];
     registration = leftTokens[leftTokens.length - 2] || "";
     origin = leftTokens[1];
   }
 
-  // 3. Right Side: [Parking]? [CrewArr] / [CrewDep] [PaxArr] / [PaxDep] [DepCallsign] [Dest] [Date]? [Time]?
+  // 3. Right Side with slash-based joining for split numbers (OCR issues)
   const slashParts = rightSide.split(/\s*\/\s*/);
-  if (slashParts.length < 3) return null;
-
+  
   // Segment 1: [Parking]? [CrewArr]
-  const seg1Tokens = slashParts[0].trim().split(/\s+/);
+  const seg1Tokens = (slashParts[0] || "").trim().split(/\s+/).filter(Boolean);
   const crewArrival = parseInt(seg1Tokens[seg1Tokens.length - 1], 10) || 0;
   const parking = seg1Tokens.length > 1 ? seg1Tokens.slice(0, -1).join(" ") : "";
 
   // Segment 2: [CrewDep] [PaxArr]
-  const seg2Tokens = slashParts[1].trim().split(/\s+/);
+  const seg2Tokens = (slashParts[1] || "").trim().split(/\s+/).filter(Boolean);
   const crewDeparture = parseInt(seg2Tokens[0], 10) || 0;
-  const paxArrival = parseInt(seg2Tokens[seg2Tokens.length - 1], 10) || 0;
+  // Handle case where Pax Arrival might be multiple tokens (e.g. "1 3")
+  const paxArrStr = seg2Tokens.slice(1).join("") || "0";
+  const paxArrival = parseInt(paxArrStr, 10) || 0;
 
-  // Segment 3: [PaxDep] [DepartureCallsign] [Destination] [Date]? [Time]?
-  const seg3Tokens = slashParts[2].trim().split(/\s+/);
+  // Segment 3: [PaxDep] [DepartureCallsign] [Destination]
+  const seg3Tokens = (slashParts[2] || "").trim().split(/\s+/).filter(Boolean);
   const paxDeparture = parseInt(seg3Tokens[0], 10) || 0;
   const departureCallsign = seg3Tokens[1] || "";
   const destination = seg3Tokens[2] || "";
+  
   let inlineDepDate = "";
   let inlineDepTime = "";
   if (seg3Tokens.length >= 5) {
