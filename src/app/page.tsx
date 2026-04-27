@@ -20,12 +20,6 @@ import { Volume2, VolumeX, FileCheck2, Printer } from "lucide-react";
 import { ShiftHandover } from "@/components/ShiftHandover";
 import { detectParkingConflicts } from "@/lib/parkingConflicts";
 
-type FlightWithRelations = Flight & {
-  services: Service[];
-  lostItems: LostItem[];
-  eventLogs: (EventLog & { user: { name: string } | null })[];
-};
-
 import { getSpainToday, dateToSqlString } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
