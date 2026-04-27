@@ -61,7 +61,8 @@ const DATE_TIME_RE = /(\d{2}\/\d{2}\/\d{2})(\d{2}:\d{2})/;
 
 // Main regex for a flight data line. Uses LEPA as anchor.
 // Groups:  1=callsign prefix  2=middle (registration..crew..)  3=after LEPA (origin+dest+pax_dep)
-const FLIGHT_LINE_RE = /^([A-Z][A-Z0-9]{2,})(.+)LEPA([A-Z]{4,}.+)$/;
+// suffix group allows 4-char-only (no destination / no paxDep) for partial entries
+const FLIGHT_LINE_RE = /^([A-Z][A-Z0-9]{2,})(.+)LEPA([A-Z]{4}.*)$/;
 
 export async function parseCybermaxPdf(buffer: Buffer): Promise<ParseResult> {
   const data = await pdf(buffer);
@@ -173,12 +174,12 @@ function parseFlightBlock(
   const leftSide = flightMatch[1] + flightMatch[2]; // Everything before LEPA
   const suffix = flightMatch[3]; // After LEPA: origin + dest + pax_dep
 
-  // Parse suffix: origin (4 chars) + destination (4 chars) + pax_dep (digits)
-  const suffixMatch = suffix.match(/^([A-Z]{4})([A-Z]{4})(\d+)$/);
+  // Parse suffix: origin (4 chars) + optional destination (4 chars) + optional pax_dep
+  const suffixMatch = suffix.match(/^([A-Z]{4})([A-Z]{0,4})(\d*)$/);
   if (!suffixMatch) return null;
   const origin = suffixMatch[1];
   const destination = suffixMatch[2];
-  const paxDeparture = parseInt(suffixMatch[3], 10);
+  const paxDeparture = parseInt(suffixMatch[3], 10) || 0;
 
   // --- Parse the left side ---
   // Strategy: use the dash in the registration as the anchor to split callsign from registration.
@@ -209,7 +210,7 @@ function parseFlightBlock(
     "OB", "OD", "OE", "OH", "OK", "OM", "OO", "OY",
     "P2", "P4", "PH", "PJ", "PK", "PP", "PR", "PT", "PZ",
     "RA", "RP",
-    "SE", "SP", "ST", "SU", "SX",
+    "S5", "SE", "SP", "ST", "SU", "SX",
     "TC", "TF", "TG", "TI", "TJ", "TN", "TR", "TS", "TT", "TU", "TY", "TZ",
     "UK", "UN", "UP", "UR",
     "V2", "V3", "V5", "V7", "V8", "VH", "VN", "VP", "VQ", "VR", "VT",
@@ -225,7 +226,9 @@ function parseFlightBlock(
     if (regStart < 3) continue;
 
     const regAndRest = leftSide.slice(regStart);
-    const regMatch = regAndRest.match(/^([A-Z0-9]{1,2}-[A-Z]{2,4})(\d.*)$/);
+    // Allow up to 5 chars after dash (e.g. 9H-CARLO) and afterReg may start with
+    // space+slash when there is no parking/pax_arr field (e.g. "EC-OMU / 22 / ...")
+    const regMatch = regAndRest.match(/^([A-Z0-9]{1,2}-[A-Z]{2,5})(\d.*|\s*\/.*)$/);
     if (regMatch) {
       const regPrefix = regMatch[1].split("-")[0];
       if (!VALID_REG_PREFIXES.has(regPrefix)) continue;
@@ -237,6 +240,20 @@ function parseFlightBlock(
         afterReg = regMatch[2];
         break;
       }
+    }
+  }
+
+  // Fallback for N-numbers (USA registrations, no dash).
+  // Format in PDF: {callsign}[inline_date?]{N-number}{afterReg}
+  // The N-number often matches the callsign exactly.
+  if (!registration) {
+    const nMatch = leftSide.match(
+      /^([A-Z][A-Z0-9]+?)(\d{2}\/\d{2}\/\d{2}\d{2}:\d{2})?(N[1-9][0-9A-Z]{1,4})(\d.*|\s*\/.*)$/
+    );
+    if (nMatch) {
+      callsignAndDate = nMatch[1] + (nMatch[2] || "");
+      registration = nMatch[3];
+      afterReg = nMatch[4];
     }
   }
 
