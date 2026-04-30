@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { parseExtrasExcel } from "@/lib/excelParser";
 import { eventBus } from "@/lib/events";
+import { SERVICE_TYPE_DEFAULT_PHASE, type ServiceType } from "@/types";
 
 // POST /api/import/extras — parse one or more Excel extras files
 export async function POST(req: NextRequest) {
@@ -163,6 +164,7 @@ export async function PUT(req: NextRequest) {
             data: {
               flightId: resolvedFlight.id,
               type: svc.type,
+              phase: SERVICE_TYPE_DEFAULT_PHASE[svc.type as ServiceType] ?? "DEPARTURE",
               customName: svc.type === "CUSTOM" ? svc.name : (svc.name !== svc.type ? svc.name : null),
               state: "PENDING",
               reference: svc.reference || null,

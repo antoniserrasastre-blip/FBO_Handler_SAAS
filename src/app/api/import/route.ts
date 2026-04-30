@@ -99,6 +99,10 @@ export async function PUT(req: NextRequest) {
     const flightKey = `${f.callsign}|${f.arrivalDate || date}`;
     const existing = existingByKey.get(flightKey);
 
+    const isOvernight = Boolean(
+      f.arrivalDate && f.departureDate && f.arrivalDate !== f.departureDate,
+    );
+
     const flightData = {
       callsign: f.callsign,
       aircraftType: f.aircraftType,
@@ -113,6 +117,7 @@ export async function PUT(req: NextRequest) {
       crewDeparture: f.crewDeparture || 0,
       paxArrival: f.paxArrival || 0,
       paxDeparture: f.paxDeparture || 0,
+      isOvernight,
     };
 
     let flightId: string;
@@ -160,6 +165,7 @@ export async function PUT(req: NextRequest) {
             crewDeparture: f.crewDeparture || 0,
             paxArrival: f.paxArrival || 0,
             paxDeparture: f.paxDeparture || 0,
+            isOvernight: true,
             linkedFlightId: flightId,
           },
         });

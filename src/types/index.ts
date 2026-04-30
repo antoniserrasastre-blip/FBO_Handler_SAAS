@@ -1,6 +1,24 @@
-// Flight states
-export const FLIGHT_STATES = ["EXPECTED", "ON_GROUND", "BOARDING", "DISPATCHED"] as const;
+// Flight states (workflow real: pre-llegada → en calzos → [pernocta] → preparacion salida → embarque → fuera de calzos)
+export const FLIGHT_STATES = [
+  "EXPECTED",
+  "ON_BLOCKS",
+  "PARKED",
+  "TURNAROUND",
+  "BOARDING",
+  "OFF_BLOCKS",
+] as const;
 export type FlightState = (typeof FLIGHT_STATES)[number];
+
+// Legacy state aliases — mapean estados viejos a los nuevos para tarjetas existentes
+export const LEGACY_STATE_MAP: Record<string, FlightState> = {
+  ON_GROUND: "ON_BLOCKS",
+  DISPATCHED: "OFF_BLOCKS",
+};
+
+export function normalizeFlightState(state: string): FlightState {
+  if ((FLIGHT_STATES as readonly string[]).includes(state)) return state as FlightState;
+  return LEGACY_STATE_MAP[state] ?? "EXPECTED";
+}
 
 // Service types
 export const SERVICE_TYPES = [
@@ -11,6 +29,9 @@ export const SERVICE_TYPES = [
   "LAUNDRY",
   "THERMOS",
   "NEWSPAPERS",
+  "WATER",
+  "GPU",
+  "ICE",
   "CUSTOM",
 ] as const;
 export type ServiceType = (typeof SERVICE_TYPES)[number];
@@ -23,7 +44,34 @@ export const SERVICE_LABELS: Record<ServiceType, string> = {
   LAUNDRY: "Laundry",
   THERMOS: "Thermos",
   NEWSPAPERS: "Periodicos",
+  WATER: "Agua potable",
+  GPU: "GPU",
+  ICE: "Hielo",
   CUSTOM: "Extra",
+};
+
+// Service phase: indica si pertenece al flujo de llegada o de salida
+export const SERVICE_PHASES = ["ARRIVAL", "DEPARTURE", "BOTH"] as const;
+export type ServicePhase = (typeof SERVICE_PHASES)[number];
+
+export const SERVICE_PHASE_LABELS: Record<ServicePhase, string> = {
+  ARRIVAL: "Llegada",
+  DEPARTURE: "Salida",
+  BOTH: "Ambos",
+};
+
+export const SERVICE_TYPE_DEFAULT_PHASE: Record<ServiceType, ServicePhase> = {
+  CATERING: "DEPARTURE",
+  DISHES: "DEPARTURE",
+  COOLER_BAG: "BOTH",
+  STORAGE_BAG: "BOTH",
+  LAUNDRY: "BOTH",
+  THERMOS: "DEPARTURE",
+  NEWSPAPERS: "DEPARTURE",
+  WATER: "ARRIVAL",
+  GPU: "ARRIVAL",
+  ICE: "ARRIVAL",
+  CUSTOM: "DEPARTURE",
 };
 
 export const SERVICE_TARGETS = ["CREW", "PAX"] as const;
@@ -34,34 +82,52 @@ export const SERVICE_TARGET_LABELS: Record<ServiceTarget, string> = {
   PAX: "Pax",
 };
 
-// Flight state colors and labels
+// Flight state colors, labels and progress %
 export const FLIGHT_STATE_CONFIG: Record<
   FlightState,
-  { label: string; color: string; bg: string; text: string }
+  { label: string; color: string; bg: string; text: string; progress: number }
 > = {
   EXPECTED: {
-    label: "Esperado",
+    label: "Esperando llegada",
     color: "#9CA3AF",
     bg: "bg-gray-100",
     text: "text-gray-700",
+    progress: 0,
   },
-  ON_GROUND: {
-    label: "Calzos",
+  ON_BLOCKS: {
+    label: "En calzos",
     color: "#3B82F6",
     bg: "bg-blue-100",
     text: "text-blue-700",
+    progress: 20,
+  },
+  PARKED: {
+    label: "En plataforma",
+    color: "#8B5CF6",
+    bg: "bg-purple-100",
+    text: "text-purple-700",
+    progress: 40,
+  },
+  TURNAROUND: {
+    label: "Preparacion salida",
+    color: "#06B6D4",
+    bg: "bg-cyan-100",
+    text: "text-cyan-700",
+    progress: 60,
   },
   BOARDING: {
-    label: "Embarque",
+    label: "Embarque realizado",
     color: "#EAB308",
     bg: "bg-yellow-100",
     text: "text-yellow-700",
+    progress: 80,
   },
-  DISPATCHED: {
-    label: "Despachado",
+  OFF_BLOCKS: {
+    label: "Fuera de calzos",
     color: "#22C55E",
     bg: "bg-green-100",
     text: "text-green-700",
+    progress: 100,
   },
 };
 

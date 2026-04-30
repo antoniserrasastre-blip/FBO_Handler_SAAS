@@ -3,6 +3,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { eventBus } from "@/lib/events";
+import { suggestNextState } from "@/lib/flightUrgency";
+import { FLIGHT_STATE_CONFIG, type FlightState } from "@/types";
 
 // PATCH /api/services/[id] — update a service (toggle delivered, etc.)
 export async function PATCH(
@@ -61,6 +63,33 @@ export async function PATCH(
       detail: actionDesc,
       timestamp: new Date().toISOString(),
     });
+
+    // Auto-transición del vuelo: al cambiar un servicio podemos cerrar la fase de llegada
+    const flight = await prisma.flight.findUnique({
+      where: { id: existing.flightId },
+      include: { services: true },
+    });
+    if (flight) {
+      const next: FlightState | null = suggestNextState(flight, flight.services);
+      if (next && next !== flight.state) {
+        await prisma.flight.update({ where: { id: flight.id }, data: { state: next } });
+        await prisma.eventLog.create({
+          data: {
+            flightId: flight.id,
+            userId: session.user.id,
+            action: `Auto-transición → ${FLIGHT_STATE_CONFIG[next].label}`,
+          },
+        });
+        eventBus.emit({
+          type: "flight_updated",
+          flightId: flight.id,
+          userId: session.user.id,
+          userName: session.user.name || undefined,
+          detail: `Estado → ${FLIGHT_STATE_CONFIG[next].label}`,
+          timestamp: new Date().toISOString(),
+        });
+      }
+    }
   }
 
   return NextResponse.json(service);

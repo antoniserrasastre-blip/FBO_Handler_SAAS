@@ -7,6 +7,9 @@ import {
   Coffee,
   Newspaper,
   Sparkles,
+  Droplet,
+  Plug,
+  IceCreamCone,
   ChevronUp,
   ChevronDown,
   ChevronLeft,
@@ -33,6 +36,9 @@ const SERVICE_ICON_MAP: Record<ServiceType, React.FC<LucideProps>> = {
   LAUNDRY: WashingMachine,
   THERMOS: Coffee,
   NEWSPAPERS: Newspaper,
+  WATER: Droplet,
+  GPU: Plug,
+  ICE: IceCreamCone,
   CUSTOM: Sparkles,
 };
 

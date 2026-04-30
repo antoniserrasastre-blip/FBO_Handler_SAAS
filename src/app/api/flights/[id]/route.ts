@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { eventBus } from "@/lib/events";
 import { requireWriter, requireAdmin } from "@/lib/roles";
+import { suggestNextState } from "@/lib/flightUrgency";
+import { FLIGHT_STATE_CONFIG, type FlightState } from "@/types";
 
 // PATCH /api/flights/[id] — update a flight
 export async function PATCH(
@@ -17,13 +19,28 @@ export async function PATCH(
   const existing = await prisma.flight.findUnique({ where: { id } });
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const flight = await prisma.flight.update({
+  let flight = await prisma.flight.update({
     where: { id },
     data: body,
     include: {
       services: { orderBy: { createdAt: "asc" } },
     },
   });
+
+  // Auto-transición de estado: solo si el cliente NO está cambiando explícitamente el estado
+  let autoTransition: FlightState | null = null;
+  if (body.state === undefined) {
+    autoTransition = suggestNextState(flight, flight.services);
+    if (autoTransition && autoTransition !== flight.state) {
+      flight = await prisma.flight.update({
+        where: { id },
+        data: { state: autoTransition },
+        include: { services: { orderBy: { createdAt: "asc" } } },
+      });
+    } else {
+      autoTransition = null;
+    }
+  }
 
   const changes: string[] = [];
   if (body.state && body.state !== existing.state) changes.push(`Estado → ${body.state}`);
@@ -44,6 +61,7 @@ export async function PATCH(
   if (body.origin !== undefined && body.origin !== existing.origin) changes.push(`Origen: ${existing.origin || "--"} → ${body.origin || "--"}`);
   if (body.destination !== undefined && body.destination !== existing.destination) changes.push(`Destino: ${existing.destination || "--"} → ${body.destination || "--"}`);
   if (body.notes !== undefined && body.notes !== existing.notes) changes.push(body.notes ? `Nota actualizada` : `Nota eliminada`);
+  if (autoTransition) changes.push(`Auto-transición → ${FLIGHT_STATE_CONFIG[autoTransition].label}`);
 
   if (changes.length > 0) {
     await prisma.eventLog.create({

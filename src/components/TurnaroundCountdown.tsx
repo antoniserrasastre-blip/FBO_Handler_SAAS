@@ -1,17 +1,25 @@
 "use client";
 
 import { useLiveCountdown } from "@/hooks/useLiveCountdown";
+import { getFlightClock } from "@/lib/flightUrgency";
 
 interface TurnaroundCountdownProps {
-  etd: string | null | undefined;
+  eta?: string | null;
+  etd?: string | null;
   flightState: string;
 }
 
-export function TurnaroundCountdown({ etd, flightState }: TurnaroundCountdownProps) {
-  const minutesLeft = useLiveCountdown(etd);
+/**
+ * Countdown que se ajusta a la fase del vuelo:
+ *  - EXPECTED → cuenta hasta ETA
+ *  - ON_BLOCKS / PARKED / TURNAROUND / BOARDING → cuenta hasta ETD
+ *  - OFF_BLOCKS → oculto
+ */
+export function TurnaroundCountdown({ eta, etd, flightState }: TurnaroundCountdownProps) {
+  const clock = getFlightClock({ state: flightState, eta: eta ?? null, etd: etd ?? null });
+  const minutesLeft = useLiveCountdown(clock.ref);
 
-  // Hide if no ETD, or flight already dispatched, or too far in the future (>3h)
-  if (minutesLeft === null || flightState === "DISPATCHED") return null;
+  if (minutesLeft === null || clock.kind === null) return null;
   if (minutesLeft > 180) return null;
 
   const isPast = minutesLeft < 0;
@@ -31,8 +39,16 @@ export function TurnaroundCountdown({ etd, flightState }: TurnaroundCountdownPro
         ? "bg-yellow-100 text-yellow-700 ring-yellow-300"
         : "bg-gray-100 text-gray-600 ring-gray-300";
 
+  const verbPast = clock.kind === "ETA" ? "Llegada retrasada" : "Salida retrasada";
+  const verbFuture = clock.kind === "ETA" ? "Tiempo hasta ETA" : "Tiempo hasta ETD";
+  const prefix = clock.kind === "ETA" ? "↓" : "↑";
+
   return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ring-1 ${color}`} title={isPast ? "Retrasado" : "Tiempo hasta ETD"}>
+    <span
+      className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[10px] font-bold ring-1 ${color}`}
+      title={isPast ? verbPast : verbFuture}
+    >
+      <span className="opacity-70">{prefix}</span>
       {isPast ? `+${display}` : display}
     </span>
   );

@@ -41,7 +41,8 @@ model Flight {
   departureDate  String?        // DD/MM
   parking        String?
   tobt           String?
-  state          String         @default("EXPECTED") // EXPECTED | ON_GROUND | BOARDING | DISPATCHED
+  state          String         @default("EXPECTED") // EXPECTED | ON_BLOCKS | PARKED | TURNAROUND | BOARDING | OFF_BLOCKS
+  isOvernight    Boolean        @default(false)
 
   // Arrival counts (estimated from import, real from handler)
   crewArrival    Int            @default(0)
@@ -107,7 +108,8 @@ model Service {
   id          String   @id @default(cuid())
   flightId    String
   flight      Flight   @relation(fields: [flightId], references: [id], onDelete: Cascade)
-  type        String   // CATERING | DISHES | COOLER_BAG | STORAGE_BAG | LAUNDRY | THERMOS | NEWSPAPERS | CUSTOM
+  type        String   // CATERING | DISHES | COOLER_BAG | STORAGE_BAG | LAUNDRY | THERMOS | NEWSPAPERS | WATER | GPU | ICE | CUSTOM
+  phase       String   @default("DEPARTURE") // ARRIVAL | DEPARTURE | BOTH
   customName  String?
   reference   String?  // Order/reference number (e.g., NJE catering ref)
   target      String?  // CREW | PAX (for catering distinction)

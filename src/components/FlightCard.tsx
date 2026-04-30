@@ -5,6 +5,7 @@ import { Flight, Service, EventLog, LostItem } from "@prisma/client";
 import {
   FLIGHT_STATE_CONFIG,
   FlightState,
+  normalizeFlightState,
   FUEL_LABELS,
   FuelState,
   TOILET_STATES,
@@ -96,12 +97,14 @@ export const FlightCard = memo(function FlightCard({
 }: FlightCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [paxModal, setPaxModal] = useState<{ direction: Direction } | null>(null);
-  const stateConfig = FLIGHT_STATE_CONFIG[flight.state as FlightState] || FLIGHT_STATE_CONFIG.EXPECTED;
+  const normalizedState = normalizeFlightState(flight.state);
+  const stateConfig = FLIGHT_STATE_CONFIG[normalizedState];
+  const progress = stateConfig.progress;
 
-  const stateProgress: Record<string, number> = { EXPECTED: 0, ON_GROUND: 33, BOARDING: 66, DISPATCHED: 100 };
-  const progress = stateProgress[flight.state] ?? 0;
-
-  const isOvernight = flight.arrivalDate && flight.departureDate && flight.arrivalDate !== flight.departureDate;
+  // Pernocta: usa el campo persistido y, si no, infiere por fechas (fallback para datos antiguos)
+  const isOvernight =
+    flight.isOvernight ||
+    Boolean(flight.arrivalDate && flight.departureDate && flight.arrivalDate !== flight.departureDate);
 
   return (
     <div
@@ -210,7 +213,7 @@ export const FlightCard = memo(function FlightCard({
                 ) : (
                   <QuickTimeEdit value={flight.etd} onSave={(v) => onUpdate(flight.id, { etd: v })} className="text-gray-500" />
                 )}
-                <TurnaroundCountdown etd={flight.etd} flightState={flight.state} />
+                <TurnaroundCountdown eta={flight.eta} etd={flight.etd} flightState={flight.state} />
               </div>
             </div>
           </div>
@@ -399,12 +402,12 @@ export const FlightCard = memo(function FlightCard({
               {/* Flight State */}
               <Section title="Estado del vuelo">
                 <div className="flex flex-wrap gap-1">
-                  {FLIGHT_STATES.map((s) => (
+                  {FLIGHT_STATES.filter((s) => s !== "PARKED" || isOvernight).map((s) => (
                     <button
                       key={s}
                       onClick={() => onUpdate(flight.id, { state: s })}
                       className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                        flight.state === s
+                        normalizedState === s
                           ? `${FLIGHT_STATE_CONFIG[s].bg} ${FLIGHT_STATE_CONFIG[s].text} ring-1 ring-current`
                           : "bg-gray-50 text-gray-400 hover:bg-gray-100"
                       }`}
@@ -545,6 +548,11 @@ export const FlightCard = memo(function FlightCard({
                             {overdue && <span className="shrink-0 text-red-600" title="Retrasado">&#9888;</span>}
                             <ServiceIcon type={service.type} size={12} className="shrink-0 text-gray-400" />
                             {service.type === "CUSTOM" ? service.customName : SERVICE_LABELS[service.type as ServiceType]}{" "}
+                            {service.phase && service.phase !== "DEPARTURE" && (
+                              <span className={`rounded px-1 py-0.5 text-[10px] font-bold ${service.phase === "ARRIVAL" ? "bg-blue-100 text-blue-600" : "bg-gray-100 text-gray-600"}`}>
+                                {service.phase === "ARRIVAL" ? "LLEG" : "AMB"}
+                              </span>
+                            )}
                             {service.target && (
                               <span className={`rounded px-1 py-0.5 text-[10px] font-bold ${service.target === "CREW" ? "bg-orange-100 text-orange-600" : "bg-blue-100 text-blue-600"}`}>
                                 {SERVICE_TARGET_LABELS[service.target as ServiceTarget]}

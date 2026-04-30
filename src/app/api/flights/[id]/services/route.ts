@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { eventBus } from "@/lib/events";
+import { SERVICE_TYPE_DEFAULT_PHASE, type ServiceType, SERVICE_PHASES } from "@/types";
 
 // POST /api/flights/[id]/services — add a service to a flight
 export async function POST(
@@ -15,10 +16,17 @@ export async function POST(
   const { id } = await params;
   const body = await req.json();
 
+  // Resolve phase: trust client value if valid, else fall back to default per service type
+  const requestedPhase = typeof body.phase === "string" && (SERVICE_PHASES as readonly string[]).includes(body.phase)
+    ? body.phase
+    : null;
+  const defaultPhase = SERVICE_TYPE_DEFAULT_PHASE[body.type as ServiceType] ?? "DEPARTURE";
+
   const service = await prisma.service.create({
     data: {
       flightId: id,
       type: body.type,
+      phase: requestedPhase ?? defaultPhase,
       customName: body.customName || null,
       reference: body.reference || null,
       origin: body.origin || null,
