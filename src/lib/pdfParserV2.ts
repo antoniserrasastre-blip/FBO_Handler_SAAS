@@ -43,11 +43,11 @@ const COLUMNS = {
   aircraft:     { x: 236, width: 30 },
   loc:          { x: 270, width: 30 },
   parking:      { x: 303, width: 50 },
-  crew_arr:     { x: 352, width: 8  },
+  crew_arr:     { x: 352, width: 5  },  // max x=357, "/" at x=359 queda fuera
   crew_sep:     { x: 362, width: 4  },
   crew_dep:     { x: 368, width: 8  },
-  pax_arr:      { x: 387, width: 6  },
-  pax_sep:      { x: 395, width: 4  },
+  pax_arr:      { x: 387, width: 4  },  // max x=391, "/" at x=392 queda fuera
+  pax_sep:      { x: 395, width: 3  },  // max x=398, pax_dep at x=399 queda fuera
   pax_dep:      { x: 399, width: 8  },
   dep_callsign: { x: 418, width: 45 },
   destination:  { x: 467, width: 40 },
