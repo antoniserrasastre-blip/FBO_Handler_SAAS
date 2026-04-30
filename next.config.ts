@@ -1,14 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // pdf-parse → pdfjs-dist → @napi-rs/canvas (native .node binary that
-  // installs DOMMatrix/Path2D/ImageData on globalThis). Externalising the
-  // packages tells Next not to bundle them, but Next's outputFileTracing
-  // misses @napi-rs/canvas because pdf-parse's bundled CJS uses dynamic
-  // requires that nft cannot follow. We force-include the package and its
-  // platform-specific binary so Vercel ships the .node file with the
-  // serverless function — without it the API route throws
-  // "DOMMatrix is not defined".
+  // pdf-parse pulls pdfjs-dist 5.x and (transitively) @napi-rs/canvas. Keep
+  // them external so Next does not try to bundle them. The actual
+  // DOMMatrix/Path2D/ImageData polyfills live in src/lib/pdfPolyfills.ts —
+  // we don't depend on Vercel shipping the @napi-rs/canvas native binary.
   serverExternalPackages: [
     "@libsql/client",
     "pdf-parse",
@@ -16,14 +12,6 @@ const nextConfig: NextConfig = {
     "@napi-rs/canvas",
     "pdfkit",
   ],
-  outputFileTracingIncludes: {
-    "/api/import": [
-      "./node_modules/@napi-rs/canvas/**/*",
-      "./node_modules/@napi-rs/canvas-linux-x64-gnu/**/*",
-      "./node_modules/pdfjs-dist/**/*",
-      "./node_modules/pdf-parse/**/*",
-    ],
-  },
 };
 
 export default nextConfig;

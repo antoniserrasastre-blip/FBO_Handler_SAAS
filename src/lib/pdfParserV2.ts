@@ -9,6 +9,7 @@
  * aircraft types. Replaces text-only parsing which had ~30% data loss.
  */
 
+import "./pdfPolyfills";
 import { PDFParse } from 'pdf-parse';
 
 export type FlightType = 'HANDLING' | 'EXTERNAL_SERVICE' | 'LOUNGE_GUEST';
