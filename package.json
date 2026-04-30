@@ -2,9 +2,6 @@
   "name": "fbo-handler-saas",
   "version": "0.1.0",
   "private": true,
-  "engines": {
-    "node": "22.x"
-  },
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && bash scripts/vercel-setup.sh && next build",
