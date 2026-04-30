@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Standalone output para Docker (copia solo lo necesario)
+  output: "standalone",
   // pdf-parse pulls pdfjs-dist 5.x and (transitively) @napi-rs/canvas. Keep
   // them external so Next does not try to bundle them. The
   // DOMMatrix/Path2D/ImageData polyfills live in src/lib/pdfPolyfills.ts.
