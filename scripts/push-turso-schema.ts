@@ -159,6 +159,8 @@ const statements = [
 const migrations = [
   `ALTER TABLE "Flight" ADD COLUMN "notes" TEXT`,
   `ALTER TABLE "Service" ADD COLUMN "scheduledAt" TEXT`,
+  `ALTER TABLE "Flight" ADD COLUMN "isOvernight" INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE "Service" ADD COLUMN "phase" TEXT NOT NULL DEFAULT 'DEPARTURE'`,
 ];
 
 async function main() {
