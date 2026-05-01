@@ -130,7 +130,9 @@ export async function PUT(req: NextRequest) {
       flightId = existing.id;
       updated++;
     } else {
-      const flight = await prisma.flight.create({ data: { daySheetId: daySheet.id, registration: f.registration, ...flightData } });
+      // Pernoctas whose arrival predates the sheet are already on the ground
+      const initialState = isOvernight && flightDate.getTime() < targetDate.getTime() ? "PARKED" : "EXPECTED";
+      const flight = await prisma.flight.create({ data: { daySheetId: daySheet.id, registration: f.registration, state: initialState, ...flightData } });
       await prisma.eventLog.create({
         data: { flightId: flight.id, userId: session.user.id, action: "Importado desde PDF", details: `${f.callsign} (${f.registration})` },
       });
@@ -166,6 +168,7 @@ export async function PUT(req: NextRequest) {
             paxArrival: f.paxArrival || 0,
             paxDeparture: f.paxDeparture || 0,
             isOvernight: true,
+            state: "PARKED",
             linkedFlightId: flightId,
           },
         });
