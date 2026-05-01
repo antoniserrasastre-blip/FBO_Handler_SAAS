@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { Flight, Service, LostItem, EventLog } from "@prisma/client";
 import { findOperator } from "@/lib/operators";
 import { getRequiredAuthorities } from "@/lib/countries";
@@ -176,7 +176,7 @@ export function SearchBar({ flights, onFilteredFlights, resultCount, totalCount,
   }, [flights, onFilteredFlights, onQueryChange]);
 
   // Recompute when flights or query change (query may change from external setQuery)
-  useMemo(() => {
+  useEffect(() => {
     if (!query.trim()) {
       onFilteredFlights(flights);
     } else {
