@@ -36,13 +36,13 @@ export async function GET(req: NextRequest) {
     },
   });
 
-  // Sort by the most relevant time for that day:
-  // - Flights with ETA sort by arrival time
-  // - Flights without ETA (pure departures or pernoctas leaving that day) sort by ETD
-  // - Flights with no time at all go last
+  // Sort chronologically by "first event today":
+  // - Overnight flights (arrived before today): sort by ETD — their only event today
+  // - Same-day flights (arrive today): sort by ETA — arrival is the first event
+  // - Flights with no time go last
   const flights = rawFlights.sort((a, b) => {
-    const ta = a.eta || a.etd || "99:99";
-    const tb = b.eta || b.etd || "99:99";
+    const ta = a.isOvernight ? (a.etd || "99:99") : (a.eta || a.etd || "99:99");
+    const tb = b.isOvernight ? (b.etd || "99:99") : (b.eta || b.etd || "99:99");
     return ta.localeCompare(tb);
   });
 
