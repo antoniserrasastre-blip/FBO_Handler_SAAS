@@ -3,22 +3,20 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   // Standalone output para Docker (copia solo lo necesario)
   output: "standalone",
-  // pdf-parse pulls pdfjs-dist 5.x and (transitively) @napi-rs/canvas. Keep
-  // them external so Next does not try to bundle them. The
-  // DOMMatrix/Path2D/ImageData polyfills live in src/lib/pdfPolyfills.ts.
+  // pdfjs-dist is kept external so Next does not bundle it.
+  // @libsql/client and pdfkit have native/CJS internals that must stay external.
   serverExternalPackages: [
     "@libsql/client",
-    "pdf-parse",
     "pdfjs-dist",
-    "@napi-rs/canvas",
     "pdfkit",
   ],
-  // pdfjs-dist loads its "fake worker" (pdf.worker.mjs) via dynamic import
-  // that nft cannot trace, so Vercel ships the function without it and the
-  // route fails with "Cannot find module .../pdf.worker.mjs". Force-include
-  // the legacy build directory in the /api/import bundle.
+  // pdfjs-dist loads pdf.worker.mjs via dynamic import that nft cannot trace,
+  // so Vercel ships the function without it. Force-include both build dirs.
   outputFileTracingIncludes: {
-    "/api/import": ["./node_modules/pdfjs-dist/legacy/build/**/*"],
+    "/api/import": [
+      "./node_modules/pdfjs-dist/build/**/*",
+      "./node_modules/pdfjs-dist/legacy/build/**/*",
+    ],
   },
 };
 

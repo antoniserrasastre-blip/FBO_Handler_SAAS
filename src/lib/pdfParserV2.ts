@@ -6,8 +6,10 @@
 
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist';
 
-// Disable the Web Worker — not available in serverless/Node.js environments
-GlobalWorkerOptions.workerSrc = '';
+// Point at the bundled worker file so pdfjs-dist can import it.
+// Vercel's nft cannot trace this dynamic import, so next.config.ts
+// force-includes the entire pdfjs-dist/build directory in the bundle.
+GlobalWorkerOptions.workerSrc = require.resolve('pdfjs-dist/build/pdf.worker.mjs');
 
 export type FlightType = 'HANDLING' | 'EXTERNAL_SERVICE' | 'LOUNGE_GUEST';
 
