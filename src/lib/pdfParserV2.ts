@@ -1,15 +1,15 @@
 /**
  * pdfParserV2 — Coordinate-based parser for Cybermax FBO PDFs
  *
- * Uses pdfjs-dist directly to access X,Y coordinates of each text item.
+ * Uses pdfjs-dist v3 (CJS) directly to access X,Y coordinates of each text
+ * item. v3's legacy build is CommonJS-compatible, so Next.js can keep it as a
+ * serverExternalPackage and require() it at runtime without ERR_REQUIRE_ESM.
+ * Setting workerSrc = '' triggers the inline FakeWorker (no real Worker needed).
  */
 
-import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist';
-
-// Point at the bundled worker file so pdfjs-dist can import it.
-// Vercel's nft cannot trace this dynamic import, so next.config.ts
-// force-includes the entire pdfjs-dist/build directory in the bundle.
-GlobalWorkerOptions.workerSrc = require.resolve('pdfjs-dist/build/pdf.worker.mjs');
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const pdfjsLib = require('pdfjs-dist/legacy/build/pdf');
+pdfjsLib.GlobalWorkerOptions.workerSrc = '';
 
 export type FlightType = 'HANDLING' | 'EXTERNAL_SERVICE' | 'LOUNGE_GUEST';
 
@@ -163,7 +163,7 @@ function parsePageItems(items: PdfItem[], isFirstPage: boolean): { sheetDate: st
 
 export async function parseCybermaxPdf(buffer: Buffer | Uint8Array): Promise<ParseResult> {
   const data = new Uint8Array(buffer instanceof Buffer ? buffer : Buffer.from(buffer));
-  const pdf = await getDocument({ data }).promise;
+  const pdf = await pdfjsLib.getDocument({ data }).promise;
 
   const pageItems: PdfItem[][] = [];
 

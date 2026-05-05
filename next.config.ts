@@ -10,13 +10,10 @@ const nextConfig: NextConfig = {
     "pdfjs-dist",
     "pdfkit",
   ],
-  // pdfjs-dist loads pdf.worker.mjs via dynamic import that nft cannot trace,
-  // so Vercel ships the function without it. Force-include both build dirs.
+  // pdfjs-dist v3 legacy CJS build: nft cannot trace dynamic requires inside
+  // the worker, so force-include the entire legacy build directory.
   outputFileTracingIncludes: {
-    "/api/import": [
-      "./node_modules/pdfjs-dist/build/**/*",
-      "./node_modules/pdfjs-dist/legacy/build/**/*",
-    ],
+    "/api/import": ["./node_modules/pdfjs-dist/legacy/build/**/*"],
   },
 };
 
