@@ -1,12 +1,13 @@
 /**
  * pdfParserV2 — Coordinate-based parser for Cybermax FBO PDFs
  *
- * Uses pdf-parse v1's pagerender hook to access X,Y coordinates of each text
- * item via the underlying pdfjs page.getTextContent() call.
+ * Uses pdfjs-dist directly to access X,Y coordinates of each text item.
  */
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const pdfParse = require('pdf-parse');
+import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist';
+
+// Disable the Web Worker — not available in serverless/Node.js environments
+GlobalWorkerOptions.workerSrc = '';
 
 export type FlightType = 'HANDLING' | 'EXTERNAL_SERVICE' | 'LOUNGE_GUEST';
 
@@ -159,30 +160,24 @@ function parsePageItems(items: PdfItem[], isFirstPage: boolean): { sheetDate: st
 }
 
 export async function parseCybermaxPdf(buffer: Buffer | Uint8Array): Promise<ParseResult> {
-  // Collect items per page using pdf-parse's pagerender hook
-  const pageItems: PdfItem[][] = [];
-  let pageIndex = 0;
+  const data = new Uint8Array(buffer instanceof Buffer ? buffer : Buffer.from(buffer));
+  const pdf = await getDocument({ data }).promise;
 
-  await pdfParse(Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer), {
-    pagerender: (pageData: any) => {
-      const currentPage = pageIndex++;
-      return pageData
-        .getTextContent({ normalizeWhitespace: false, disableCombineTextItems: true })
-        .then((tc: any) => {
-          const items: PdfItem[] = tc.items
-            .filter((it: any) => it.str && it.str.trim())
-            .map((it: any) => ({
-              text: it.str.trim(),
-              x: it.transform[4],
-              y: it.transform[5],
-              page: currentPage,
-            }));
-          pageItems[currentPage] = items;
-          return '';
-        });
-    },
-    version: 'v1.10.100',
-  });
+  const pageItems: PdfItem[][] = [];
+
+  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+    const page = await pdf.getPage(pageNum);
+    const tc = await page.getTextContent();
+    const items: PdfItem[] = (tc.items as any[])
+      .filter((it: any) => it.str && it.str.trim())
+      .map((it: any) => ({
+        text: it.str.trim(),
+        x: it.transform[4],
+        y: it.transform[5],
+        page: pageNum - 1,
+      }));
+    pageItems[pageNum - 1] = items;
+  }
 
   let sheetDate = '';
   const allFlights: ParsedFlight[] = [];
