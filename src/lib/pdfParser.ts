@@ -9,6 +9,7 @@
 // a redeploy: parseCybermaxPdf logs a warning and returns an empty result with
 // the shape callers already expect. Real rollback path is `git revert`.
 
+import "./pdfPolyfills";
 import { parseCybermaxPdf as parseV2 } from "./pdfParserV2";
 
 export interface ParsedFlight {
