@@ -1,0 +1,25 @@
+{
+  "name": "fbo-pdf-microservice",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Express microservice for parsing handler PDFs (NetJets ALS Handling Logistics, etc.) for the FBO Handler SAAS app.",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "multer": "^1.4.5-lts.1",
+    "pdfjs-dist": "^4.7.76"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.0"
+  }
+}
