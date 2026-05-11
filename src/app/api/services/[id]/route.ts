@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { eventBus } from "@/lib/events";
 import { requireWriter } from "@/lib/roles";
@@ -56,7 +57,7 @@ export async function PATCH(
 
   const service = await prisma.service.update({
     where: { id },
-    data,
+    data: data as Prisma.ServiceUpdateInput,
   });
 
   const newState = typeof body.state === "string" ? body.state : null;

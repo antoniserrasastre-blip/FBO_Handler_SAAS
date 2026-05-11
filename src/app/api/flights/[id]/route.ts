@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { eventBus } from "@/lib/events";
 import { requireWriter, requireAdmin } from "@/lib/roles";
@@ -48,7 +49,7 @@ export async function PATCH(
 
   let flight = await prisma.flight.update({
     where: { id },
-    data: body,
+    data: body as Prisma.FlightUpdateInput,
     include: {
       services: { orderBy: { createdAt: "asc" } },
     },
