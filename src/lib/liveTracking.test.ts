@@ -80,8 +80,8 @@ describe("matchFlights", () => {
   it("matches by normalised callsign and flags phase change", () => {
     const states = [mkState({ callsign: "RYR4521 ", onGround: true, velocityMs: 0 })];
     const flights = [
-      { id: "f1", callsign: "ryr4521", livePhase: "APPROACHING" },
-      { id: "f2", callsign: "FR4521", livePhase: null }, // commercial number, won't match ICAO callsign
+      { id: "f1", callsign: "ryr4521", registration: "EI-EBA", livePhase: "APPROACHING", liveOnGround: false },
+      { id: "f2", callsign: "FR4521", registration: "EI-XXX", livePhase: null, liveOnGround: null }, // commercial nº won't match
     ];
     const matches = matchFlights(flights, states);
     expect(matches).toHaveLength(1);
@@ -92,8 +92,31 @@ describe("matchFlights", () => {
 
   it("does not flag phaseChanged when phase is the same", () => {
     const states = [mkState({ callsign: "EJU1", onGround: true, velocityMs: 0 })];
-    const flights = [{ id: "f1", callsign: "EJU1", livePhase: "ON_BLOCKS" }];
+    const flights = [{ id: "f1", callsign: "EJU1", registration: "G-EZAA", livePhase: "ON_BLOCKS", liveOnGround: true }];
     const matches = matchFlights(flights, states);
     expect(matches[0].phaseChanged).toBe(false);
+  });
+
+  it("falls back to registration when callsign doesn't match (private aviation)", () => {
+    // Private bizjet broadcasts its tail number as callsign
+    const states = [mkState({ callsign: "ECMJI ", onGround: false, baroAltitudeM: 800, verticalRateMs: -3 })];
+    const flights = [
+      // handler entered registration with dash, callsign as charter ref or empty
+      { id: "p1", callsign: "OPS123", registration: "EC-MJI", livePhase: null, liveOnGround: null },
+    ];
+    const matches = matchFlights(flights, states);
+    expect(matches).toHaveLength(1);
+    expect(matches[0].flightId).toBe("p1");
+    expect(matches[0].phase).toBe("APPROACHING");
+  });
+
+  it("prefers callsign over registration when both could match different planes", () => {
+    const states = [
+      mkState({ icao24: "by-call", callsign: "NJE234", onGround: true, velocityMs: 0 }),
+      mkState({ icao24: "by-reg", callsign: "CSLTC", onGround: false, baroAltitudeM: 5000 }),
+    ];
+    const flights = [{ id: "p1", callsign: "NJE234", registration: "CS-LTC", livePhase: null, liveOnGround: null }];
+    const matches = matchFlights(flights, states);
+    expect(matches[0].state.icao24).toBe("by-call");
   });
 });

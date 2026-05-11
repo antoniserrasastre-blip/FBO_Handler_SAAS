@@ -39,7 +39,9 @@ export function indexByCallsign(states: OpenSkyState[]): Map<string, OpenSkyStat
 type FlightForMatch = {
   id: string;
   callsign: string;
+  registration: string;
   livePhase: string | null;
+  liveOnGround: boolean | null;
 };
 
 export type MatchResult = {
@@ -49,7 +51,12 @@ export type MatchResult = {
   phaseChanged: boolean;
 };
 
-/** Match a set of Flights (today's schedule) against an OpenSky state snapshot. */
+/**
+ * Match Flights against an ADS-B snapshot. Tries callsign first, then falls
+ * back to registration — private flights commonly use their tail number as
+ * callsign (e.g. EC-MJI → ECMJI), where comercial flights use airline ICAO
+ * (RYR4521).
+ */
 export function matchFlights(
   flights: FlightForMatch[],
   states: OpenSkyState[],
@@ -57,9 +64,12 @@ export function matchFlights(
   const byCallsign = indexByCallsign(states);
   const results: MatchResult[] = [];
   for (const f of flights) {
-    const key = normaliseCallsign(f.callsign);
-    if (!key) continue;
-    const state = byCallsign.get(key);
+    const callKey = normaliseCallsign(f.callsign);
+    const regKey = normaliseCallsign(f.registration);
+    let state = callKey ? byCallsign.get(callKey) : undefined;
+    if (!state && regKey && regKey !== callKey) {
+      state = byCallsign.get(regKey);
+    }
     if (!state) continue;
     const phase = computePhase(state);
     results.push({
@@ -81,6 +91,7 @@ export async function pollOnce(): Promise<{
   fetched: number;
   matched: number;
   transitions: number;
+  ghostsParked: number;
 }> {
   const states = await fetchStates();
 
@@ -92,12 +103,15 @@ export async function pollOnce(): Promise<{
     where: {
       daySheet: { date: { gte: since, lte: until } },
     },
-    select: { id: true, callsign: true, livePhase: true },
+    select: { id: true, callsign: true, registration: true, livePhase: true, liveOnGround: true },
   });
 
   const matches = matchFlights(flights, states);
+  const matchedIds = new Set(matches.map((m) => m.flightId));
 
   let transitions = 0;
+  const now = new Date();
+
   for (const m of matches) {
     await prisma.flight.update({
       where: { id: m.flightId },
@@ -125,5 +139,35 @@ export async function pollOnce(): Promise<{
     }
   }
 
-  return { fetched: states.length, matched: matches.length, transitions };
+  // Persistencia ON_BLOCKS: si un vuelo estaba en suelo (LANDED o ON_BLOCKS) y
+  // ahora desaparece del feed, asume que ha apagado el transponder al estacionar.
+  // Lo marcamos ON_BLOCKS y refrescamos liveLastSeenAt para que el badge no
+  // expire por la regla de stale (>10 min).
+  let ghostsParked = 0;
+  for (const f of flights) {
+    if (matchedIds.has(f.id)) continue;
+    if (f.liveOnGround !== true) continue;
+    if (f.livePhase !== "LANDED" && f.livePhase !== "ON_BLOCKS") continue;
+
+    await prisma.flight.update({
+      where: { id: f.id },
+      data: {
+        livePhase: "ON_BLOCKS",
+        liveVelocityMs: 0,
+        liveLastSeenAt: now,
+      },
+    });
+    ghostsParked++;
+    if (f.livePhase !== "ON_BLOCKS") {
+      transitions++;
+      eventBus.emit({
+        type: "flight_updated",
+        flightId: f.id,
+        detail: "live phase → ON_BLOCKS (transponder apagado tras aterrizar)",
+        timestamp: now.toISOString(),
+      });
+    }
+  }
+
+  return { fetched: states.length, matched: matches.length, transitions, ghostsParked };
 }
