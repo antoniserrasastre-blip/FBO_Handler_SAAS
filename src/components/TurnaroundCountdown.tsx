@@ -7,6 +7,9 @@ interface TurnaroundCountdownProps {
   eta?: string | null;
   etd?: string | null;
   flightState: string;
+  /** DaySheet UTC date this flight belongs to. Anchors the countdown to the
+   * correct day so flights scheduled for tomorrow don't show as "+17h late". */
+  dayUtc?: Date | null;
 }
 
 /**
@@ -15,9 +18,9 @@ interface TurnaroundCountdownProps {
  *  - ON_BLOCKS / PARKED / TURNAROUND / BOARDING → cuenta hasta ETD
  *  - OFF_BLOCKS → oculto
  */
-export function TurnaroundCountdown({ eta, etd, flightState }: TurnaroundCountdownProps) {
+export function TurnaroundCountdown({ eta, etd, flightState, dayUtc }: TurnaroundCountdownProps) {
   const clock = getFlightClock({ state: flightState, eta: eta ?? null, etd: etd ?? null });
-  const minutesLeft = useLiveCountdown(clock.ref);
+  const minutesLeft = useLiveCountdown(clock.ref, dayUtc);
 
   if (minutesLeft === null || clock.kind === null) return null;
   if (minutesLeft > 180) return null;

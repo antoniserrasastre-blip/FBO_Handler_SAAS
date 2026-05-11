@@ -601,6 +601,7 @@ export default function HomePage() {
                       .join(", ");
                   })()}
                   readOnly={false}
+                  dayUtc={date}
                 />
               </div>
             ))}

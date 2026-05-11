@@ -78,6 +78,8 @@ interface FlightCardProps {
   onBadgeClick?: (searchTerm: string) => void;
   parkingConflict?: string | null;
   readOnly?: boolean;
+  /** DaySheet UTC date — used to anchor the countdown to the correct day. */
+  dayUtc?: Date | null;
 }
 
 export const FlightCard = memo(function FlightCard({
@@ -95,6 +97,7 @@ export const FlightCard = memo(function FlightCard({
   onBadgeClick,
   parkingConflict,
   readOnly = false,
+  dayUtc,
 }: FlightCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [paxModal, setPaxModal] = useState<{ direction: Direction } | null>(null);
@@ -226,7 +229,7 @@ export const FlightCard = memo(function FlightCard({
                 ) : (
                   <QuickTimeEdit value={flight.etd} onSave={(v) => onUpdate(flight.id, { etd: v })} className="text-gray-500" />
                 )}
-                <TurnaroundCountdown eta={flight.eta} etd={flight.etd} flightState={flight.state} />
+                <TurnaroundCountdown eta={flight.eta} etd={flight.etd} flightState={flight.state} dayUtc={dayUtc} />
               </div>
             </div>
           </div>
