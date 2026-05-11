@@ -5,6 +5,32 @@ import { requireWriter, requireAdmin } from "@/lib/roles";
 import { suggestNextState } from "@/lib/flightUrgency";
 import { FLIGHT_STATE_CONFIG, type FlightState } from "@/types";
 
+const ALLOWED_FLIGHT_PATCH_FIELDS = new Set([
+  "callsign", "registration", "aircraftType",
+  "origin", "eta", "arrivalDate",
+  "destination", "etd", "departureDate",
+  "parking", "tobt",
+  "state", "isOvernight",
+  "crewArrival", "crewArrivalReal", "paxArrival", "paxArrivalReal",
+  "crewDeparture", "crewDepartureReal", "paxDeparture", "paxDepartureReal",
+  "paxArrBagsChecked", "paxArrBagsCabin", "paxArrBagsState",
+  "paxArrTransportType", "paxArrTransportState", "paxArrState",
+  "paxDepBagsChecked", "paxDepBagsCabin", "paxDepBagsState",
+  "paxDepTransportType", "paxDepTransportState", "paxDepState",
+  "crewArrLocation", "crewDepLocation",
+  "fuelState", "fuelRequestedAt", "fuelServedAt",
+  "toiletState", "toiletRequestedAt", "toiletCompletedAt",
+  "linkedFlightId", "notes",
+]);
+
+function pickAllowed(body: Record<string, unknown>, allowed: Set<string>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(body)) {
+    if (allowed.has(key)) out[key] = body[key];
+  }
+  return out;
+}
+
 // PATCH /api/flights/[id] — update a flight
 export async function PATCH(
   req: NextRequest,
@@ -14,7 +40,8 @@ export async function PATCH(
   if (error) return error;
 
   const { id } = await params;
-  const body = await req.json();
+  const rawBody = await req.json();
+  const body = pickAllowed(rawBody, ALLOWED_FLIGHT_PATCH_FIELDS);
 
   const existing = await prisma.flight.findUnique({ where: { id } });
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });

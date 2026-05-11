@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { requireSupervisor } from "@/lib/roles";
+import { requireAdmin, requireSupervisor } from "@/lib/roles";
 
 // GET /api/daysheets — list all day sheets with flight counts
 export async function GET() {
@@ -50,20 +50,22 @@ export async function GET() {
 // DELETE /api/daysheets?id=xxx — delete a specific day sheet (and all its flights/services/logs)
 // DELETE /api/daysheets?all=true — delete ALL data (all daysheets, flights, services, logs)
 export async function DELETE(req: NextRequest) {
-  const { error } = await requireSupervisor();
-  if (error) return error;
-
   const id = req.nextUrl.searchParams.get("id");
   const all = req.nextUrl.searchParams.get("all");
 
   if (all === "true") {
-    // Delete everything (cascade deletes flights, services, logs)
+    // Wipes audit trail + all operational data — admin only.
+    const { error } = await requireAdmin();
+    if (error) return error;
     await prisma.eventLog.deleteMany();
     await prisma.service.deleteMany();
     await prisma.flight.deleteMany();
     await prisma.daySheet.deleteMany();
     return NextResponse.json({ ok: true, message: "Todos los datos eliminados" });
   }
+
+  const { error } = await requireSupervisor();
+  if (error) return error;
 
   if (id) {
     const ds = await prisma.daySheet.findUnique({ where: { id } });
