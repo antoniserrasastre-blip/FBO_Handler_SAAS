@@ -5,13 +5,16 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { parseCybermaxPdf, parseDate } from "@/lib/pdfParser";
 import { eventBus } from "@/lib/events";
-import { validateUpload } from "@/lib/uploadValidation";
+import { validateUpload, validateContentLength } from "@/lib/uploadValidation";
 
 // POST /api/import — parse one or more Cybermax PDFs
 // Returns combined parsed flights for preview (doesn't save yet)
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const lenCheck = validateContentLength(req.headers.get("content-length"), "pdf");
+  if (!lenCheck.ok) return NextResponse.json({ error: lenCheck.message }, { status: lenCheck.status });
 
   const formData = await req.formData();
   const files = formData.getAll("pdf") as File[];

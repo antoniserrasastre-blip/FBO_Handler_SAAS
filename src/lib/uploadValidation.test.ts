@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { validateUpload } from "./uploadValidation";
+import { validateUpload, validateContentLength } from "./uploadValidation";
 
 describe("validateUpload", () => {
   it("accepts a small valid PDF", () => {
@@ -39,5 +39,30 @@ describe("validateUpload", () => {
   it("rejects pdf masquerading as xlsx", () => {
     const r = validateUpload({ name: "x.pdf", type: "application/pdf", size: 100 }, "xlsx");
     expect(r).toMatchObject({ ok: false, status: 415 });
+  });
+});
+
+describe("validateContentLength", () => {
+  it("passes when header is missing", () => {
+    expect(validateContentLength(null, "pdf")).toEqual({ ok: true });
+  });
+
+  it("passes when value is non-numeric", () => {
+    expect(validateContentLength("not-a-number", "pdf")).toEqual({ ok: true });
+  });
+
+  it("passes for body under the limit", () => {
+    const oneMb = String(1 * 1024 * 1024);
+    expect(validateContentLength(oneMb, "pdf")).toEqual({ ok: true });
+  });
+
+  it("rejects with 413 when body exceeds the pdf limit", () => {
+    const twentyMb = String(20 * 1024 * 1024);
+    expect(validateContentLength(twentyMb, "pdf")).toMatchObject({ ok: false, status: 413 });
+  });
+
+  it("rejects with 413 when body exceeds the xlsx limit", () => {
+    const tenMb = String(10 * 1024 * 1024);
+    expect(validateContentLength(tenMb, "xlsx")).toMatchObject({ ok: false, status: 413 });
   });
 });

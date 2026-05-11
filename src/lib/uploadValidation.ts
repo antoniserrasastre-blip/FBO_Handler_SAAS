@@ -42,3 +42,18 @@ export function validateUpload(file: { name?: string; type?: string; size: numbe
   }
   return { ok: true };
 }
+
+// Reject early based on Content-Length so requests over the Next body-parse
+// limit don't reach formData() (which would throw 500 instead of 413).
+// Includes a small overhead for multipart boundaries.
+export function validateContentLength(headerValue: string | null, kind: UploadKind): ValidationResult {
+  if (!headerValue) return { ok: true };
+  const bytes = parseInt(headerValue, 10);
+  if (isNaN(bytes)) return { ok: true };
+  const max = RULES[kind].maxBytes + 64 * 1024;
+  if (bytes > max) {
+    const mb = Math.round(RULES[kind].maxBytes / 1024 / 1024);
+    return { ok: false, status: 413, message: `Petición supera ${mb} MB` };
+  }
+  return { ok: true };
+}

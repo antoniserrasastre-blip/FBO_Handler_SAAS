@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { parseExtrasExcel } from "@/lib/excelParser";
 import { palmaDayUtc } from "@/lib/time";
-import { validateUpload } from "@/lib/uploadValidation";
+import { validateUpload, validateContentLength } from "@/lib/uploadValidation";
 import { eventBus } from "@/lib/events";
 import { SERVICE_TYPE_DEFAULT_PHASE, type ServiceType } from "@/types";
 
@@ -12,6 +12,9 @@ import { SERVICE_TYPE_DEFAULT_PHASE, type ServiceType } from "@/types";
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const lenCheck = validateContentLength(req.headers.get("content-length"), "xlsx");
+  if (!lenCheck.ok) return NextResponse.json({ error: lenCheck.message }, { status: lenCheck.status });
 
   const formData = await req.formData();
   const files = formData.getAll("xlsx") as File[];
