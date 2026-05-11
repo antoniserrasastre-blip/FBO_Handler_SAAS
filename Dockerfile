@@ -41,10 +41,20 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 
-# Prisma: cliente generado + schema
+# Schema Prisma (necesario en runtime para `prisma db push`)
+COPY --from=builder /app/prisma ./prisma
+
+# Cliente Prisma generado (lo usa la app)
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
-COPY --from=builder /app/prisma ./prisma
+
+# CLI Prisma en subdirectorio aislado — Next standalone omite las deps no
+# importadas en código (@prisma/config, effect, etc.). Instalado aparte para
+# no duplicar las prod deps que ya trae el standalone.
+RUN mkdir -p /app/_cli && cd /app/_cli && \
+    npm init -y >/dev/null && \
+    npm install --no-audit --no-fund --silent prisma@6.5.0 && \
+    rm -rf /root/.npm
 
 # Directorio para la base de datos SQLite (si se usa local)
 RUN mkdir -p /app/data && chown nextjs:nodejs /app/data

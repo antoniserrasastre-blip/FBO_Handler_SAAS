@@ -45,6 +45,26 @@ jobs:
           docker compose build --no-cache
           docker compose up -d
 
+      - name: Sync database schema (idempotente)
+        run: |
+          cd /home/randomite/FBO_Handler_SAAS
+          # Espera a que el container esté listo para `exec` (no a que Next
+          # responda — Next puede crashear si el schema está stale).
+          for i in $(seq 1 15); do
+            if docker compose exec -T fbo true 2>/dev/null; then break; fi
+            sleep 1
+          done
+          # `prisma db push` aplica el schema actual a la BD (crea tablas si no
+          # existen, añade columnas nuevas). Idempotente: no hace nada si todo
+          # está alineado. Se ejecuta SIEMPRE tras el deploy, no solo first run.
+          docker compose exec -T -u root fbo \
+            node /app/_cli/node_modules/prisma/build/index.js db push \
+            --schema=/app/prisma/schema.prisma \
+            --skip-generate \
+            --accept-data-loss
+          # Si la app crasheó en startup por schema viejo, reinicia tras el push.
+          docker compose restart fbo
+
       - name: Wait for healthcheck
         run: |
           echo "Esperando a que FBO arranque..."
@@ -58,12 +78,3 @@ jobs:
           echo "AVISO: FBO no respondió tras 60s"
           docker compose -f /home/randomite/FBO_Handler_SAAS/docker-compose.yml logs --tail=30
           exit 1
-
-      - name: Init database (first run only)
-        run: |
-          cd /home/randomite/FBO_Handler_SAAS
-          # Si la DB no existe, crear schema y seed
-          if ! docker compose exec fbo test -f /app/data/fbo.db; then
-            docker compose exec fbo npx prisma db push
-            echo "Schema creado. Seed manual si es necesario."
-          fi
