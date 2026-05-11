@@ -430,7 +430,7 @@ export default function HomePage() {
         onDateChange={handleDateChange}
       />
 
-      {isToday && <TurnaroundAlerts flights={flights} />}
+      {isToday && <TurnaroundAlerts flights={flights} dayUtc={date} />}
 
       <PendingServicesPanel flights={flights} onQuickFilter={setSearchQuery} />
 

@@ -8,6 +8,9 @@ type FlightWithServices = Flight & { services: Service[] };
 
 interface TurnaroundAlertsProps {
   flights: FlightWithServices[];
+  /** DaySheet UTC date the flights belong to. Anchors HH:MM Zulu to a real
+   * instant so flights for tomorrow don't show as "1000+ min retrasado". */
+  dayUtc?: Date | null;
 }
 
 type AlertKind = "ARRIVAL" | "DEPARTURE";
@@ -20,30 +23,56 @@ interface FlightAlert {
   pendingServices: number;
 }
 
-export function getTurnaroundAlerts(flights: FlightWithServices[]): FlightAlert[] {
-  const alerts: FlightAlert[] = [];
+/**
+ * Convert an HH:MM Zulu time to absolute minutes-from-now, anchored to the
+ * given UTC day. Without dayUtc, falls back to a wrap-around heuristic
+ * (±12h) so flights tomorrow morning don't read as -1000 min today.
+ */
+function minutesUntil(hhmm: string, dayUtc: Date | null, now: Date): number | null {
+  const m = hhmm.match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return null;
+  const hh = parseInt(m[1], 10);
+  const mm = parseInt(m[2], 10);
+  if (dayUtc) {
+    const target = Date.UTC(
+      dayUtc.getUTCFullYear(),
+      dayUtc.getUTCMonth(),
+      dayUtc.getUTCDate(),
+      hh,
+      mm,
+    );
+    return Math.round((target - now.getTime()) / 60000);
+  }
+  const targetMin = hh * 60 + mm;
+  const nowMin = now.getUTCHours() * 60 + now.getUTCMinutes();
+  let diff = targetMin - nowMin;
+  if (diff > 12 * 60) diff -= 24 * 60;
+  else if (diff < -12 * 60) diff += 24 * 60;
+  return diff;
+}
 
+export function getTurnaroundAlerts(
+  flights: FlightWithServices[],
+  dayUtc: Date | null = null,
+): FlightAlert[] {
+  const alerts: FlightAlert[] = [];
   const now = new Date();
-  // Per CLAUDE.md: flight ETA/ETD are in Zulu (UTC); compare against UTC now, not local.
-  const currentMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
 
   for (const flight of flights) {
     const state = normalizeFlightState(flight.state);
 
-    // Llegada: vuelo EXPECTED con ETA <= 30 min
+    // Llegada: vuelo EXPECTED con ETA en ventana [-30, +30] min.
+    // Sin cota inferior, vuelos de mañana aparecían como "hace 1000+ min".
     if (state === "EXPECTED" && flight.eta) {
-      const [h, m] = flight.eta.split(":").map(Number);
-      if (!isNaN(h) && !isNaN(m)) {
-        const minutesUntilArrival = h * 60 + m - currentMinutes;
-        if (minutesUntilArrival <= 30) {
-          alerts.push({
-            flightId: flight.id,
-            callsign: flight.callsign,
-            kind: "ARRIVAL",
-            minutesLeft: minutesUntilArrival,
-            pendingServices: 0,
-          });
-        }
+      const minutesUntilArrival = minutesUntil(flight.eta, dayUtc, now);
+      if (minutesUntilArrival !== null && minutesUntilArrival >= -30 && minutesUntilArrival <= 30) {
+        alerts.push({
+          flightId: flight.id,
+          callsign: flight.callsign,
+          kind: "ARRIVAL",
+          minutesLeft: minutesUntilArrival,
+          pendingServices: 0,
+        });
       }
       continue;
     }
@@ -53,10 +82,8 @@ export function getTurnaroundAlerts(flights: FlightWithServices[]): FlightAlert[
       (state === "ON_BLOCKS" || state === "PARKED" || state === "TURNAROUND" || state === "BOARDING") &&
       flight.etd
     ) {
-      const [h, m] = flight.etd.split(":").map(Number);
-      if (isNaN(h) || isNaN(m)) continue;
-
-      const minutesUntilDeparture = h * 60 + m - currentMinutes;
+      const minutesUntilDeparture = minutesUntil(flight.etd, dayUtc, now);
+      if (minutesUntilDeparture === null) continue;
       if (minutesUntilDeparture > -30 && minutesUntilDeparture <= 90) {
         // Filtrar servicios DEPARTURE / BOTH pendientes
         const pendingServices = flight.services.filter(
@@ -80,8 +107,8 @@ export function getTurnaroundAlerts(flights: FlightWithServices[]): FlightAlert[
   return alerts.sort((a, b) => a.minutesLeft - b.minutesLeft);
 }
 
-export function TurnaroundAlerts({ flights }: TurnaroundAlertsProps) {
-  const alerts = getTurnaroundAlerts(flights);
+export function TurnaroundAlerts({ flights, dayUtc }: TurnaroundAlertsProps) {
+  const alerts = getTurnaroundAlerts(flights, dayUtc ?? null);
 
   if (alerts.length === 0) return null;
 
