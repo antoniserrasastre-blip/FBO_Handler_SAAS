@@ -8,10 +8,9 @@ services:
     volumes:
       # SQLite persistente fuera del contenedor
       - fbo-data:/app/data
+    env_file:
+      - .env
     environment:
-      - DATABASE_URL=file:/app/data/fbo.db
-      - NEXTAUTH_URL=https://fbo.randomite.space
-      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
       - NODE_ENV=production
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000"]
