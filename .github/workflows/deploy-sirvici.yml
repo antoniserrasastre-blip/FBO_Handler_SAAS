@@ -5,8 +5,30 @@ on:
     branches: [main]
 
 jobs:
+  verify:
+    name: Lint, typecheck, test, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npx tsc --noEmit
+      - run: npm run lint
+      - run: npm test
+      - name: pdf-microservice tests
+        run: |
+          cd pdf-microservice
+          npm ci
+          npm test
+
   deploy:
     name: Build & Deploy
+    needs: verify
     runs-on: [self-hosted, sirvici]
     timeout-minutes: 15
 
