@@ -24,7 +24,8 @@ export function getTurnaroundAlerts(flights: FlightWithServices[]): FlightAlert[
   const alerts: FlightAlert[] = [];
 
   const now = new Date();
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  // Per CLAUDE.md: flight ETA/ETD are in Zulu (UTC); compare against UTC now, not local.
+  const currentMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
 
   for (const flight of flights) {
     const state = normalizeFlightState(flight.state);

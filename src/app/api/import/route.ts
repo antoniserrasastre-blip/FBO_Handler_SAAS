@@ -5,6 +5,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { parseCybermaxPdf, parseDate } from "@/lib/pdfParser";
 import { eventBus } from "@/lib/events";
+import { validateUpload } from "@/lib/uploadValidation";
 
 // POST /api/import — parse one or more Cybermax PDFs
 // Returns combined parsed flights for preview (doesn't save yet)
@@ -16,6 +17,11 @@ export async function POST(req: NextRequest) {
   const files = formData.getAll("pdf") as File[];
   if (!files.length) {
     return NextResponse.json({ error: "No se envio ningun archivo PDF" }, { status: 400 });
+  }
+
+  for (const file of files) {
+    const v = validateUpload(file, "pdf");
+    if (!v.ok) return NextResponse.json({ error: v.message }, { status: v.status });
   }
 
   const allFlights: Awaited<ReturnType<typeof parseCybermaxPdf>>["flights"] = [];

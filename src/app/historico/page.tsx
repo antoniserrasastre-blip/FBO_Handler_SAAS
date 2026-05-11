@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { palmaDayUtc } from "@/lib/time";
 
 interface DaySheetSummary {
   id: string;
@@ -27,10 +28,7 @@ export default function HistoricoPage() {
   }, []);
 
   function navigateToDay(dateStr: string) {
-    // Navigate to main page and set the date via URL search param
-    const d = new Date(dateStr);
-    d.setHours(0, 0, 0, 0);
-    // We store the desired date in sessionStorage so the main page can pick it up
+    const d = palmaDayUtc(new Date(dateStr));
     sessionStorage.setItem("viewDate", d.toISOString());
     router.push("/");
   }
@@ -40,8 +38,7 @@ export default function HistoricoPage() {
     window.open(`/api/export?date=${d}&type=${type}`, "_blank");
   }
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const today = palmaDayUtc();
 
   if (loading) {
     return (

@@ -1,21 +1,36 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { eventBus } from "@/lib/events";
+import { requireWriter } from "@/lib/roles";
 import { suggestNextState } from "@/lib/flightUrgency";
 import { FLIGHT_STATE_CONFIG, type FlightState } from "@/types";
+
+const ALLOWED_SERVICE_PATCH_FIELDS = new Set([
+  "type", "customName", "reference",
+  "phase", "scheduledAt",
+  "origin", "target",
+  "state", "arrivedAt", "deliveredAt",
+]);
+
+function pickAllowed(body: Record<string, unknown>, allowed: Set<string>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(body)) {
+    if (allowed.has(key)) out[key] = body[key];
+  }
+  return out;
+}
 
 // PATCH /api/services/[id] — update a service (toggle delivered, etc.)
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { session, error } = await requireWriter();
+  if (error) return error;
 
   const { id } = await params;
-  const body = await req.json();
+  const rawBody = await req.json();
+  const body = pickAllowed(rawBody, ALLOWED_SERVICE_PATCH_FIELDS);
 
   const existing = await prisma.service.findUnique({ where: { id } });
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -44,9 +59,10 @@ export async function PATCH(
     data,
   });
 
-  if (body.state && body.state !== existing.state) {
+  const newState = typeof body.state === "string" ? body.state : null;
+  if (newState && newState !== existing.state) {
     const stateLabel: Record<string, string> = { PENDING: "pendiente", ARRIVED: "llegado", DELIVERED: "entregado" };
-    const actionDesc = `Servicio ${existing.type}: ${stateLabel[body.state] || body.state}`;
+    const actionDesc = `Servicio ${existing.type}: ${stateLabel[newState] || newState}`;
     await prisma.eventLog.create({
       data: {
         flightId: existing.flightId,
@@ -100,8 +116,8 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { session, error } = await requireWriter();
+  if (error) return error;
 
   const { id } = await params;
   const service = await prisma.service.findUnique({ where: { id } });

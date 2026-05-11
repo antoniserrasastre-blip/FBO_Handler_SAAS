@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { eventBus } from "@/lib/events";
+import { requireWriter } from "@/lib/roles";
 import { SERVICE_TYPE_DEFAULT_PHASE, type ServiceType, SERVICE_PHASES } from "@/types";
 
 // POST /api/flights/[id]/services — add a service to a flight
@@ -10,8 +9,8 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { session, error } = await requireWriter();
+  if (error) return error;
 
   const { id } = await params;
   const body = await req.json();

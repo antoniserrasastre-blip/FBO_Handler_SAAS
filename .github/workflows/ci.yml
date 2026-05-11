@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches-ignore: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify:
+    name: Lint, typecheck, test, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install deps (root)
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Tests (main app)
+        run: npm test
+
+      - name: Install + test pdf-microservice
+        run: |
+          cd pdf-microservice
+          npm ci
+          npm test
+
+      - name: Build (without vercel-setup)
+        env:
+          SKIP_SETUP: "1"
+          DATABASE_URL: "file:./dev.db"
+        run: npx next build

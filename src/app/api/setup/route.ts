@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@libsql/client";
 import bcrypt from "bcryptjs";
 
@@ -20,7 +20,19 @@ function cuid() {
   return "c" + Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const expectedSecret = process.env.SETUP_SECRET;
+  if (!expectedSecret) {
+    return NextResponse.json(
+      { error: "SETUP_SECRET not configured on the server; refusing to run /api/setup" },
+      { status: 500 },
+    );
+  }
+  const provided = req.headers.get("x-setup-secret");
+  if (provided !== expectedSecret) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const url = process.env.TURSO_DATABASE_URL;
   const authToken = process.env.TURSO_AUTH_TOKEN;
 
@@ -58,13 +70,24 @@ export async function GET() {
       }
     }
 
-    // 2. Seed users
+    // 2. Seed users — passwords come from env, not source.
+    // Skip a user if its password env var is not set.
     const now = new Date().toISOString();
-    const users = [
-      { email: "admin@mallorcair.com", name: "Antoni", password: "admin123", role: "ADMIN" },
-      { email: "handler@mallorcair.com", name: "Maria", password: "handler123", role: "HANDLER" },
-      { email: "viewer@mallorcair.com", name: "Director", password: "viewer123", role: "VIEWER" },
+    const seedSpecs: Array<{ email: string; name: string; envVar: string; role: string }> = [
+      { email: "admin@mallorcair.com", name: "Antoni", envVar: "SEED_ADMIN_PASSWORD", role: "ADMIN" },
+      { email: "handler@mallorcair.com", name: "Maria", envVar: "SEED_HANDLER_PASSWORD", role: "HANDLER" },
+      { email: "viewer@mallorcair.com", name: "Director", envVar: "SEED_VIEWER_PASSWORD", role: "VIEWER" },
     ];
+    const users = seedSpecs
+      .map((s) => {
+        const password = process.env[s.envVar];
+        if (!password) {
+          log.push(`Skipping seed for ${s.email}: ${s.envVar} not set`);
+          return null;
+        }
+        return { email: s.email, name: s.name, password, role: s.role };
+      })
+      .filter((u): u is { email: string; name: string; password: string; role: string } => u !== null);
 
     for (const u of users) {
       const existing = await client.execute({ sql: `SELECT id FROM "User" WHERE email = ?`, args: [u.email] });

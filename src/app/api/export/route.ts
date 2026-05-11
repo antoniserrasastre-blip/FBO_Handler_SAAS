@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { palmaDayUtc } from "@/lib/time";
 import { SERVICE_LABELS, ServiceType } from "@/types";
 
 // GET /api/export?date=YYYY-MM-DD&format=csv
@@ -12,8 +13,7 @@ export async function GET(req: NextRequest) {
   const dateParam = req.nextUrl.searchParams.get("date");
   if (!dateParam) return NextResponse.json({ error: "Missing date" }, { status: 400 });
 
-  const date = new Date(dateParam);
-  date.setHours(0, 0, 0, 0);
+  const date = palmaDayUtc(dateParam);
 
   const daySheet = await prisma.daySheet.findUnique({ where: { date } });
   if (!daySheet) return NextResponse.json({ error: "No data for this date" }, { status: 404 });
