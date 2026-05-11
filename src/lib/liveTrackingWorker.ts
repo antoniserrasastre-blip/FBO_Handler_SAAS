@@ -6,7 +6,7 @@
 
 import { pollOnce } from "./liveTracking";
 
-const POLL_INTERVAL_MS = 30_000;
+const POLL_INTERVAL_MS = 35_000;
 
 type WorkerState = {
   timer: NodeJS.Timeout | null;
