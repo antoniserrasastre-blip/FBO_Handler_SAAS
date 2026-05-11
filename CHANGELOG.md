@@ -9,6 +9,46 @@
 
 ---
 
+## v0.3 (POC) — Seguimiento en vivo de vuelos (2026-05-11)
+
+**Qué ve distinto el handler**: en cada tarjeta de vuelo aparece
+una etiqueta nueva en vivo: **Aproximación** (azul, parpadea),
+**Aterrizado** (ámbar, parpadea), **En parking** (verde) o
+**Despegado** (gris). La etiqueta sale sola cuando el avión real
+entra en el radar ADS-B de Palma, sin que nadie haga nada.
+
+**Qué se puede hacer que antes no**:
+
+- Saber sin llamar a torre si el vuelo X ya está acercándose,
+  ya ha aterrizado o ya está en parking. La info la da el
+  propio avión (ADS-B), no AENA ni Cybermax.
+- Cuando un vuelo pasa a "En parking" el equipo lo ve en la
+  pantalla en directo y puede empezar la operación.
+
+**Cómo funciona por dentro**: un proceso en el servidor pregunta
+cada 30 segundos a OpenSky Network (red abierta de receptores
+ADS-B) qué aviones hay en un radio de ~80 NM alrededor de LEPA.
+Los cruza con los vuelos del día por **callsign** y actualiza la
+fase. Coste: 0€. Requiere que el avión emita ADS-B (todos los
+comerciales lo hacen). Si OpenSky no tiene cobertura del avión,
+la etiqueta no aparece (no rompe nada).
+
+**Limitaciones conocidas (POC)**:
+
+- El "parking" se detecta como "avión en suelo y parado", no
+  por polígono de stand. Mejorable cuando tengamos las
+  coordenadas oficiales de cada stand de Palma.
+- Vuelos privados con transpondedor apagado o sin ADS-B no
+  aparecen.
+- Si OpenSky cae, no hay datos hasta que vuelva (sin coste de
+  API alternativa).
+
+**Vía oficial paralela**: en paralelo se solicitará a AENA
+acceso A-CDM/AODB como handler licenciado. Cuando llegue, se
+sustituye la fuente sin tocar el frontend.
+
+---
+
 ## v0.2 — Panel de operaciones (2026-04-20)
 
 **Qué ve distinto el handler**: abre el panel, ve la lista de

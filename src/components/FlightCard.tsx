@@ -46,6 +46,7 @@ import {
 } from "@/types";
 import { ServiceIcon, ArrivedIcon, DeliveredIcon, ChevronUp, ChevronDown, CloseIcon, LostItemIcon, PdfIcon, ExcelIcon } from "./Icons";
 import { ArrowRight, Trash2, Users, StickyNote } from "lucide-react";
+import { LiveStatusBadge } from "./LiveStatusBadge";
 import { ServiceBadges } from "./ServiceCheckbox";
 import { PassengerCrewModal } from "./PassengerCrewModal";
 import { getOperatorName, findOperator } from "@/lib/operators";
@@ -187,6 +188,18 @@ export const FlightCard = memo(function FlightCard({
                 {isOvernight && (
                   <span className="rounded bg-purple-100 px-1 py-0.5 text-[10px] font-medium text-purple-600 sm:px-1.5 sm:text-xs">
                     PERNOCTA
+                  </span>
+                )}
+                <LiveStatusBadge
+                  livePhase={flight.livePhase}
+                  liveLastSeenAt={flight.liveLastSeenAt}
+                  liveAltitudeM={flight.liveAltitudeM}
+                  liveVelocityMs={flight.liveVelocityMs}
+                  liveOnGround={flight.liveOnGround}
+                />
+                {flight.parking && flight.livePhase === "ON_BLOCKS" && flight.liveLastSeenAt && (
+                  <span className="inline-flex items-center gap-0.5 rounded bg-emerald-50 px-1 py-0.5 text-[10px] font-medium text-emerald-700 ring-1 ring-emerald-200 sm:text-xs" title="Avión detectado en parking">
+                    OK
                   </span>
                 )}
                 {flight.notes && (
