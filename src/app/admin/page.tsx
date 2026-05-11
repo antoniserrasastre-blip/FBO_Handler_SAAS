@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { ROLE_LABELS, Role, ROLES } from "@/types";
+import { palmaDayUtc } from "@/lib/time";
 
 interface User {
   id: string;
@@ -264,14 +265,11 @@ export default function AdminPage() {
           <button
             onClick={async () => {
               if (!window.confirm("Eliminar TODOS los vuelos y datos del dia actual?")) return;
-              const today = new Date();
-              today.setHours(0, 0, 0, 0);
+              const today = palmaDayUtc();
               const res = await fetch("/api/daysheets");
               const sheets = await res.json();
               const todaySheet = sheets.find((s: { date: string }) => {
-                const d = new Date(s.date);
-                d.setHours(0, 0, 0, 0);
-                return d.getTime() === today.getTime();
+                return palmaDayUtc(new Date(s.date)).getTime() === today.getTime();
               });
               if (todaySheet) {
                 await fetch(`/api/daysheets?id=${todaySheet.id}`, { method: "DELETE" });

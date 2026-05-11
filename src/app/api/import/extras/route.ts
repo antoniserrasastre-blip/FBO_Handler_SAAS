@@ -3,6 +3,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { parseExtrasExcel } from "@/lib/excelParser";
+import { palmaDayUtc } from "@/lib/time";
+import { validateUpload } from "@/lib/uploadValidation";
 import { eventBus } from "@/lib/events";
 import { SERVICE_TYPE_DEFAULT_PHASE, type ServiceType } from "@/types";
 
@@ -15,6 +17,11 @@ export async function POST(req: NextRequest) {
   const files = formData.getAll("xlsx") as File[];
   if (!files.length) {
     return NextResponse.json({ error: "No se envio archivo Excel" }, { status: 400 });
+  }
+
+  for (const file of files) {
+    const v = validateUpload(file, "xlsx");
+    if (!v.ok) return NextResponse.json({ error: v.message }, { status: v.status });
   }
 
   const allExtras: ReturnType<typeof parseExtrasExcel>["extras"] = [];
@@ -56,12 +63,7 @@ export async function PUT(req: NextRequest) {
   }
 
   function toDateObj(dateStr: string): Date {
-    const parts = dateStr.split("-");
-    const d = parts.length === 3
-      ? new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]))
-      : new Date(dateStr);
-    d.setHours(0, 0, 0, 0);
-    return d;
+    return palmaDayUtc(dateStr);
   }
 
   // Group extras by date
