@@ -64,6 +64,18 @@ describe("isArrivalToday / isDepartureToday", () => {
 });
 
 describe("deriveATA", () => {
+  it("prefers explicit ata field over event log / live", () => {
+    const f = mk({
+      ata: "09:42",
+      eventLogs: [
+        { id: "e1", flightId: "f1", userId: null, action: "Estado → ON_BLOCKS", details: null, timestamp: new Date(Date.UTC(2026, 4, 12, 10, 0)) } as never,
+      ],
+      livePhase: "LANDED",
+      liveLastSeenAt: new Date(Date.UTC(2026, 4, 12, 9, 30)),
+    });
+    expect(deriveATA(f)).toBe("09:42");
+  });
+
   it("uses eventLog timestamp when state went to ON_BLOCKS", () => {
     const f = mk({
       state: "ON_BLOCKS",
@@ -89,6 +101,16 @@ describe("deriveATA", () => {
 });
 
 describe("deriveATD", () => {
+  it("prefers explicit atd field over event log / live", () => {
+    const f = mk({
+      atd: "12:15",
+      eventLogs: [
+        { id: "e1", flightId: "f1", userId: null, action: "Estado → OFF_BLOCKS", details: null, timestamp: new Date(Date.UTC(2026, 4, 12, 13, 0)) } as never,
+      ],
+    });
+    expect(deriveATD(f)).toBe("12:15");
+  });
+
   it("uses eventLog timestamp when state went to OFF_BLOCKS", () => {
     const f = mk({
       state: "OFF_BLOCKS",

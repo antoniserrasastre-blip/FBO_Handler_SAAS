@@ -42,6 +42,8 @@ model Flight {
   departureDate  String?        // DD/MM
   parking        String?
   tobt           String?
+  ata            String?        // HH:MM Zulu — Actual Time of Arrival (in-blocks). Override manual del handler; si null, se infiere de eventLog/live.
+  atd            String?        // HH:MM Zulu — Actual Time of Departure (off-blocks).
   state          String         @default("EXPECTED") // EXPECTED | ON_BLOCKS | PARKED | TURNAROUND | BOARDING | OFF_BLOCKS
   isOvernight    Boolean        @default(false)
 

@@ -11,6 +11,8 @@ export type FlightLite = Pick<
   | "state"
   | "eta"
   | "etd"
+  | "ata"
+  | "atd"
   | "arrivalDate"
   | "departureDate"
   | "fuelState"
@@ -58,11 +60,13 @@ export function isDepartureToday(f: Pick<Flight, "etd" | "departureDate">, date:
 }
 
 /**
- * Devuelve la hora de aterrizaje real (HH:MM Zulu) si la podemos derivar:
- *  1. eventLog con "Estado → ON_BLOCKS" → timestamp de la transición
- *  2. fallback: si livePhase es LANDED/ON_BLOCKS y liveLastSeenAt existe
+ * Devuelve la hora de aterrizaje real (HH:MM Zulu). Orden de prioridad:
+ *  1. campo explícito flight.ata (override del handler)
+ *  2. eventLog con "Estado → ON_BLOCKS" → timestamp de la transición
+ *  3. fallback: si livePhase es LANDED/ON_BLOCKS y liveLastSeenAt existe
  */
 export function deriveATA(f: FlightLite): string | null {
+  if (f.ata) return f.ata;
   if (f.eventLogs?.length) {
     for (const e of f.eventLogs) {
       if (
@@ -80,6 +84,7 @@ export function deriveATA(f: FlightLite): string | null {
 }
 
 export function deriveATD(f: FlightLite): string | null {
+  if (f.atd) return f.atd;
   if (f.eventLogs?.length) {
     for (const e of f.eventLogs) {
       if (

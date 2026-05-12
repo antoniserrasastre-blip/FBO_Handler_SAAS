@@ -299,7 +299,13 @@ export default function DiaPage() {
                         <td className="border border-gray-200 p-1 text-center font-mono font-medium">
                           <QuickTimeEdit value={f.eta} onSave={(v) => patchFlight(f.id, { eta: v })} />
                         </td>
-                        <td className={`border border-gray-200 p-1 text-center font-mono ${ata ? "text-emerald-700 font-semibold" : "text-gray-300 italic text-[11px]"}`}>{ata ?? "--:--"}</td>
+                        <td className={`border border-gray-200 p-1 text-center font-mono ${ata ? "text-emerald-700 font-semibold" : "text-gray-300"}`}>
+                          <QuickTimeEdit
+                            value={ata}
+                            onSave={(v) => patchFlight(f.id, { ata: v || null })}
+                            placeholder="--:--"
+                          />
+                        </td>
                       </>
                     ) : (
                       <td colSpan={4} className="border border-gray-200 bg-gray-50 p-1 text-center text-[11px] text-gray-300 italic">sin llegada hoy</td>
@@ -352,7 +358,13 @@ export default function DiaPage() {
                         <td className="border border-gray-200 p-1 text-center font-mono font-medium">
                           <QuickTimeEdit value={f.etd} onSave={(v) => patchFlight(f.id, { etd: v })} />
                         </td>
-                        <td className={`border border-gray-200 p-1 text-center font-mono ${atd ? "text-emerald-700 font-semibold" : "text-gray-300 italic text-[11px]"}`}>{atd ?? "--:--"}</td>
+                        <td className={`border border-gray-200 p-1 text-center font-mono ${atd ? "text-emerald-700 font-semibold" : "text-gray-300"}`}>
+                          <QuickTimeEdit
+                            value={atd}
+                            onSave={(v) => patchFlight(f.id, { atd: v || null })}
+                            placeholder="--:--"
+                          />
+                        </td>
                       </>
                     ) : (
                       <td colSpan={4} className="border border-gray-200 bg-gray-50 p-1 text-center text-[11px] text-gray-300 italic">sin salida hoy</td>

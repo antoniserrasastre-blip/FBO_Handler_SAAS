@@ -8,8 +8,8 @@ import { FLIGHT_STATE_CONFIG, type FlightState } from "@/types";
 
 const ALLOWED_FLIGHT_PATCH_FIELDS = new Set([
   "callsign", "registration", "aircraftType",
-  "origin", "eta", "arrivalDate",
-  "destination", "etd", "departureDate",
+  "origin", "eta", "arrivalDate", "ata",
+  "destination", "etd", "departureDate", "atd",
   "parking", "tobt",
   "state", "isOvernight",
   "crewArrival", "crewArrivalReal", "paxArrival", "paxArrivalReal",
