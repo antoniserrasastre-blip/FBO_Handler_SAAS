@@ -10,15 +10,13 @@ import { ChevronLeft, ChevronRight, Maximize2, PlaneLanding, ParkingSquare, Plan
 import { QuickTimeEdit } from "@/components/QuickTimeEdit";
 import { InlineTextEdit } from "@/components/InlineTextEdit";
 import {
-  isArrivalToday,
-  isDepartureToday,
   deriveATA,
   deriveATD,
-  nextEventMinutes,
-  rowUrgency,
   computeHeaderStats,
   STATE_DOT_CLASS,
-  URGENCY_ROW_CLASS,
+  arrivalSegmentState,
+  departureSegmentState,
+  SEGMENT_CELL_CLASS,
   type FlightLite,
 } from "./diaHelpers";
 import { FlightDetailPanel } from "./FlightDetailPanel";
@@ -110,23 +108,10 @@ export default function DiaPage() {
     }
   }, [fetchFlights]);
 
-  const sortedFlights = useMemo(() => {
-    const lite = flights as unknown as FlightLite[];
-    return [...flights]
-      .map((f, i) => ({
-        f,
-        next: nextEventMinutes(lite[i], date, now),
-        urgency: rowUrgency(lite[i], date, now),
-      }))
-      .sort((a, b) => {
-        if (a.urgency === "departed" && b.urgency !== "departed") return 1;
-        if (b.urgency === "departed" && a.urgency !== "departed") return -1;
-        if (a.next === null && b.next !== null) return 1;
-        if (b.next === null && a.next !== null) return -1;
-        if (a.next === null && b.next === null) return 0;
-        return (a.next ?? 0) - (b.next ?? 0);
-      });
-  }, [flights, date, now]);
+  // Mantenemos el orden que devuelve el API (cronologico por primer evento del
+  // dia, igual que la vista de tarjetas). El tablon es una "hoja del dia" —
+  // su orden es estable; el progreso se ve por color de celdas, no moviendo
+  // filas. Esto evita la sensacion de que un vuelo "desaparece" al despachar.
 
   const stats = useMemo(
     () => computeHeaderStats(flights as unknown as FlightLite[], date, now),
@@ -253,10 +238,12 @@ export default function DiaPage() {
               </tr>
             </thead>
             <tbody>
-              {sortedFlights.map(({ f, urgency }) => {
+              {flights.map((f) => {
                 const lite = f as unknown as FlightLite;
-                const isArr = isArrivalToday(f, date);
-                const isDep = isDepartureToday(f, date);
+                const arrSeg = arrivalSegmentState(lite, date, now);
+                const depSeg = departureSegmentState(lite, date, now);
+                const arrCls = arrSeg ? SEGMENT_CELL_CLASS[arrSeg] : "";
+                const depCls = depSeg ? SEGMENT_CELL_CLASS[depSeg] : "";
                 const ata = deriveATA(lite);
                 const atd = deriveATD(lite);
                 const live = f.livePhase ? LIVE_PHASE_UI[f.livePhase] : null;
@@ -264,7 +251,6 @@ export default function DiaPage() {
                   f.liveLastSeenAt && Date.now() - new Date(f.liveLastSeenAt).getTime() > STALE_LIVE_MS;
                 const showLive = live && !liveStale;
                 const dotClass = STATE_DOT_CLASS[f.state] ?? "bg-gray-300";
-                const rowClass = URGENCY_ROW_CLASS[urgency];
                 const isSelected = selectedFlightId === f.id;
                 const paxArr = f.paxArrivalReal ?? f.paxArrival;
                 const paxDep = f.paxDepartureReal ?? f.paxDeparture;
@@ -275,7 +261,7 @@ export default function DiaPage() {
                   <tr
                     key={f.id}
                     onClick={() => setSelectedFlightId(isSelected ? null : f.id)}
-                    className={`group cursor-pointer border-b border-gray-200 transition-colors hover:bg-blue-50/40 ${rowClass} ${isSelected ? "outline outline-2 outline-blue-500 outline-offset-[-2px]" : ""}`}
+                    className={`group cursor-pointer border-b border-gray-200 transition-colors hover:bg-blue-50/30 ${isSelected ? "outline outline-2 outline-blue-500 outline-offset-[-2px]" : ""}`}
                   >
                     <td className="border border-gray-200 p-1 text-center">
                       <div className={`mx-auto h-3 w-3 rounded-full shadow-inner ${dotClass}`} title={f.state} />
@@ -291,15 +277,15 @@ export default function DiaPage() {
                       )}
                     </td>
 
-                    {/* LLEGADA */}
-                    {isArr ? (
+                    {/* LLEGADA — siempre se renderiza si hay ETA. El color tiñe past/future/done/overdue. */}
+                    {arrSeg ? (
                       <>
-                        <td className="border border-gray-200 p-1 px-2 font-bold text-blue-700">{f.callsign}</td>
-                        <td className="border border-gray-200 p-1 text-center font-mono">{f.origin || "—"}</td>
-                        <td className="border border-gray-200 p-1 text-center font-mono font-medium">
+                        <td className={`border border-gray-200 p-1 px-2 font-bold ${arrCls || "text-blue-700"}`}>{f.callsign}</td>
+                        <td className={`border border-gray-200 p-1 text-center font-mono ${arrCls}`}>{f.origin || "—"}</td>
+                        <td className={`border border-gray-200 p-1 text-center font-mono font-medium ${arrCls}`}>
                           <QuickTimeEdit value={f.eta} onSave={(v) => patchFlight(f.id, { eta: v })} />
                         </td>
-                        <td className={`border border-gray-200 p-1 text-center font-mono ${ata ? "text-emerald-700 font-semibold" : "text-gray-300"}`}>
+                        <td className={`border border-gray-200 p-1 text-center font-mono ${arrCls || (ata ? "text-emerald-700 font-semibold" : "text-gray-300")}`}>
                           <QuickTimeEdit
                             value={ata}
                             onSave={(v) => patchFlight(f.id, { ata: v || null })}
@@ -308,7 +294,7 @@ export default function DiaPage() {
                         </td>
                       </>
                     ) : (
-                      <td colSpan={4} className="border border-gray-200 bg-gray-50 p-1 text-center text-[11px] text-gray-300 italic">sin llegada hoy</td>
+                      <td colSpan={4} className="border border-gray-200 bg-gray-50 p-1 text-center text-[11px] text-gray-300 italic">sin llegada</td>
                     )}
 
                     {/* AVION */}
@@ -350,15 +336,15 @@ export default function DiaPage() {
                       }}
                     />
 
-                    {/* SALIDA */}
-                    {isDep ? (
+                    {/* SALIDA — mismo tratamiento de tinte por estado */}
+                    {depSeg ? (
                       <>
-                        <td className="border border-gray-200 p-1 px-2 font-bold text-orange-700">{f.callsign}</td>
-                        <td className="border border-gray-200 p-1 text-center font-mono">{f.destination || "—"}</td>
-                        <td className="border border-gray-200 p-1 text-center font-mono font-medium">
+                        <td className={`border border-gray-200 p-1 px-2 font-bold ${depCls || "text-orange-700"}`}>{f.callsign}</td>
+                        <td className={`border border-gray-200 p-1 text-center font-mono ${depCls}`}>{f.destination || "—"}</td>
+                        <td className={`border border-gray-200 p-1 text-center font-mono font-medium ${depCls}`}>
                           <QuickTimeEdit value={f.etd} onSave={(v) => patchFlight(f.id, { etd: v })} />
                         </td>
-                        <td className={`border border-gray-200 p-1 text-center font-mono ${atd ? "text-emerald-700 font-semibold" : "text-gray-300"}`}>
+                        <td className={`border border-gray-200 p-1 text-center font-mono ${depCls || (atd ? "text-emerald-700 font-semibold" : "text-gray-300")}`}>
                           <QuickTimeEdit
                             value={atd}
                             onSave={(v) => patchFlight(f.id, { atd: v || null })}
@@ -367,7 +353,7 @@ export default function DiaPage() {
                         </td>
                       </>
                     ) : (
-                      <td colSpan={4} className="border border-gray-200 bg-gray-50 p-1 text-center text-[11px] text-gray-300 italic">sin salida hoy</td>
+                      <td colSpan={4} className="border border-gray-200 bg-gray-50 p-1 text-center text-[11px] text-gray-300 italic">sin salida</td>
                     )}
 
                     {/* PAX / CREW */}
@@ -416,14 +402,12 @@ export default function DiaPage() {
       {/* FOOTER */}
       <footer className="bg-white border-t border-gray-300 px-4 py-1 text-[11px] text-gray-500 flex flex-wrap justify-between gap-2">
         <div className="flex flex-wrap gap-3">
-          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" /> En llegada</span>
-          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-blue-700" /> Parking</span>
-          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-purple-500" /> Turnaround</span>
-          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-orange-500 animate-pulse" /> Boarding</span>
-          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-green-600" /> Despegado</span>
-          <span className="ml-2 flex items-center gap-1"><span className="h-2 w-2 rounded bg-red-200" /> alerta</span>
+          <span className="flex items-center gap-1"><span className="h-2 w-3 rounded bg-emerald-100 border border-emerald-300" /> hecho ✓</span>
+          <span className="flex items-center gap-1"><span className="h-2 w-3 rounded bg-red-100 border border-red-300" /> retrasado</span>
+          <span className="flex items-center gap-1"><span className="h-2 w-3 rounded bg-slate-200 border border-slate-300" /> dia anterior</span>
+          <span className="flex items-center gap-1"><span className="h-2 w-3 rounded bg-indigo-100 border border-indigo-300" /> dia siguiente</span>
+          <span className="ml-3 text-gray-400">El orden no cambia durante el dia — el color marca lo hecho como un highlighter sobre la hoja impresa</span>
         </div>
-        <div>Click en F/T cicla estado · click ETA/ETD/parking edita · click resto de fila abre detalle · Esc cierra</div>
       </footer>
     </div>
   );

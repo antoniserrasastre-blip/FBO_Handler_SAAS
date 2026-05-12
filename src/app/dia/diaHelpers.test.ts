@@ -8,6 +8,8 @@ import {
   nextEventMinutes,
   rowUrgency,
   computeHeaderStats,
+  arrivalSegmentState,
+  departureSegmentState,
   type FlightLite,
 } from "./diaHelpers";
 
@@ -18,6 +20,8 @@ function mk(partial: Partial<FlightLite> = {}): FlightLite {
     state: "EXPECTED",
     eta: null,
     etd: null,
+    ata: null,
+    atd: null,
     arrivalDate: null,
     departureDate: null,
     fuelState: "NOT_REQUESTED",
@@ -190,6 +194,59 @@ describe("rowUrgency", () => {
   it("normal when ETD >90min away", () => {
     const f = mk({ state: "PARKED", etd: "13:00" });
     expect(rowUrgency(f, day, now)).toBe("normal");
+  });
+});
+
+describe("arrivalSegmentState (highlighter por celda)", () => {
+  it("returns null cuando no hay ETA", () => {
+    expect(arrivalSegmentState(mk(), day, now)).toBeNull();
+  });
+
+  it("today-pending cuando es de hoy y aun no ha llegado", () => {
+    const f = mk({ eta: "11:00", arrivalDate: "12/05/26" });
+    expect(arrivalSegmentState(f, day, now)).toBe("today-pending");
+  });
+
+  it("today-overdue cuando ETA paso hace mas de 5 min y no hay ATA", () => {
+    const f = mk({ eta: "09:00", arrivalDate: "12/05/26" });
+    expect(arrivalSegmentState(f, day, now)).toBe("today-overdue");
+  });
+
+  it("today-done cuando hay ATA registrada", () => {
+    const f = mk({ eta: "09:00", arrivalDate: "12/05/26", ata: "09:05" });
+    expect(arrivalSegmentState(f, day, now)).toBe("today-done");
+  });
+
+  it("past cuando arrivalDate es anterior al dia visualizado", () => {
+    const f = mk({ eta: "16:05", arrivalDate: "11/05/26" });
+    expect(arrivalSegmentState(f, day, now)).toBe("past");
+  });
+
+  it("future cuando arrivalDate es posterior", () => {
+    const f = mk({ eta: "06:00", arrivalDate: "13/05/26" });
+    expect(arrivalSegmentState(f, day, now)).toBe("future");
+  });
+
+  it("acepta arrivalDate sin anio (DD/MM)", () => {
+    const f = mk({ eta: "11:00", arrivalDate: "12/05" });
+    expect(arrivalSegmentState(f, day, now)).toBe("today-pending");
+  });
+});
+
+describe("departureSegmentState", () => {
+  it("today-done cuando hay ATD", () => {
+    const f = mk({ etd: "11:30", departureDate: "12/05/26", atd: "11:35" });
+    expect(departureSegmentState(f, day, now)).toBe("today-done");
+  });
+
+  it("today-overdue cuando ETD paso sin ATD", () => {
+    const f = mk({ etd: "08:00", departureDate: "12/05/26" });
+    expect(departureSegmentState(f, day, now)).toBe("today-overdue");
+  });
+
+  it("future cuando departureDate es manana", () => {
+    const f = mk({ etd: "08:00", departureDate: "13/05/26" });
+    expect(departureSegmentState(f, day, now)).toBe("future");
   });
 });
 

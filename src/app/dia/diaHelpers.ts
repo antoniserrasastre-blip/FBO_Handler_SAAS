@@ -59,6 +59,68 @@ export function isDepartureToday(f: Pick<Flight, "etd" | "departureDate">, date:
   return dateMatches(f.departureDate, date);
 }
 
+/** Compara DD/MM[/YY] contra el día de referencia → -1 (past), 0 (today), 1 (future). */
+function compareStoredDate(stored: string | null, day: Date): -1 | 0 | 1 | null {
+  if (!stored) return null;
+  const headStored = stored.slice(0, 5); // DD/MM
+  if (headStored === shortDate(day)) return 0;
+  // Componer ambos como YYYY-MM-DD para comparar
+  const [dd, mm] = headStored.split("/").map(Number);
+  if (!dd || !mm) return null;
+  const yy = stored.length >= 8 ? Number(stored.slice(6, 8)) : day.getUTCFullYear() % 100;
+  const storedDate = new Date(Date.UTC(2000 + yy, mm - 1, dd));
+  const refDate = new Date(Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate()));
+  if (storedDate < refDate) return -1;
+  if (storedDate > refDate) return 1;
+  return 0;
+}
+
+/**
+ * Estado visual de un segmento (LLEGADA o SALIDA) — para teñir las celdas
+ * como un highlighter sobre la hoja del día. Sin esconder nada.
+ */
+export type SegmentState = "past" | "future" | "today-pending" | "today-overdue" | "today-done";
+
+export function arrivalSegmentState(
+  f: FlightLite,
+  day: Date,
+  now: Date = new Date(),
+): SegmentState | null {
+  if (!f.eta) return null;
+  const cmp = compareStoredDate(f.arrivalDate, day);
+  if (cmp === -1) return "past";
+  if (cmp === 1) return "future";
+  // cmp === 0 (hoy) o null (sin arrivalDate, asumimos hoy)
+  if (f.ata) return "today-done";
+  const minutesToEta = calcMinutes(f.eta, day, now);
+  if (minutesToEta !== null && minutesToEta < -5) return "today-overdue";
+  return "today-pending";
+}
+
+export function departureSegmentState(
+  f: FlightLite,
+  day: Date,
+  now: Date = new Date(),
+): SegmentState | null {
+  if (!f.etd) return null;
+  const cmp = compareStoredDate(f.departureDate, day);
+  if (cmp === -1) return "past";
+  if (cmp === 1) return "future";
+  if (f.atd) return "today-done";
+  const minutesToEtd = calcMinutes(f.etd, day, now);
+  if (minutesToEtd !== null && minutesToEtd < -5) return "today-overdue";
+  return "today-pending";
+}
+
+/** Clases de fondo+texto para cada estado de segmento (highlighter style). */
+export const SEGMENT_CELL_CLASS: Record<SegmentState, string> = {
+  "past":          "bg-slate-100 text-slate-500",
+  "future":        "bg-indigo-50 text-indigo-700",
+  "today-pending": "",
+  "today-overdue": "bg-red-100 text-red-800",
+  "today-done":    "bg-emerald-50 text-emerald-800",
+};
+
 /**
  * Devuelve la hora de aterrizaje real (HH:MM Zulu). Orden de prioridad:
  *  1. campo explícito flight.ata (override del handler)
