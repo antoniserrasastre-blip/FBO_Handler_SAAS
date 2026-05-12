@@ -16,7 +16,7 @@ import { ShortcutsHelp } from "@/components/ShortcutsHelp";
 import { PendingServicesPanel } from "@/components/PendingServicesPanel";
 import { QuickAddFlight } from "@/components/QuickAddFlight";
 import { useOverdueAlert } from "@/hooks/useOverdueAlert";
-import { Volume2, VolumeX, FileCheck2, Printer } from "lucide-react";
+import { Volume2, VolumeX, FileCheck2, Printer, LayoutGrid } from "lucide-react";
 import { ShiftHandover } from "@/components/ShiftHandover";
 import { detectParkingConflicts } from "@/lib/parkingConflicts";
 
@@ -465,6 +465,13 @@ export default function HomePage() {
                 &#9888; {overdueCount} retrasado{overdueCount !== 1 ? "s" : ""}
               </span>
             )}
+            <button
+              onClick={() => router.push("/dia")}
+              className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 sm:px-3 sm:py-2 sm:text-sm"
+              title="Vista compacta de operaciones (tablon)"
+            >
+              <LayoutGrid size={14} /> Tablon
+            </button>
             {flights.length > 0 && (
               <button
                 onClick={() => window.print()}

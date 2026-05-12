@@ -4,10 +4,21 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Flight, Service, EventLog, LostItem } from "@prisma/client";
-import { getSpainToday, dateToSqlString } from "@/lib/time";
+import { palmaDayUtc, dateToSqlString } from "@/lib/time";
 import { useEventStream } from "@/hooks/useEventStream";
-import { ChevronLeft, ChevronRight, Search, Printer, Maximize2 } from "lucide-react";
-import { FLIGHT_STATES, SERVICE_TYPES } from "@/types";
+import { ChevronLeft, ChevronRight, Maximize2, PlaneLanding, ParkingSquare, PlaneTakeoff, Plane, AlertTriangle } from "lucide-react";
+import {
+  isArrivalToday,
+  isDepartureToday,
+  deriveATA,
+  deriveATD,
+  nextEventMinutes,
+  rowUrgency,
+  computeHeaderStats,
+  STATE_DOT_CLASS,
+  URGENCY_ROW_CLASS,
+  type FlightLite,
+} from "./diaHelpers";
 
 type FlightWithRelations = Flight & {
   services: Service[];
@@ -15,17 +26,25 @@ type FlightWithRelations = Flight & {
   eventLogs: (EventLog & { user: { name: string } | null })[];
 };
 
+const LIVE_PHASE_UI: Record<string, { label: string; cls: string; Icon: typeof Plane }> = {
+  APPROACHING: { label: "APROX", cls: "bg-sky-100 text-sky-700 animate-pulse", Icon: PlaneLanding },
+  LANDED:      { label: "ATERR", cls: "bg-amber-100 text-amber-700 animate-pulse", Icon: PlaneLanding },
+  ON_BLOCKS:   { label: "PARK",  cls: "bg-emerald-100 text-emerald-700", Icon: ParkingSquare },
+  DEPARTED:    { label: "DESPG", cls: "bg-gray-100 text-gray-500", Icon: PlaneTakeoff },
+};
+
+const STALE_LIVE_MS = 10 * 60 * 1000;
+
 export default function DiaPage() {
   const { status } = useSession();
   const router = useRouter();
   const [flights, setFlights] = useState<FlightWithRelations[]>([]);
-  const [date, setDate] = useState(() => getSpainToday());
+  const [date, setDate] = useState(() => palmaDayUtc());
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState(new Date());
 
-  // Dual Clock update
   useEffect(() => {
-    const interval = setInterval(() => setNow(new Date()), 1000);
+    const interval = setInterval(() => setNow(new Date()), 30_000);
     return () => clearInterval(interval);
   }, []);
 
@@ -37,87 +56,88 @@ export default function DiaPage() {
         const data = await res.json();
         setFlights(data.flights);
       }
-    } catch (err) {
-      console.error("Error fetching flights:", err);
     } finally {
       setLoading(false);
     }
   }, [date]);
 
   useEffect(() => {
-    if (status === "authenticated") {
-      fetchFlights();
-    }
+    if (status === "authenticated") fetchFlights();
   }, [status, fetchFlights]);
 
-  useEventStream({
-    onEvent: () => fetchFlights(),
-    enabled: status === "authenticated",
-  });
+  useEventStream({ onEvent: () => fetchFlights(), enabled: status === "authenticated" });
 
-  const stats = useMemo(() => {
-    const day = date.getUTCDate();
-    const month = date.getUTCMonth() + 1;
-    const shortDate = `${String(day).padStart(2, "0")}/${String(month).padStart(2, "0")}`;
-    let arrivals = 0;
-    let departures = 0;
-    flights.forEach((f) => {
-      if (f.eta && (!f.arrivalDate || f.arrivalDate === shortDate)) arrivals++;
-      if (f.etd && (!f.departureDate || f.departureDate === shortDate)) departures++;
-    });
-    return { arrivals, departures };
-  }, [flights, date]);
+  const sortedFlights = useMemo(() => {
+    const lite = flights as unknown as FlightLite[];
+    return [...flights]
+      .map((f, i) => ({
+        f,
+        next: nextEventMinutes(lite[i], date, now),
+        urgency: rowUrgency(lite[i], date, now),
+      }))
+      .sort((a, b) => {
+        // Departed/terminados al final
+        if (a.urgency === "departed" && b.urgency !== "departed") return 1;
+        if (b.urgency === "departed" && a.urgency !== "departed") return -1;
+        // Sin próximo evento al final del bloque activo
+        if (a.next === null && b.next !== null) return 1;
+        if (b.next === null && a.next !== null) return -1;
+        if (a.next === null && b.next === null) return 0;
+        return (a.next ?? 0) - (b.next ?? 0);
+      });
+  }, [flights, date, now]);
 
-  const formatTime = (date: Date, tz?: string) => {
-    return date.toLocaleTimeString("es-ES", {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      timeZone: tz,
-    });
-  };
+  const stats = useMemo(
+    () => computeHeaderStats(flights as unknown as FlightLite[], date, now),
+    [flights, date, now],
+  );
 
-  const getServiceState = (flight: FlightWithRelations, type: string) => {
-    const svc = flight.services.find(s => s.type === type);
-    if (!svc) return "NONE";
-    return svc.state; // PENDING, ARRIVED, DELIVERED
-  };
+  const formatTime = (d: Date, tz?: string) =>
+    d.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: tz });
 
   if (status === "loading" || loading) {
-    return <div className="flex h-screen items-center justify-center bg-[#1a1a1a] text-white">Cargando Tablón...</div>;
+    return <div className="flex h-screen items-center justify-center bg-[#1a1a1a] text-white">Cargando Tablon...</div>;
   }
 
   return (
     <div className="flex h-screen flex-col bg-[#f0f0f0] text-sm font-sans select-none">
-      {/* --- HEADER (OPERATIONS STYLE) --- */}
-      <header className="flex items-center justify-between bg-[#2c3e50] px-4 py-2 text-white shadow-md">
+      {/* HEADER */}
+      <header className="flex flex-wrap items-center justify-between gap-2 bg-[#2c3e50] px-4 py-2 text-white shadow-md">
         <div className="flex items-center gap-6">
           <div className="flex flex-col">
             <h1 className="text-lg font-bold tracking-tight text-blue-300 leading-tight">MALLORCAIR</h1>
             <span className="text-[10px] uppercase tracking-widest text-blue-100/50">Operations Dashboard</span>
           </div>
-          
+
           <div className="h-8 w-[1px] bg-white/10" />
 
-          {/* Date Nav */}
           <div className="flex items-center gap-2">
-            <button onClick={() => {
-              const d = new Date(date);
-              d.setUTCDate(d.getUTCDate() - 1);
-              setDate(d);
-            }} className="hover:text-blue-300"><ChevronLeft size={20}/></button>
+            <button
+              onClick={() => {
+                const d = new Date(date);
+                d.setUTCDate(d.getUTCDate() - 1);
+                setDate(d);
+              }}
+              className="hover:text-blue-300"
+            >
+              <ChevronLeft size={20} />
+            </button>
             <span className="font-mono text-lg font-medium">
               {date.toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "2-digit" }).toUpperCase()}
             </span>
-            <button onClick={() => {
-              const d = new Date(date);
-              d.setUTCDate(d.getUTCDate() + 1);
-              setDate(d);
-            }} className="hover:text-blue-300"><ChevronRight size={20}/></button>
+            <button
+              onClick={() => {
+                const d = new Date(date);
+                d.setUTCDate(d.getUTCDate() + 1);
+                setDate(d);
+              }}
+              className="hover:text-blue-300"
+            >
+              <ChevronRight size={20} />
+            </button>
           </div>
         </div>
 
-        {/* Dual Clock */}
         <div className="flex items-center gap-8 font-mono">
           <div className="flex flex-col items-center">
             <span className="text-[10px] text-blue-200/60 uppercase">Local Palma</span>
@@ -129,43 +149,54 @@ export default function DiaPage() {
           </div>
         </div>
 
-        {/* Quick Stats */}
-        <div className="flex items-center gap-4">
-          <div className="flex gap-2 text-xs uppercase font-medium">
-            <span className="rounded bg-blue-900/50 px-2 py-1 border border-blue-400/30">LLEG: {stats.arrivals}</span>
-            <span className="rounded bg-orange-900/50 px-2 py-1 border border-orange-400/30">SAL: {stats.departures}</span>
-          </div>
+        <div className="flex flex-wrap items-center gap-2 text-xs uppercase font-medium">
+          <span className="rounded bg-blue-900/50 px-2 py-1 border border-blue-400/30">LLEG: {stats.arrivals}</span>
+          <span className="rounded bg-orange-900/50 px-2 py-1 border border-orange-400/30">SAL: {stats.departures}</span>
+          {stats.approaching > 0 && (
+            <span className="rounded bg-sky-700/60 px-2 py-1 border border-sky-300/40 animate-pulse" title="Aviones acercandose ahora">
+              <PlaneLanding size={11} className="inline mb-0.5 mr-1" />
+              {stats.approaching} aprox
+            </span>
+          )}
+          {stats.pendingDepServices > 0 && (
+            <span className="rounded bg-yellow-700/60 px-2 py-1 border border-yellow-300/40" title="Vuelos con servicios de salida pendientes">
+              {stats.pendingDepServices} pend.
+            </span>
+          )}
+          {stats.alerts > 0 && (
+            <span className="rounded bg-red-700/70 px-2 py-1 border border-red-300/40 animate-pulse" title="Vuelos con alerta de retraso o servicios sin terminar">
+              <AlertTriangle size={11} className="inline mb-0.5 mr-1" />
+              {stats.alerts} alerta
+            </span>
+          )}
           <button onClick={() => router.push("/")} className="rounded bg-gray-700 p-1.5 hover:bg-gray-600" title="Volver a tarjetas">
-            <Maximize2 size={16}/>
+            <Maximize2 size={16} />
           </button>
         </div>
       </header>
 
-      {/* --- MAIN TABLE AREA --- */}
+      {/* TABLE */}
       <main className="flex-1 overflow-auto bg-white p-1">
         <table className="w-full border-collapse border-spacing-0 text-[13px]">
           <thead className="sticky top-0 z-20 bg-[#ecf0f1] text-[#34495e] shadow-sm">
             <tr>
               <th className="border border-gray-300 p-1 font-bold w-8">ST</th>
-              {/* Bloque Llegada */}
+              <th className="border border-gray-300 p-1 font-bold w-16">LIVE</th>
               <th colSpan={4} className="border border-gray-300 bg-blue-50 p-1 font-bold text-blue-800">LLEGADA</th>
-              {/* Bloque Avión */}
-              <th colSpan={3} className="border border-gray-300 bg-gray-100 p-1 font-bold text-gray-800">AVIÓN / PARKING</th>
-              {/* Bloque Servicios */}
+              <th colSpan={3} className="border border-gray-300 bg-gray-100 p-1 font-bold text-gray-800">AVION / PARKING</th>
               <th colSpan={3} className="border border-gray-300 bg-yellow-50 p-1 font-bold text-yellow-800">SVC</th>
-              {/* Bloque Salida */}
               <th colSpan={4} className="border border-gray-300 bg-orange-50 p-1 font-bold text-orange-800">SALIDA</th>
-              {/* Bloque Info */}
               <th className="border border-gray-300 bg-gray-50 p-1 font-bold">PAX / CREW</th>
             </tr>
             <tr className="bg-gray-50 text-[11px] uppercase tracking-wider text-gray-500">
               <th className="border border-gray-300 p-1 w-6"></th>
+              <th className="border border-gray-300 p-1 w-16"></th>
               <th className="border border-gray-300 p-1 w-24">Vuelo</th>
               <th className="border border-gray-300 p-1 w-16">Origen</th>
               <th className="border border-gray-300 p-1 w-16">ETA (Z)</th>
-              <th className="border border-gray-300 p-1 w-16">ATA (L)</th>
-              
-              <th className="border border-gray-300 p-1 w-28">Matrícula</th>
+              <th className="border border-gray-300 p-1 w-16">ATA (Z)</th>
+
+              <th className="border border-gray-300 p-1 w-28">Matricula</th>
               <th className="border border-gray-300 p-1 w-16">Tipo</th>
               <th className="border border-gray-300 p-1 w-16">Stand</th>
 
@@ -176,94 +207,155 @@ export default function DiaPage() {
               <th className="border border-gray-300 p-1 w-24">Vuelo</th>
               <th className="border border-gray-300 p-1 w-16">Destino</th>
               <th className="border border-gray-300 p-1 w-16">ETD (Z)</th>
-              <th className="border border-gray-300 p-1 w-16">ATD (L)</th>
+              <th className="border border-gray-300 p-1 w-16">ATD (Z)</th>
 
               <th className="border border-gray-300 p-1">P | C</th>
             </tr>
           </thead>
           <tbody>
-            {flights.map((f) => (
-              <tr key={f.id} className="group border-b border-gray-200 hover:bg-blue-50/50 transition-colors">
-                {/* Status Dot */}
-                <td className="border border-gray-200 p-1 text-center">
-                  <div className={`h-3 w-3 rounded-full mx-auto shadow-inner ${
-                    f.state === "ON_GROUND" ? "bg-blue-500 animate-pulse" :
-                    f.state === "BOARDING" ? "bg-orange-500 animate-pulse" :
-                    f.state === "DISPATCHED" ? "bg-green-500" : "bg-gray-300"
-                  }`} />
-                </td>
+            {sortedFlights.map(({ f, urgency }) => {
+              const lite = f as unknown as FlightLite;
+              const isArr = isArrivalToday(f, date);
+              const isDep = isDepartureToday(f, date);
+              const ata = deriveATA(lite);
+              const atd = deriveATD(lite);
+              const live = f.livePhase ? LIVE_PHASE_UI[f.livePhase] : null;
+              const liveStale =
+                f.liveLastSeenAt && Date.now() - new Date(f.liveLastSeenAt).getTime() > STALE_LIVE_MS;
+              const showLive = live && !liveStale;
 
-                {/* LLEGADA */}
-                <td className="border border-gray-200 p-1 px-2 font-bold text-blue-700">{f.callsign}</td>
-                <td className="border border-gray-200 p-1 text-center font-mono">{f.origin}</td>
-                <td className="border border-gray-200 p-1 text-center font-mono font-medium">{f.eta}</td>
-                <td className="border border-gray-200 p-1 text-center font-mono text-gray-400 text-[11px] italic">--:--</td>
+              const dotClass = STATE_DOT_CLASS[f.state] ?? "bg-gray-300";
+              const rowClass = URGENCY_ROW_CLASS[urgency];
 
-                {/* AVIÓN */}
-                <td className="border border-gray-200 p-1 px-2 text-center bg-gray-50/50">
-                  <span className="rounded bg-white border border-gray-300 px-2 py-0.5 font-mono font-bold tracking-tight shadow-sm">
-                    {f.registration}
-                  </span>
-                </td>
-                <td className="border border-gray-200 p-1 text-center font-mono text-gray-600">{f.aircraftType}</td>
-                <td className="border border-gray-200 p-1 text-center bg-gray-50/50">
-                  <span className={`font-mono font-bold text-lg leading-none ${f.parking ? "text-gray-900" : "text-gray-300 italic text-xs font-normal"}`}>
-                    {f.parking || "tbd"}
-                  </span>
-                </td>
+              const paxArr = f.paxArrivalReal ?? f.paxArrival;
+              const paxDep = f.paxDepartureReal ?? f.paxDeparture;
+              const crewArr = f.crewArrivalReal ?? f.crewArrival;
+              const crewDep = f.crewDepartureReal ?? f.crewDeparture;
 
-                {/* SERVICIOS COMPACTOS */}
-                <ServiceCell state={f.fuelState === "SERVED" ? "DELIVERED" : f.fuelState === "REQUESTED" ? "ARRIVED" : "PENDING"} label="F" />
-                <ServiceCell state={getServiceState(f, "CATERING")} label="C" />
-                <ServiceCell state={f.toiletState === "COMPLETED" ? "DELIVERED" : f.toiletState === "REQUESTED" ? "ARRIVED" : "PENDING"} label="T" />
+              return (
+                <tr
+                  key={f.id}
+                  className={`group border-b border-gray-200 transition-colors hover:bg-blue-50/40 ${rowClass}`}
+                >
+                  <td className="border border-gray-200 p-1 text-center">
+                    <div className={`mx-auto h-3 w-3 rounded-full shadow-inner ${dotClass}`} title={f.state} />
+                  </td>
 
-                {/* SALIDA */}
-                <td className="border border-gray-200 p-1 px-2 font-bold text-orange-700">{f.callsign}</td>
-                <td className="border border-gray-200 p-1 text-center font-mono">{f.destination}</td>
-                <td className="border border-gray-200 p-1 text-center font-mono font-medium">{f.etd}</td>
-                <td className="border border-gray-200 p-1 text-center font-mono text-gray-400 text-[11px] italic">--:--</td>
+                  <td className="border border-gray-200 p-0 text-center">
+                    {showLive && live ? (
+                      <div
+                        className={`mx-auto inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-bold ${live.cls}`}
+                        title={`OpenSky · ultima posicion ${f.liveLastSeenAt ? new Date(f.liveLastSeenAt).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }) : "?"}`}
+                      >
+                        <live.Icon size={9} />
+                        {live.label}
+                      </div>
+                    ) : (
+                      <span className="text-gray-300 text-[10px]">—</span>
+                    )}
+                  </td>
 
-                {/* PAX / CREW */}
-                <td className="border border-gray-200 p-1 text-center whitespace-nowrap bg-gray-50/30">
-                  <span className="text-gray-800 font-medium">P: {f.paxArrival}/{f.paxDeparture}</span>
-                  <span className="mx-2 text-gray-300">|</span>
-                  <span className="text-gray-500">C: {f.crewArrival}/{f.crewDeparture}</span>
-                </td>
-              </tr>
-            ))}
+                  {/* LLEGADA */}
+                  {isArr ? (
+                    <>
+                      <td className="border border-gray-200 p-1 px-2 font-bold text-blue-700">{f.callsign}</td>
+                      <td className="border border-gray-200 p-1 text-center font-mono">{f.origin || "—"}</td>
+                      <td className="border border-gray-200 p-1 text-center font-mono font-medium">{f.eta || "—"}</td>
+                      <td className={`border border-gray-200 p-1 text-center font-mono ${ata ? "text-emerald-700 font-semibold" : "text-gray-300 italic text-[11px]"}`}>{ata ?? "--:--"}</td>
+                    </>
+                  ) : (
+                    <td colSpan={4} className="border border-gray-200 bg-gray-50 p-1 text-center text-[11px] text-gray-300 italic">
+                      sin llegada hoy
+                    </td>
+                  )}
+
+                  {/* AVION */}
+                  <td className="border border-gray-200 p-1 px-2 text-center bg-gray-50/50">
+                    <span className="rounded bg-white border border-gray-300 px-2 py-0.5 font-mono font-bold tracking-tight shadow-sm">
+                      {f.registration}
+                    </span>
+                  </td>
+                  <td className="border border-gray-200 p-1 text-center font-mono text-gray-600">{f.aircraftType}</td>
+                  <td className="border border-gray-200 p-1 text-center bg-gray-50/50">
+                    <span className={`font-mono font-bold text-lg leading-none ${f.parking ? "text-gray-900" : "text-gray-300 italic text-xs font-normal"}`}>
+                      {f.parking || "tbd"}
+                    </span>
+                  </td>
+
+                  {/* SERVICIOS */}
+                  <ServiceCell state={f.fuelState === "SERVED" ? "DELIVERED" : f.fuelState === "REQUESTED" ? "ARRIVED" : "PENDING"} label="F" />
+                  <ServiceCell state={getServiceState(f, "CATERING")} label="C" />
+                  <ServiceCell state={f.toiletState === "COMPLETED" ? "DELIVERED" : f.toiletState === "REQUESTED" ? "ARRIVED" : "PENDING"} label="T" />
+
+                  {/* SALIDA */}
+                  {isDep ? (
+                    <>
+                      <td className="border border-gray-200 p-1 px-2 font-bold text-orange-700">{f.callsign}</td>
+                      <td className="border border-gray-200 p-1 text-center font-mono">{f.destination || "—"}</td>
+                      <td className="border border-gray-200 p-1 text-center font-mono font-medium">{f.etd || "—"}</td>
+                      <td className={`border border-gray-200 p-1 text-center font-mono ${atd ? "text-emerald-700 font-semibold" : "text-gray-300 italic text-[11px]"}`}>{atd ?? "--:--"}</td>
+                    </>
+                  ) : (
+                    <td colSpan={4} className="border border-gray-200 bg-gray-50 p-1 text-center text-[11px] text-gray-300 italic">
+                      sin salida hoy
+                    </td>
+                  )}
+
+                  {/* PAX / CREW */}
+                  <td className="border border-gray-200 p-1 text-center whitespace-nowrap bg-gray-50/30">
+                    <span className="text-gray-800 font-medium">P: {paxArr}/{paxDep}</span>
+                    <span className="mx-2 text-gray-300">|</span>
+                    <span className="text-gray-500">C: {crewArr}/{crewDep}</span>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
 
         {flights.length === 0 && (
-          <div className="p-12 text-center text-gray-400 italic">No hay vuelos registrados para este día.</div>
+          <div className="p-12 text-center text-gray-400 italic">No hay vuelos registrados para este dia.</div>
         )}
       </main>
 
-      {/* --- FOOTER / INFO BAR --- */}
-      <footer className="bg-white border-t border-gray-300 px-4 py-1 text-[11px] text-gray-500 flex justify-between">
-        <div className="flex gap-4">
-          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-blue-500" /> Tierra</span>
-          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-orange-500" /> Embarcando</span>
-          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-green-500" /> Despachado</span>
+      {/* FOOTER */}
+      <footer className="bg-white border-t border-gray-300 px-4 py-1 text-[11px] text-gray-500 flex flex-wrap justify-between gap-2">
+        <div className="flex flex-wrap gap-3">
+          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" /> En llegada</span>
+          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-blue-700" /> Parking</span>
+          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-purple-500" /> Turnaround</span>
+          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-orange-500 animate-pulse" /> Boarding</span>
+          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-green-600" /> Despegado</span>
+          <span className="ml-2 flex items-center gap-1"><span className="h-2 w-2 rounded bg-red-200" /> alerta</span>
+          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded bg-yellow-50 ring-1 ring-yellow-300" /> ETD &lt;30m</span>
         </div>
-        <div>MALLORCAIR Operations System v0.3</div>
+        <div>MALLORCAIR Operations System v0.4 — orden por proximo evento</div>
       </footer>
     </div>
   );
 }
 
-function ServiceCell({ state, label }: { state: string, label: string }) {
-  const colors = {
+function getServiceState(flight: FlightWithRelations, type: string) {
+  const svc = flight.services.find((s) => s.type === type);
+  if (!svc) return "NONE";
+  return svc.state;
+}
+
+function ServiceCell({ state, label }: { state: string; label: string }) {
+  const colors: Record<string, string> = {
     DELIVERED: "bg-green-500 text-white border-green-600",
     ARRIVED: "bg-yellow-400 text-yellow-900 border-yellow-500 animate-pulse",
     PENDING: "bg-gray-100 text-gray-400 border-gray-200",
-    NONE: "bg-gray-50 text-gray-200 border-transparent"
+    NONE: "bg-gray-50 text-gray-200 border-transparent",
   };
-  
-  const current = (state === "DELIVERED" || state === "COMPLETED" || state === "SERVED") ? "DELIVERED" : 
-                  (state === "ARRIVED" || state === "REQUESTED") ? "ARRIVED" : 
-                  (state === "PENDING") ? "PENDING" : "NONE";
-
+  const current =
+    state === "DELIVERED" || state === "COMPLETED" || state === "SERVED"
+      ? "DELIVERED"
+      : state === "ARRIVED" || state === "REQUESTED"
+        ? "ARRIVED"
+        : state === "PENDING"
+          ? "PENDING"
+          : "NONE";
   return (
     <td className="border border-gray-200 p-0 text-center w-8 h-8">
       <div className={`flex h-full w-full items-center justify-center font-bold border-b-2 ${colors[current]}`}>
