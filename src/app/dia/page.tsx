@@ -2,11 +2,11 @@
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
 import { Flight, Service, EventLog, LostItem } from "@prisma/client";
 import { palmaDayUtc, dateToSqlString } from "@/lib/time";
 import { useEventStream } from "@/hooks/useEventStream";
-import { ChevronLeft, ChevronRight, Maximize2, PlaneLanding, ParkingSquare, PlaneTakeoff, Plane, AlertTriangle, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, PlaneLanding, ParkingSquare, PlaneTakeoff, Plane, AlertTriangle, Plus } from "lucide-react";
+import { ViewTabs } from "@/components/ViewTabs";
 import { QuickTimeEdit } from "@/components/QuickTimeEdit";
 import { InlineTextEdit } from "@/components/InlineTextEdit";
 import { QuickAddFlight } from "@/components/QuickAddFlight";
@@ -51,7 +51,6 @@ function nextInCycle<T extends readonly string[]>(arr: T, current: string): T[nu
 
 export default function DiaPage() {
   const { status } = useSession();
-  const router = useRouter();
   const [flights, setFlights] = useState<FlightWithRelations[]>([]);
   const [date, setDate] = useState(() => palmaDayUtc());
   const [loading, setLoading] = useState(true);
@@ -208,9 +207,7 @@ export default function DiaPage() {
           >
             <Plus size={12} /> Nuevo vuelo
           </button>
-          <button onClick={() => router.push("/")} className="rounded bg-gray-700 p-1.5 hover:bg-gray-600" title="Volver a tarjetas">
-            <Maximize2 size={16} />
-          </button>
+          <ViewTabs tone="dark" />
         </div>
       </header>
 
