@@ -30,15 +30,17 @@ type FlightWithRelations = Flight & {
 };
 
 type FilterKind = "all" | "private" | "commercial" | "overnight";
+type SortKind = "time" | "stand";
 
 const SHIFTS = [
-  { label: "Turno mañana", startMin: 6 * 60, endMin: 14 * 60 },
-  { label: "Turno tarde", startMin: 14 * 60, endMin: 22 * 60 },
-  { label: "Turno noche", startMin: 22 * 60, endMin: 24 * 60 },
+  { label: "Mañana", startMin: 6 * 60, endMin: 14 * 60 },
+  { label: "Tarde", startMin: 14 * 60, endMin: 22 * 60 },
+  { label: "Noche", startMin: 22 * 60, endMin: 24 * 60 },
 ] as const;
 
 const STANDS = 12;
 const ROW_H = 56;
+const BAR_H = 22;
 
 export default function TimelinePage() {
   const { status } = useSession();
@@ -50,6 +52,7 @@ export default function TimelinePage() {
   const [paxCrewModal, setPaxCrewModal] = useState<{ flightId: string; direction: "ARRIVAL" | "DEPARTURE" } | null>(null);
   const [filter, setFilter] = useState<FilterKind>("all");
   const [zoom, setZoom] = useState<6 | 12 | 24>(24);
+  const [sortBy, setSortBy] = useState<SortKind>("time");
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 60_000);
@@ -75,12 +78,25 @@ export default function TimelinePage() {
 
   useEventStream({ onEvent: () => fetchFlights(), enabled: status === "authenticated" });
 
+  // Keyboard shortcuts: ESC cierra panel; ←/→ navega fechas; T = hoy; 1/2/3 = zoom.
   useEffect(() => {
-    if (!selectedFlightId) return;
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") setSelectedFlightId(null); };
+    const handler = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      if (e.key === "Escape" && selectedFlightId) { setSelectedFlightId(null); return; }
+      if (e.key === "ArrowLeft") {
+        const d = new Date(date); d.setUTCDate(d.getUTCDate() - 1); setDate(d);
+      } else if (e.key === "ArrowRight") {
+        const d = new Date(date); d.setUTCDate(d.getUTCDate() + 1); setDate(d);
+      } else if (e.key === "t" || e.key === "T") {
+        setDate(palmaDayUtc());
+      } else if (e.key === "1") setZoom(6);
+      else if (e.key === "2") setZoom(12);
+      else if (e.key === "3") setZoom(24);
+    };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [selectedFlightId]);
+  }, [selectedFlightId, date]);
 
   const range: TimelineRange = useMemo(() => zoomedRange(zoom, now), [zoom, now]);
 
@@ -97,11 +113,21 @@ export default function TimelinePage() {
     if (filter === "commercial") xs = xs.filter((f) => isCommercialCallsign(f.callsign));
     if (filter === "overnight") xs = xs.filter((f) => f.isOvernight);
     return [...xs].sort((a, b) => {
+      if (sortBy === "stand") {
+        // Asignados primero (alfa-num natural), luego TBD por hora
+        const pa = a.parking || ""; const pb = b.parking || "";
+        if (pa && !pb) return -1;
+        if (!pa && pb) return 1;
+        if (pa && pb) {
+          const cmp = pa.localeCompare(pb, undefined, { numeric: true, sensitivity: "base" });
+          if (cmp !== 0) return cmp;
+        }
+      }
       const ta = parseHHMM(a.eta) ?? parseHHMM(a.etd) ?? 99999;
       const tb = parseHHMM(b.eta) ?? parseHHMM(b.etd) ?? 99999;
       return ta - tb;
     });
-  }, [flights, filter]);
+  }, [flights, filter, sortBy]);
 
   const stats = useMemo(
     () => computeHeaderStats(flights as unknown as FlightLite[], date, now),
@@ -144,12 +170,26 @@ export default function TimelinePage() {
     return out;
   }, [flights, visibleHours]);
 
+  // "Activos ahora" — robust to zoom: count flights whose [eta, etd] contains now,
+  // independiente de si la hora actual está dentro de la ventana visible.
+  const activeNowCount = useMemo(() => {
+    if (!isToday) return 0;
+    const m = now.getUTCHours() * 60 + now.getUTCMinutes();
+    return flights.filter((f) => {
+      const eta = parseHHMM(f.eta); const etd = parseHHMM(f.etd);
+      if (eta === null || etd === null) return false;
+      if (etd < eta) return m >= eta || m <= etd;
+      return m >= eta && m <= etd;
+    }).length;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flights, now, dayShort]);
+
   if (status === "loading" || loading) {
     return <div className="flex h-screen items-center justify-center bg-[#0a0a0a] text-white">Cargando Timeline...</div>;
   }
-
   return (
     <div className="flex h-screen flex-col bg-[#fafafa] text-sm select-none" style={{ fontFamily: "Inter Tight, system-ui, sans-serif" }}>
+      <style>{`@keyframes tlpulse { 0%,100% { opacity: 1 } 50% { opacity: 0.55 } }`}</style>
       {/* HEADER */}
       <header className="flex items-center justify-between gap-6 bg-[#0a0a0a] px-7 py-3.5 text-[#e6edf3]">
         <div className="flex items-center gap-8">
@@ -177,6 +217,7 @@ export default function TimelinePage() {
             <button
               onClick={() => { const d = new Date(date); d.setUTCDate(d.getUTCDate() - 1); setDate(d); }}
               className="px-2 py-1 text-gray-500 hover:text-gray-200"
+              title="Día anterior (←)"
             >
               <ChevronLeft size={14} />
             </button>
@@ -188,9 +229,20 @@ export default function TimelinePage() {
             <button
               onClick={() => { const d = new Date(date); d.setUTCDate(d.getUTCDate() + 1); setDate(d); }}
               className="px-2 py-1 text-gray-500 hover:text-gray-200"
+              title="Día siguiente (→)"
             >
               <ChevronRight size={14} />
             </button>
+            {!isToday && (
+              <button
+                onClick={() => setDate(palmaDayUtc())}
+                className="ml-1 px-2 py-1 text-[10.5px] font-semibold rounded uppercase tracking-wider"
+                style={{ background: "oklch(0.85 0.15 95 / 0.18)", color: "oklch(0.85 0.15 95)" }}
+                title="Volver a hoy (T)"
+              >
+                Hoy
+              </button>
+            )}
           </div>
 
           <div className="flex items-baseline gap-7" style={{ fontFamily: "JetBrains Mono, monospace" }}>
@@ -209,10 +261,12 @@ export default function TimelinePage() {
       {/* SUMMARY band */}
       <div className="flex items-stretch border-b border-gray-200 bg-white px-7">
         <Stat label="Movimientos" value={String(flights.length)} sub={`${stats.arrivals} LLEG · ${stats.departures} SAL`} />
-        <Stat label="Activos ahora" value={String(occupancy.find((o) => o.hour === now.getUTCHours())?.count ?? 0)} sub="en parking" />
+        <Stat label="Activos ahora" value={String(activeNowCount)} sub="en parking" />
         <Stat label="Próximas 2 h" value={String(countNext2h(flights, now))} sub={`${countNext2hKind(flights, now, "DEP")} SAL · ${countNext2hKind(flights, now, "ARR")} LLEG`} />
         <Stat label="Servicios pend." value={String(stats.pendingDepServices)} sub="fuel + catering" />
-        <Stat label="Alerta" value={String(stats.alerts)} sub={stats.alerts > 0 ? "ETD pasada" : "todo en hora"} alert={stats.alerts > 0} />
+        {stats.alerts > 0 && (
+          <Stat label="Alerta" value={String(stats.alerts)} sub="ETD pasada" alert />
+        )}
 
         <div className="ml-auto flex items-center gap-2.5 py-2.5">
           <FilterPill label="Todos" count={filterCounts.all} active={filter === "all"} onClick={() => setFilter("all")} />
@@ -220,7 +274,21 @@ export default function TimelinePage() {
           <FilterPill label="Comerciales" count={filterCounts.commercial} active={filter === "commercial"} onClick={() => setFilter("commercial")} />
           <FilterPill label="Pernoctas" count={filterCounts.overnight} active={filter === "overnight"} onClick={() => setFilter("overnight")} />
 
-          <div className="flex items-center bg-gray-100 rounded-md p-0.5 ml-1">
+          <div className="w-px h-5 bg-gray-200 mx-1" />
+
+          <div className="flex items-center bg-gray-100 rounded-md p-0.5" title="Ordenar por">
+            {([["time", "Hora"], ["stand", "Stand"]] as const).map(([k, lbl]) => (
+              <button
+                key={k}
+                onClick={() => setSortBy(k)}
+                className={`px-2.5 py-1 text-[11px] font-semibold rounded ${sortBy === k ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+              >
+                {lbl}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center bg-gray-100 rounded-md p-0.5" title="Zoom (1/2/3)">
             {([6, 12, 24] as const).map((z) => (
               <button
                 key={z}
@@ -240,23 +308,24 @@ export default function TimelinePage() {
         <div className="flex-1 overflow-auto bg-white">
           {/* RULER */}
           <div className="grid grid-cols-[320px_1fr] border-b border-gray-200 sticky top-0 z-20 bg-white">
-            <div className="flex items-end px-4 pt-3.5 pb-1.5 bg-[#fafafa] border-r border-gray-200">
-              <span className="text-[10px] uppercase tracking-wider font-semibold text-gray-400">Aeronave · stand</span>
+            <div className="flex items-end justify-between px-4 pt-3.5 pb-1.5 bg-[#fafafa] border-r border-gray-200">
+              <span className="text-[10px] uppercase tracking-wider font-semibold text-gray-400">Aeronave · {sortBy === "stand" ? "stand" : "hora"}</span>
+              <span className="text-[9.5px] text-gray-400" style={{ fontFamily: "JetBrains Mono, monospace" }}>{filtered.length}</span>
             </div>
             <div className="relative h-[42px]">
-              {/* Shift bands behind */}
-              {SHIFTS.map((s) => {
+              {/* Shift bands behind — sutiles barras de color, no texto */}
+              {SHIFTS.map((s, i) => {
                 const left = minToPct(s.startMin, range);
                 const width = minToPct(s.endMin, range) - left;
                 if (width <= 0 || left >= 100) return null;
+                const colors = ["oklch(0.97 0.02 75)", "oklch(0.97 0.02 230)", "oklch(0.96 0.02 280)"];
                 return (
                   <div
                     key={s.label}
-                    className="absolute top-7 h-2.5 flex items-center justify-center text-[9px] font-semibold uppercase tracking-wider text-gray-400"
-                    style={{ left: `${Math.max(0, left)}%`, width: `${Math.min(100 - Math.max(0, left), width)}%`, fontFamily: "JetBrains Mono, monospace" }}
-                  >
-                    {s.label}
-                  </div>
+                    className="absolute bottom-0 h-1"
+                    style={{ left: `${Math.max(0, left)}%`, width: `${Math.min(100 - Math.max(0, left), width)}%`, background: colors[i] }}
+                    title={`Turno ${s.label}`}
+                  />
                 );
               })}
 
@@ -267,15 +336,12 @@ export default function TimelinePage() {
                 const isNowH = isToday && h === now.getUTCHours();
                 return (
                   <div key={h} className="absolute top-0 bottom-0" style={{ left: `${pct}%` }}>
-                    <div className="absolute left-0 bottom-0 w-px h-2 bg-gray-300" />
+                    <div className="absolute left-0 bottom-1 w-px h-2 bg-gray-300" />
                     <div
-                      className={`absolute left-0 bottom-3 -translate-x-1/2 text-[11px] font-medium whitespace-nowrap ${isNowH ? "text-red-600 font-bold" : "text-gray-700"}`}
+                      className={`absolute left-0 bottom-4 -translate-x-1/2 text-[11px] font-medium whitespace-nowrap tabular-nums ${isNowH ? "opacity-30" : "text-gray-700"}`}
                       style={{ fontFamily: "JetBrains Mono, monospace" }}
                     >
                       {String(h).padStart(2, "0")}
-                      {h === Math.floor((range.startMin + (range.endMin - range.startMin) / 2) / 60) && (
-                        <span className="ml-0.5 text-[9.5px] text-gray-400">Z</span>
-                      )}
                     </div>
                   </div>
                 );
@@ -284,10 +350,10 @@ export default function TimelinePage() {
               {/* NOW tag */}
               {isToday && (
                 <div
-                  className="absolute top-1 -translate-x-1/2 px-2 py-0.5 text-[10px] font-bold rounded-full text-white tracking-wider z-10"
-                  style={{ left: `${nowPct}%`, background: "oklch(0.55 0.2 25)", boxShadow: "0 1px 4px oklch(0.55 0.2 25 / 0.35)", fontFamily: "JetBrains Mono, monospace" }}
+                  className="absolute top-2 -translate-x-1/2 px-2 py-0.5 text-[10px] font-bold rounded-full text-white tracking-wider z-10 whitespace-nowrap"
+                  style={{ left: `${nowPct}%`, background: "oklch(0.55 0.2 25)", boxShadow: "0 1px 6px oklch(0.55 0.2 25 / 0.4)", fontFamily: "JetBrains Mono, monospace" }}
                 >
-                  AHORA · {fmt(now, "UTC")}
+                  {fmt(now, "UTC")} Z
                   <div
                     className="absolute left-1/2 -translate-x-1/2 -bottom-[3px] h-[6px] w-[6px] rotate-45"
                     style={{ background: "oklch(0.55 0.2 25)" }}
@@ -299,34 +365,39 @@ export default function TimelinePage() {
 
           {/* OCCUPANCY strip */}
           <div className="grid grid-cols-[320px_1fr] bg-white border-b border-gray-200">
-            <div className="flex items-center gap-2 px-4 py-2 bg-[#fafafa] border-r border-gray-200">
-              <span className="text-[10px] uppercase tracking-wider font-bold text-gray-400">Ocupacion</span>
-              <span className="text-[11px] text-gray-700 font-semibold" style={{ fontFamily: "JetBrains Mono, monospace" }}>
-                {STANDS} stands · pico {Math.max(...occupancy.map((o) => o.count), 0)}
+            <div className="flex items-center justify-between px-4 py-2 bg-[#fafafa] border-r border-gray-200">
+              <span className="text-[10px] uppercase tracking-wider font-bold text-gray-400">Ocupación</span>
+              <span className="text-[10.5px] text-gray-600" style={{ fontFamily: "JetBrains Mono, monospace" }}>
+                pico {Math.max(...occupancy.map((o) => o.count), 0)}/{STANDS}
               </span>
             </div>
-            <div className="relative h-9 py-1">
+            <div className="relative h-10 py-1">
+              {/* baseline */}
+              <div className="absolute left-0 right-0 bottom-1 h-px bg-gray-200" />
+              {/* capacity threshold (80% = 0.8 * STANDS) */}
+              <div className="absolute left-0 right-0 border-t border-dashed border-gray-200" style={{ bottom: `${4 + 0.8 * 28}px` }} />
               {occupancy.map((o) => {
                 if (o.count === 0) return null;
                 const leftPct = minToPct(o.hour * 60, range);
                 const widthPct = minToPct((o.hour + 1) * 60, range) - leftPct;
                 if (leftPct >= 100 || leftPct + widthPct <= 0) return null;
-                const heightPct = Math.min(100, (o.count / STANDS) * 100) * 0.6;
-                const peak = o.count >= 8;
+                const ratio = Math.min(1, o.count / STANDS);
+                const barH = Math.max(2, ratio * 28);
+                const peak = o.count >= Math.ceil(STANDS * 0.8);
                 return (
                   <div
                     key={o.hour}
-                    className="absolute bottom-1 rounded-t opacity-85"
+                    className="absolute bottom-1 rounded-t"
                     style={{
-                      left: `${leftPct + widthPct * 0.1}%`,
-                      width: `${widthPct * 0.8}%`,
-                      height: `${heightPct}%`,
-                      background: peak ? "oklch(0.6 0.18 25)" : "oklch(0.55 0.15 245)",
+                      left: `${leftPct + widthPct * 0.08}%`,
+                      width: `${widthPct * 0.84}%`,
+                      height: `${barH}px`,
+                      background: peak ? "oklch(0.68 0.16 25 / 0.85)" : "oklch(0.7 0.1 245 / 0.7)",
                     }}
                   >
                     <span
-                      className="absolute -top-3 left-1/2 -translate-x-1/2 text-[9px] font-bold"
-                      style={{ fontFamily: "JetBrains Mono, monospace", color: peak ? "oklch(0.4 0.16 25)" : "oklch(0.35 0.12 245)" }}
+                      className="absolute -top-3.5 left-1/2 -translate-x-1/2 text-[9.5px] font-bold tabular-nums"
+                      style={{ fontFamily: "JetBrains Mono, monospace", color: peak ? "oklch(0.45 0.18 25)" : "#6b7280" }}
                     >
                       {o.count}
                     </span>
@@ -352,8 +423,16 @@ export default function TimelinePage() {
             ))}
 
             {filtered.length === 0 && (
-              <div className="p-12 text-center text-gray-400 italic">
-                {flights.length === 0 ? "No hay vuelos registrados para este dia." : "Ningun vuelo coincide con el filtro."}
+              <div className="py-20 px-12 text-center">
+                <div className="text-[42px] mb-3 opacity-30">✈</div>
+                <div className="text-gray-700 font-semibold text-[14px] mb-1">
+                  {flights.length === 0 ? "Sin movimientos para este día" : "Ningún vuelo coincide con el filtro"}
+                </div>
+                <div className="text-gray-400 text-[12px]">
+                  {flights.length === 0
+                    ? "Prueba con otra fecha (← →) o vuelve a hoy (T)"
+                    : "Quita filtros para ver todos los movimientos"}
+                </div>
               </div>
             )}
           </div>
@@ -427,7 +506,7 @@ function countNext2hKind(flights: Flight[], now: Date, kind: "ARR" | "DEP"): num
   }).length;
 }
 
-// ─── Sub-componentes ─────────────────────────────────────────────────────────
+// ─── Sub-componentes ───────────────────────────────────────────────────────
 
 function Stat({ label, value, sub, alert }: {
   label: string; value: string; sub?: string; alert?: boolean;
@@ -513,7 +592,7 @@ function LegendPip({ letter, state, label }: { letter: string; state: "ok" | "re
   );
 }
 
-// ─── Row ─────────────────────────────────────────────────────────────────────
+// ─── Row ────────────────────────────────────────────────────────────
 
 const URGENCY_PILL_COLOR: Record<string, string> = {
   EXPECTED:   "#d1d5db",
@@ -567,19 +646,23 @@ function FlightRow({
       >
         <div className="w-1.5 h-9 rounded-sm shrink-0" style={{ background: URGENCY_PILL_COLOR[flight.state] ?? "#d1d5db" }} />
         <div className="min-w-0 flex-1">
-          <div className="text-[13.5px] font-semibold leading-tight -tracking-[0.01em]" style={{ fontFamily: "JetBrains Mono, monospace" }}>{flight.registration}</div>
-          <div className="flex items-center gap-2 mt-0.5 text-[11px] text-gray-500" style={{ fontFamily: "JetBrains Mono, monospace" }}>
-            <span className="font-semibold" style={{ color: "oklch(0.5 0.14 245)" }}>{flight.callsign}</span>
-            <span className="text-gray-700 font-medium">{flight.aircraftType}</span>
+          <div className="flex items-baseline gap-2">
+            <div className="text-[14.5px] font-semibold leading-tight -tracking-[0.01em] text-gray-900" style={{ fontFamily: "JetBrains Mono, monospace" }}>{flight.registration}</div>
+            <div className="text-[11.5px] font-semibold leading-tight" style={{ color: "oklch(0.5 0.14 245)", fontFamily: "JetBrains Mono, monospace" }}>{flight.callsign}</div>
+          </div>
+          <div className="flex items-center gap-2 mt-1 text-[11px] text-gray-500" style={{ fontFamily: "JetBrains Mono, monospace" }}>
+            <span className="text-gray-600">{flight.aircraftType}</span>
+            <span aria-hidden className="text-gray-300">·</span>
             <span className={flight.parking
-              ? "bg-gray-100 px-1.5 py-px rounded text-gray-700 font-semibold text-[10.5px]"
-              : "text-gray-300 italic font-normal"}>
-              {flight.parking || "tbd"}
+              ? "bg-gray-100 px-1.5 py-px rounded text-gray-800 font-semibold text-[10.5px]"
+              : "text-gray-300 italic font-normal text-[10.5px]"}>
+              {flight.parking || "sin stand"}
             </span>
-            {!isPrivate ? (
-              <span className="text-[10px] py-px px-1.5 rounded font-semibold" style={{ color: "oklch(0.5 0.13 250)", background: "oklch(0.95 0.03 250)" }}>{operator}</span>
-            ) : (
-              <span className="text-[10px] text-gray-400 italic">Privado</span>
+            {!isPrivate && (
+              <>
+                <span aria-hidden className="text-gray-300">·</span>
+                <span className="text-[10.5px] text-gray-500 truncate">{operator}</span>
+              </>
             )}
           </div>
         </div>
@@ -603,10 +686,11 @@ function FlightRow({
         {/* BAR */}
         {bounds && (
           <div
-            className="absolute top-1/2 -translate-y-1/2 h-[18px] rounded-[3px] flex overflow-visible shadow-sm"
+            className="absolute top-1/2 -translate-y-1/2 rounded-[3px] flex overflow-visible shadow-sm"
             style={{
               left: `${bounds.startPct}%`,
               width: `${Math.max(bounds.endPct - bounds.startPct, 0.5)}%`,
+              height: `${BAR_H}px`,
               background: isFuture ? "oklch(0.94 0.02 250)" : isDeparted ? "oklch(0.92 0.01 250)" : segments.length === 0 ? "oklch(0.7 0.14 290)" : undefined,
               border: isFuture ? "1px dashed oklch(0.78 0.04 250)" : isDeparted ? "1px solid #e5e7eb" : undefined,
               boxShadow: isAlert ? "0 0 0 1.5px oklch(0.6 0.2 25), 0 0 12px oklch(0.6 0.2 25 / 0.35)" : undefined,
@@ -656,19 +740,12 @@ function FlightRow({
           <Marker pct={etdPct} kind="etd" actual={!!flight.atd} label={flight.atd || flight.etd || ""} below />
         )}
 
-        {/* NOW LINE per row */}
+        {/* NOW LINE per row — sutil, debajo de pips y markers */}
         {showNow && nowPct >= 0 && nowPct <= 100 && (
-          <div className="absolute top-0 bottom-0 w-0.5 z-[8] pointer-events-none" style={{ left: `${nowPct}%`, background: "oklch(0.6 0.2 25)" }}>
-            <div
-              className="absolute -top-px left-1/2 -translate-x-1/2 h-2 w-2 rounded-full"
-              style={{ background: "oklch(0.6 0.2 25)" }}
-            />
-          </div>
+          <div className="absolute top-0 bottom-0 w-px z-[2] pointer-events-none" style={{ left: `${nowPct}%`, background: "oklch(0.6 0.2 25 / 0.55)" }} />
         )}
       </div>
 
-      {/* keyframe local — pulse para pips req */}
-      <style>{`@keyframes tlpulse { 0%,100% { opacity: 1 } 50% { opacity: 0.6 } }`}</style>
     </div>
   );
 }
@@ -685,12 +762,12 @@ function Marker({ pct, kind, actual, label, below }: {
         style={{ border: `2px solid ${color}`, background: actual ? color : "#fff" }}
       />
       <div
-        className="absolute left-1/2 -translate-x-1/2 text-[9.5px] font-bold whitespace-nowrap py-px px-1 bg-white rounded-sm"
+        className="absolute left-1/2 -translate-x-1/2 text-[9.5px] font-bold whitespace-nowrap py-px px-1 bg-white rounded-sm shadow-sm"
         style={{
-          [below ? "top" : "bottom"]: below ? "14px" : "14px",
+          ...(below ? { top: "14px" } : { bottom: "14px" }),
           color: labelColor,
           fontFamily: "JetBrains Mono, monospace",
-        } as React.CSSProperties}
+        }}
       >
         {label}
       </div>
