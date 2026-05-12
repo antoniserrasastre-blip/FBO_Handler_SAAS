@@ -5,6 +5,7 @@ import { Passenger, CrewMember } from "@prisma/client";
 import { Modal } from "./Modal";
 import { CloseIcon } from "./Icons";
 import { GenDecPasteSection } from "./GenDecPasteSection";
+import { InlineTextEdit as InlineEdit } from "./InlineTextEdit";
 import {
   PASSENGER_STATUS_CONFIG,
   PassengerStatus,
@@ -340,33 +341,3 @@ function AddPassengerRow({ onAdd }: { onAdd: (data: Partial<Passenger>) => void 
   );
 }
 
-function InlineEdit({ value, onSave, placeholder }: { value: string; onSave: (v: string) => void; placeholder?: string }) {
-  const [editing, setEditing] = useState(false);
-  const [local, setLocal] = useState(value);
-
-  if (!editing) {
-    return (
-      <span
-        onClick={() => { setLocal(value); setEditing(true); }}
-        className="cursor-text rounded px-1 py-0.5 hover:bg-blue-50"
-        title="Click para editar"
-      >
-        {value || <span className="text-gray-300">{placeholder || "---"}</span>}
-      </span>
-    );
-  }
-
-  return (
-    <input
-      value={local}
-      onChange={(e) => setLocal(e.target.value)}
-      onBlur={() => {
-        if (local !== value) onSave(local);
-        setEditing(false);
-      }}
-      onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") setEditing(false); }}
-      autoFocus
-      className="w-full rounded border border-blue-400 px-1 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
-    />
-  );
-}

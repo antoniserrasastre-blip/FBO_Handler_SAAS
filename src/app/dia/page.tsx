@@ -7,6 +7,8 @@ import { Flight, Service, EventLog, LostItem } from "@prisma/client";
 import { palmaDayUtc, dateToSqlString } from "@/lib/time";
 import { useEventStream } from "@/hooks/useEventStream";
 import { ChevronLeft, ChevronRight, Maximize2, PlaneLanding, ParkingSquare, PlaneTakeoff, Plane, AlertTriangle } from "lucide-react";
+import { QuickTimeEdit } from "@/components/QuickTimeEdit";
+import { InlineTextEdit } from "@/components/InlineTextEdit";
 import {
   isArrivalToday,
   isDepartureToday,
@@ -19,6 +21,7 @@ import {
   URGENCY_ROW_CLASS,
   type FlightLite,
 } from "./diaHelpers";
+import { FlightDetailPanel } from "./FlightDetailPanel";
 
 type FlightWithRelations = Flight & {
   services: Service[];
@@ -35,6 +38,15 @@ const LIVE_PHASE_UI: Record<string, { label: string; cls: string; Icon: typeof P
 
 const STALE_LIVE_MS = 10 * 60 * 1000;
 
+// ─── Cycle orders for inline F / T toggles ─────────────────────────────────
+const FUEL_CYCLE = ["NOT_REQUESTED", "REQUESTED", "SERVED"] as const;
+const TOILET_CYCLE = ["NOT_REQUESTED", "REQUESTED", "COMPLETED"] as const;
+
+function nextInCycle<T extends readonly string[]>(arr: T, current: string): T[number] {
+  const i = arr.indexOf(current as T[number]);
+  return arr[(i + 1) % arr.length];
+}
+
 export default function DiaPage() {
   const { status } = useSession();
   const router = useRouter();
@@ -42,6 +54,7 @@ export default function DiaPage() {
   const [date, setDate] = useState(() => palmaDayUtc());
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState(new Date());
+  const [selectedFlightId, setSelectedFlightId] = useState<string | null>(null);
 
   useEffect(() => {
     const interval = setInterval(() => setNow(new Date()), 30_000);
@@ -67,6 +80,34 @@ export default function DiaPage() {
 
   useEventStream({ onEvent: () => fetchFlights(), enabled: status === "authenticated" });
 
+  // Esc closes the side panel
+  useEffect(() => {
+    if (!selectedFlightId) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSelectedFlightId(null);
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [selectedFlightId]);
+
+  /** Optimistic PATCH — updates local state immediately, rolls back on failure. */
+  const patchFlight = useCallback(async (id: string, data: Partial<Flight>) => {
+    setFlights((prev) => prev.map((f) => (f.id === id ? { ...f, ...data } : f)));
+    try {
+      const res = await fetch(`/api/flights/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error(`PATCH ${res.status}`);
+      // Re-fetch to get any server-side derivations (auto-transitions etc.)
+      fetchFlights();
+    } catch (e) {
+      console.error("[dia] patch failed", e);
+      fetchFlights(); // roll back
+    }
+  }, [fetchFlights]);
+
   const sortedFlights = useMemo(() => {
     const lite = flights as unknown as FlightLite[];
     return [...flights]
@@ -76,10 +117,8 @@ export default function DiaPage() {
         urgency: rowUrgency(lite[i], date, now),
       }))
       .sort((a, b) => {
-        // Departed/terminados al final
         if (a.urgency === "departed" && b.urgency !== "departed") return 1;
         if (b.urgency === "departed" && a.urgency !== "departed") return -1;
-        // Sin próximo evento al final del bloque activo
         if (a.next === null && b.next !== null) return 1;
         if (b.next === null && a.next !== null) return -1;
         if (a.next === null && b.next === null) return 0;
@@ -90,6 +129,11 @@ export default function DiaPage() {
   const stats = useMemo(
     () => computeHeaderStats(flights as unknown as FlightLite[], date, now),
     [flights, date, now],
+  );
+
+  const selectedFlight = useMemo(
+    () => flights.find((f) => f.id === selectedFlightId) ?? null,
+    [flights, selectedFlightId],
   );
 
   const formatTime = (d: Date, tz?: string) =>
@@ -153,20 +197,16 @@ export default function DiaPage() {
           <span className="rounded bg-blue-900/50 px-2 py-1 border border-blue-400/30">LLEG: {stats.arrivals}</span>
           <span className="rounded bg-orange-900/50 px-2 py-1 border border-orange-400/30">SAL: {stats.departures}</span>
           {stats.approaching > 0 && (
-            <span className="rounded bg-sky-700/60 px-2 py-1 border border-sky-300/40 animate-pulse" title="Aviones acercandose ahora">
-              <PlaneLanding size={11} className="inline mb-0.5 mr-1" />
-              {stats.approaching} aprox
+            <span className="rounded bg-sky-700/60 px-2 py-1 border border-sky-300/40 animate-pulse">
+              <PlaneLanding size={11} className="inline mb-0.5 mr-1" />{stats.approaching} aprox
             </span>
           )}
           {stats.pendingDepServices > 0 && (
-            <span className="rounded bg-yellow-700/60 px-2 py-1 border border-yellow-300/40" title="Vuelos con servicios de salida pendientes">
-              {stats.pendingDepServices} pend.
-            </span>
+            <span className="rounded bg-yellow-700/60 px-2 py-1 border border-yellow-300/40">{stats.pendingDepServices} pend.</span>
           )}
           {stats.alerts > 0 && (
-            <span className="rounded bg-red-700/70 px-2 py-1 border border-red-300/40 animate-pulse" title="Vuelos con alerta de retraso o servicios sin terminar">
-              <AlertTriangle size={11} className="inline mb-0.5 mr-1" />
-              {stats.alerts} alerta
+            <span className="rounded bg-red-700/70 px-2 py-1 border border-red-300/40 animate-pulse">
+              <AlertTriangle size={11} className="inline mb-0.5 mr-1" />{stats.alerts} alerta
             </span>
           )}
           <button onClick={() => router.push("/")} className="rounded bg-gray-700 p-1.5 hover:bg-gray-600" title="Volver a tarjetas">
@@ -175,146 +215,167 @@ export default function DiaPage() {
         </div>
       </header>
 
-      {/* TABLE */}
-      <main className="flex-1 overflow-auto bg-white p-1">
-        <table className="w-full border-collapse border-spacing-0 text-[13px]">
-          <thead className="sticky top-0 z-20 bg-[#ecf0f1] text-[#34495e] shadow-sm">
-            <tr>
-              <th className="border border-gray-300 p-1 font-bold w-8">ST</th>
-              <th className="border border-gray-300 p-1 font-bold w-16">LIVE</th>
-              <th colSpan={4} className="border border-gray-300 bg-blue-50 p-1 font-bold text-blue-800">LLEGADA</th>
-              <th colSpan={3} className="border border-gray-300 bg-gray-100 p-1 font-bold text-gray-800">AVION / PARKING</th>
-              <th colSpan={3} className="border border-gray-300 bg-yellow-50 p-1 font-bold text-yellow-800">SVC</th>
-              <th colSpan={4} className="border border-gray-300 bg-orange-50 p-1 font-bold text-orange-800">SALIDA</th>
-              <th className="border border-gray-300 bg-gray-50 p-1 font-bold">PAX / CREW</th>
-            </tr>
-            <tr className="bg-gray-50 text-[11px] uppercase tracking-wider text-gray-500">
-              <th className="border border-gray-300 p-1 w-6"></th>
-              <th className="border border-gray-300 p-1 w-16"></th>
-              <th className="border border-gray-300 p-1 w-24">Vuelo</th>
-              <th className="border border-gray-300 p-1 w-16">Origen</th>
-              <th className="border border-gray-300 p-1 w-16">ETA (Z)</th>
-              <th className="border border-gray-300 p-1 w-16">ATA (Z)</th>
+      {/* MAIN: tabla + panel */}
+      <main className="flex flex-1 overflow-hidden">
+        {/* TABLE */}
+        <div className="flex-1 overflow-auto bg-white p-1">
+          <table className="w-full border-collapse border-spacing-0 text-[13px]">
+            <thead className="sticky top-0 z-20 bg-[#ecf0f1] text-[#34495e] shadow-sm">
+              <tr>
+                <th className="border border-gray-300 p-1 font-bold w-8">ST</th>
+                <th className="border border-gray-300 p-1 font-bold w-16">LIVE</th>
+                <th colSpan={4} className="border border-gray-300 bg-blue-50 p-1 font-bold text-blue-800">LLEGADA</th>
+                <th colSpan={3} className="border border-gray-300 bg-gray-100 p-1 font-bold text-gray-800">AVION / PARKING</th>
+                <th colSpan={3} className="border border-gray-300 bg-yellow-50 p-1 font-bold text-yellow-800">SVC</th>
+                <th colSpan={4} className="border border-gray-300 bg-orange-50 p-1 font-bold text-orange-800">SALIDA</th>
+                <th className="border border-gray-300 bg-gray-50 p-1 font-bold">PAX / CREW</th>
+              </tr>
+              <tr className="bg-gray-50 text-[11px] uppercase tracking-wider text-gray-500">
+                <th className="border border-gray-300 p-1 w-6"></th>
+                <th className="border border-gray-300 p-1 w-16"></th>
+                <th className="border border-gray-300 p-1 w-24">Vuelo</th>
+                <th className="border border-gray-300 p-1 w-16">Origen</th>
+                <th className="border border-gray-300 p-1 w-16">ETA (Z)</th>
+                <th className="border border-gray-300 p-1 w-16">ATA (Z)</th>
+                <th className="border border-gray-300 p-1 w-28">Matricula</th>
+                <th className="border border-gray-300 p-1 w-16">Tipo</th>
+                <th className="border border-gray-300 p-1 w-16">Stand</th>
+                <th className="border border-gray-300 p-1 w-8" title="Fuel">F</th>
+                <th className="border border-gray-300 p-1 w-8" title="Catering">C</th>
+                <th className="border border-gray-300 p-1 w-8" title="Toilet">T</th>
+                <th className="border border-gray-300 p-1 w-24">Vuelo</th>
+                <th className="border border-gray-300 p-1 w-16">Destino</th>
+                <th className="border border-gray-300 p-1 w-16">ETD (Z)</th>
+                <th className="border border-gray-300 p-1 w-16">ATD (Z)</th>
+                <th className="border border-gray-300 p-1">P | C</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sortedFlights.map(({ f, urgency }) => {
+                const lite = f as unknown as FlightLite;
+                const isArr = isArrivalToday(f, date);
+                const isDep = isDepartureToday(f, date);
+                const ata = deriveATA(lite);
+                const atd = deriveATD(lite);
+                const live = f.livePhase ? LIVE_PHASE_UI[f.livePhase] : null;
+                const liveStale =
+                  f.liveLastSeenAt && Date.now() - new Date(f.liveLastSeenAt).getTime() > STALE_LIVE_MS;
+                const showLive = live && !liveStale;
+                const dotClass = STATE_DOT_CLASS[f.state] ?? "bg-gray-300";
+                const rowClass = URGENCY_ROW_CLASS[urgency];
+                const isSelected = selectedFlightId === f.id;
+                const paxArr = f.paxArrivalReal ?? f.paxArrival;
+                const paxDep = f.paxDepartureReal ?? f.paxDeparture;
+                const crewArr = f.crewArrivalReal ?? f.crewArrival;
+                const crewDep = f.crewDepartureReal ?? f.crewDeparture;
 
-              <th className="border border-gray-300 p-1 w-28">Matricula</th>
-              <th className="border border-gray-300 p-1 w-16">Tipo</th>
-              <th className="border border-gray-300 p-1 w-16">Stand</th>
+                return (
+                  <tr
+                    key={f.id}
+                    onClick={() => setSelectedFlightId(isSelected ? null : f.id)}
+                    className={`group cursor-pointer border-b border-gray-200 transition-colors hover:bg-blue-50/40 ${rowClass} ${isSelected ? "outline outline-2 outline-blue-500 outline-offset-[-2px]" : ""}`}
+                  >
+                    <td className="border border-gray-200 p-1 text-center">
+                      <div className={`mx-auto h-3 w-3 rounded-full shadow-inner ${dotClass}`} title={f.state} />
+                    </td>
 
-              <th className="border border-gray-300 p-1 w-8" title="Fuel">F</th>
-              <th className="border border-gray-300 p-1 w-8" title="Catering">C</th>
-              <th className="border border-gray-300 p-1 w-8" title="Toilet">T</th>
+                    <td className="border border-gray-200 p-0 text-center">
+                      {showLive && live ? (
+                        <div className={`mx-auto inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-bold ${live.cls}`}>
+                          <live.Icon size={9} />{live.label}
+                        </div>
+                      ) : (
+                        <span className="text-gray-300 text-[10px]">—</span>
+                      )}
+                    </td>
 
-              <th className="border border-gray-300 p-1 w-24">Vuelo</th>
-              <th className="border border-gray-300 p-1 w-16">Destino</th>
-              <th className="border border-gray-300 p-1 w-16">ETD (Z)</th>
-              <th className="border border-gray-300 p-1 w-16">ATD (Z)</th>
-
-              <th className="border border-gray-300 p-1">P | C</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sortedFlights.map(({ f, urgency }) => {
-              const lite = f as unknown as FlightLite;
-              const isArr = isArrivalToday(f, date);
-              const isDep = isDepartureToday(f, date);
-              const ata = deriveATA(lite);
-              const atd = deriveATD(lite);
-              const live = f.livePhase ? LIVE_PHASE_UI[f.livePhase] : null;
-              const liveStale =
-                f.liveLastSeenAt && Date.now() - new Date(f.liveLastSeenAt).getTime() > STALE_LIVE_MS;
-              const showLive = live && !liveStale;
-
-              const dotClass = STATE_DOT_CLASS[f.state] ?? "bg-gray-300";
-              const rowClass = URGENCY_ROW_CLASS[urgency];
-
-              const paxArr = f.paxArrivalReal ?? f.paxArrival;
-              const paxDep = f.paxDepartureReal ?? f.paxDeparture;
-              const crewArr = f.crewArrivalReal ?? f.crewArrival;
-              const crewDep = f.crewDepartureReal ?? f.crewDeparture;
-
-              return (
-                <tr
-                  key={f.id}
-                  className={`group border-b border-gray-200 transition-colors hover:bg-blue-50/40 ${rowClass}`}
-                >
-                  <td className="border border-gray-200 p-1 text-center">
-                    <div className={`mx-auto h-3 w-3 rounded-full shadow-inner ${dotClass}`} title={f.state} />
-                  </td>
-
-                  <td className="border border-gray-200 p-0 text-center">
-                    {showLive && live ? (
-                      <div
-                        className={`mx-auto inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-bold ${live.cls}`}
-                        title={`OpenSky · ultima posicion ${f.liveLastSeenAt ? new Date(f.liveLastSeenAt).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }) : "?"}`}
-                      >
-                        <live.Icon size={9} />
-                        {live.label}
-                      </div>
+                    {/* LLEGADA */}
+                    {isArr ? (
+                      <>
+                        <td className="border border-gray-200 p-1 px-2 font-bold text-blue-700">{f.callsign}</td>
+                        <td className="border border-gray-200 p-1 text-center font-mono">{f.origin || "—"}</td>
+                        <td className="border border-gray-200 p-1 text-center font-mono font-medium">
+                          <QuickTimeEdit value={f.eta} onSave={(v) => patchFlight(f.id, { eta: v })} />
+                        </td>
+                        <td className={`border border-gray-200 p-1 text-center font-mono ${ata ? "text-emerald-700 font-semibold" : "text-gray-300 italic text-[11px]"}`}>{ata ?? "--:--"}</td>
+                      </>
                     ) : (
-                      <span className="text-gray-300 text-[10px]">—</span>
+                      <td colSpan={4} className="border border-gray-200 bg-gray-50 p-1 text-center text-[11px] text-gray-300 italic">sin llegada hoy</td>
                     )}
-                  </td>
 
-                  {/* LLEGADA */}
-                  {isArr ? (
-                    <>
-                      <td className="border border-gray-200 p-1 px-2 font-bold text-blue-700">{f.callsign}</td>
-                      <td className="border border-gray-200 p-1 text-center font-mono">{f.origin || "—"}</td>
-                      <td className="border border-gray-200 p-1 text-center font-mono font-medium">{f.eta || "—"}</td>
-                      <td className={`border border-gray-200 p-1 text-center font-mono ${ata ? "text-emerald-700 font-semibold" : "text-gray-300 italic text-[11px]"}`}>{ata ?? "--:--"}</td>
-                    </>
-                  ) : (
-                    <td colSpan={4} className="border border-gray-200 bg-gray-50 p-1 text-center text-[11px] text-gray-300 italic">
-                      sin llegada hoy
+                    {/* AVION */}
+                    <td className="border border-gray-200 p-1 px-2 text-center bg-gray-50/50">
+                      <span className="rounded bg-white border border-gray-300 px-2 py-0.5 font-mono font-bold tracking-tight shadow-sm">{f.registration}</span>
                     </td>
-                  )}
-
-                  {/* AVION */}
-                  <td className="border border-gray-200 p-1 px-2 text-center bg-gray-50/50">
-                    <span className="rounded bg-white border border-gray-300 px-2 py-0.5 font-mono font-bold tracking-tight shadow-sm">
-                      {f.registration}
-                    </span>
-                  </td>
-                  <td className="border border-gray-200 p-1 text-center font-mono text-gray-600">{f.aircraftType}</td>
-                  <td className="border border-gray-200 p-1 text-center bg-gray-50/50">
-                    <span className={`font-mono font-bold text-lg leading-none ${f.parking ? "text-gray-900" : "text-gray-300 italic text-xs font-normal"}`}>
-                      {f.parking || "tbd"}
-                    </span>
-                  </td>
-
-                  {/* SERVICIOS */}
-                  <ServiceCell state={f.fuelState === "SERVED" ? "DELIVERED" : f.fuelState === "REQUESTED" ? "ARRIVED" : "PENDING"} label="F" />
-                  <ServiceCell state={getServiceState(f, "CATERING")} label="C" />
-                  <ServiceCell state={f.toiletState === "COMPLETED" ? "DELIVERED" : f.toiletState === "REQUESTED" ? "ARRIVED" : "PENDING"} label="T" />
-
-                  {/* SALIDA */}
-                  {isDep ? (
-                    <>
-                      <td className="border border-gray-200 p-1 px-2 font-bold text-orange-700">{f.callsign}</td>
-                      <td className="border border-gray-200 p-1 text-center font-mono">{f.destination || "—"}</td>
-                      <td className="border border-gray-200 p-1 text-center font-mono font-medium">{f.etd || "—"}</td>
-                      <td className={`border border-gray-200 p-1 text-center font-mono ${atd ? "text-emerald-700 font-semibold" : "text-gray-300 italic text-[11px]"}`}>{atd ?? "--:--"}</td>
-                    </>
-                  ) : (
-                    <td colSpan={4} className="border border-gray-200 bg-gray-50 p-1 text-center text-[11px] text-gray-300 italic">
-                      sin salida hoy
+                    <td className="border border-gray-200 p-1 text-center font-mono text-gray-600">{f.aircraftType}</td>
+                    <td className="border border-gray-200 p-1 text-center bg-gray-50/50">
+                      <InlineTextEdit
+                        value={f.parking || ""}
+                        onSave={(v) => patchFlight(f.id, { parking: v || null })}
+                        placeholder="tbd"
+                        stopPropagation
+                        className={`font-mono font-bold ${f.parking ? "text-gray-900" : "text-gray-300 italic text-xs"}`}
+                        inputClassName="w-12 text-center font-mono"
+                      />
                     </td>
-                  )}
 
-                  {/* PAX / CREW */}
-                  <td className="border border-gray-200 p-1 text-center whitespace-nowrap bg-gray-50/30">
-                    <span className="text-gray-800 font-medium">P: {paxArr}/{paxDep}</span>
-                    <span className="mx-2 text-gray-300">|</span>
-                    <span className="text-gray-500">C: {crewArr}/{crewDep}</span>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                    {/* SERVICIOS — F y T inline cycle, C abre panel (Phase 4) */}
+                    <FuelCell
+                      state={f.fuelState}
+                      onCycle={(e) => {
+                        e.stopPropagation();
+                        patchFlight(f.id, { fuelState: nextInCycle(FUEL_CYCLE, f.fuelState) });
+                      }}
+                    />
+                    <CateringCell
+                      flight={f}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedFlightId(f.id); // open panel to manage catering
+                      }}
+                    />
+                    <ToiletCell
+                      state={f.toiletState}
+                      onCycle={(e) => {
+                        e.stopPropagation();
+                        patchFlight(f.id, { toiletState: nextInCycle(TOILET_CYCLE, f.toiletState) });
+                      }}
+                    />
 
-        {flights.length === 0 && (
-          <div className="p-12 text-center text-gray-400 italic">No hay vuelos registrados para este dia.</div>
+                    {/* SALIDA */}
+                    {isDep ? (
+                      <>
+                        <td className="border border-gray-200 p-1 px-2 font-bold text-orange-700">{f.callsign}</td>
+                        <td className="border border-gray-200 p-1 text-center font-mono">{f.destination || "—"}</td>
+                        <td className="border border-gray-200 p-1 text-center font-mono font-medium">
+                          <QuickTimeEdit value={f.etd} onSave={(v) => patchFlight(f.id, { etd: v })} />
+                        </td>
+                        <td className={`border border-gray-200 p-1 text-center font-mono ${atd ? "text-emerald-700 font-semibold" : "text-gray-300 italic text-[11px]"}`}>{atd ?? "--:--"}</td>
+                      </>
+                    ) : (
+                      <td colSpan={4} className="border border-gray-200 bg-gray-50 p-1 text-center text-[11px] text-gray-300 italic">sin salida hoy</td>
+                    )}
+
+                    {/* PAX / CREW */}
+                    <td className="border border-gray-200 p-1 text-center whitespace-nowrap bg-gray-50/30">
+                      <span className="text-gray-800 font-medium">P: {paxArr}/{paxDep}</span>
+                      <span className="mx-2 text-gray-300">|</span>
+                      <span className="text-gray-500">C: {crewArr}/{crewDep}</span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+
+          {flights.length === 0 && (
+            <div className="p-12 text-center text-gray-400 italic">No hay vuelos registrados para este dia.</div>
+          )}
+        </div>
+
+        {/* PANEL DETALLE — solo cuando hay seleccion */}
+        {selectedFlight && (
+          <FlightDetailPanel flight={selectedFlight} onClose={() => setSelectedFlightId(null)} />
         )}
       </main>
 
@@ -327,40 +388,64 @@ export default function DiaPage() {
           <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-orange-500 animate-pulse" /> Boarding</span>
           <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-green-600" /> Despegado</span>
           <span className="ml-2 flex items-center gap-1"><span className="h-2 w-2 rounded bg-red-200" /> alerta</span>
-          <span className="flex items-center gap-1"><span className="h-2 w-2 rounded bg-yellow-50 ring-1 ring-yellow-300" /> ETD &lt;30m</span>
         </div>
-        <div>MALLORCAIR Operations System v0.4 — orden por proximo evento</div>
+        <div>Click en F/T cicla estado · click ETA/ETD/parking edita · click resto de fila abre detalle · Esc cierra</div>
       </footer>
     </div>
   );
 }
 
-function getServiceState(flight: FlightWithRelations, type: string) {
-  const svc = flight.services.find((s) => s.type === type);
-  if (!svc) return "NONE";
-  return svc.state;
-}
+// ─── Service cells ─────────────────────────────────────────────────────────
 
-function ServiceCell({ state, label }: { state: string; label: string }) {
-  const colors: Record<string, string> = {
-    DELIVERED: "bg-green-500 text-white border-green-600",
-    ARRIVED: "bg-yellow-400 text-yellow-900 border-yellow-500 animate-pulse",
-    PENDING: "bg-gray-100 text-gray-400 border-gray-200",
-    NONE: "bg-gray-50 text-gray-200 border-transparent",
-  };
-  const current =
-    state === "DELIVERED" || state === "COMPLETED" || state === "SERVED"
-      ? "DELIVERED"
-      : state === "ARRIVED" || state === "REQUESTED"
-        ? "ARRIVED"
-        : state === "PENDING"
-          ? "PENDING"
-          : "NONE";
+function ServiceCellShell({ children, onClick, title, tone }: {
+  children: React.ReactNode;
+  onClick?: (e: React.MouseEvent) => void;
+  title: string;
+  tone: string;
+}) {
   return (
     <td className="border border-gray-200 p-0 text-center w-8 h-8">
-      <div className={`flex h-full w-full items-center justify-center font-bold border-b-2 ${colors[current]}`}>
-        {label}
-      </div>
+      <button
+        type="button"
+        onClick={onClick}
+        title={title}
+        className={`flex h-full w-full items-center justify-center font-bold border-b-2 transition-colors ${tone}`}
+      >
+        {children}
+      </button>
     </td>
+  );
+}
+
+function FuelCell({ state, onCycle }: { state: string; onCycle: (e: React.MouseEvent) => void }) {
+  const tone =
+    state === "SERVED" ? "bg-green-500 text-white border-green-600 hover:bg-green-600" :
+    state === "REQUESTED" ? "bg-yellow-400 text-yellow-900 border-yellow-500 animate-pulse hover:bg-yellow-500" :
+    "bg-gray-100 text-gray-400 border-gray-200 hover:bg-gray-200";
+  return (
+    <ServiceCellShell onClick={onCycle} title={`Fuel: ${state} (click para avanzar)`} tone={tone}>F</ServiceCellShell>
+  );
+}
+
+function ToiletCell({ state, onCycle }: { state: string; onCycle: (e: React.MouseEvent) => void }) {
+  const tone =
+    state === "COMPLETED" ? "bg-green-500 text-white border-green-600 hover:bg-green-600" :
+    state === "REQUESTED" ? "bg-yellow-400 text-yellow-900 border-yellow-500 animate-pulse hover:bg-yellow-500" :
+    "bg-gray-100 text-gray-400 border-gray-200 hover:bg-gray-200";
+  return (
+    <ServiceCellShell onClick={onCycle} title={`Toilet: ${state} (click para avanzar)`} tone={tone}>T</ServiceCellShell>
+  );
+}
+
+function CateringCell({ flight, onClick }: { flight: FlightWithRelations; onClick: (e: React.MouseEvent) => void }) {
+  const cat = flight.services.find((s) => s.type === "CATERING");
+  const state = cat?.state ?? "NONE";
+  const tone =
+    state === "DELIVERED" ? "bg-green-500 text-white border-green-600 hover:bg-green-600" :
+    state === "ARRIVED" ? "bg-yellow-400 text-yellow-900 border-yellow-500 animate-pulse hover:bg-yellow-500" :
+    state === "PENDING" ? "bg-gray-100 text-gray-400 border-gray-200 hover:bg-gray-200" :
+    "bg-gray-50 text-gray-200 border-transparent hover:bg-gray-100";
+  return (
+    <ServiceCellShell onClick={onClick} title={cat ? `Catering: ${state} (click para gestionar)` : "Sin catering — click para añadir en el panel"} tone={tone}>C</ServiceCellShell>
   );
 }
