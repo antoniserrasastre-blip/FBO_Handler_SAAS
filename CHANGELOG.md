@@ -9,6 +9,34 @@
 
 ---
 
+## v0.5 — Estados simplificados de 6 a 5 (2026-05-12)
+
+**Qué ve distinto el handler**: los estados de cada vuelo se reducen y
+se renombran para que sean más claros operativamente:
+
+| Antes (6) | Ahora (5) |
+|---|---|
+| EXPECTED — Esperando llegada | EXPECTED — Esperando llegada |
+| ON_BLOCKS — En calzos | **ARRIVING — Llegando** |
+| PARKED — En plataforma | PARKED — En plataforma |
+| TURNAROUND — Preparación salida | **DEPARTING — Preparación salida** |
+| BOARDING — Embarque realizado | (fundido en DEPARTING) |
+| OFF_BLOCKS — Fuera de calzos | **DEPARTED — Despegado** |
+
+**Por qué**: BOARDING y TURNAROUND eran muy cercanos — el cambio entre
+ellos no disparaba ninguna acción operativa específica. Se funden en
+DEPARTING; la sub-fase "embarcando ahora" se ve via `paxDepState=BOARDED`
+como badge cuando aplica. ON_BLOCKS chocaba con la fase del POC OpenSky.
+OFF_BLOCKS y DISPATCHED eran nombres técnicos que no decían nada — ahora
+"Despegado".
+
+**Compatibilidad**: vuelos pre-migración con estados viejos siguen
+mostrándose correctos (mapeo automático ON_BLOCKS→ARRIVING, etc.). Una
+migración SQL idempotente actualiza la DB en el primer arranque post-deploy
+y deja los datos limpios.
+
+---
+
 ## v0.4 — Pegar GenDec en vez de teclear (2026-05-12)
 
 **Qué ve distinto el handler**: en el modal de Tripulación/Pasajeros de cada

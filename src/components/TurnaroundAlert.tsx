@@ -77,9 +77,9 @@ export function getTurnaroundAlerts(
       continue;
     }
 
-    // Salida: ON_BLOCKS / PARKED / TURNAROUND / BOARDING con ETD <= 90 min y servicios pendientes
+    // Salida: ARRIVING / PARKED / DEPARTING con ETD <= 90 min y servicios pendientes
     if (
-      (state === "ON_BLOCKS" || state === "PARKED" || state === "TURNAROUND" || state === "BOARDING") &&
+      (state === "ARRIVING" || state === "PARKED" || state === "DEPARTING") &&
       flight.etd
     ) {
       const minutesUntilDeparture = minutesUntil(flight.etd, dayUtc, now);

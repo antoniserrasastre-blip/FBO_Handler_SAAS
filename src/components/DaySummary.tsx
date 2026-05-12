@@ -17,10 +17,14 @@ export function DaySummary({ flights, date, connected, isToday = true, onDateCha
   const { data: session } = useSession();
   const router = useRouter();
 
-  const onGround = flights.filter((f) => f.state === "ON_GROUND").length;
+  // Estados nuevos (5 valores). Mantenemos compatibilidad leyendo tambien los
+  // viejos por si quedara algun row sin migrar; el normalizer mapea pero
+  // aqui contamos directo para ahorrar normalizacion.
+  const onGround = flights.filter((f) => f.state === "ARRIVING" || f.state === "ON_BLOCKS" || f.state === "ON_GROUND").length;
   const expected = flights.filter((f) => f.state === "EXPECTED").length;
-  const boarding = flights.filter((f) => f.state === "BOARDING").length;
-  const dispatched = flights.filter((f) => f.state === "DISPATCHED").length;
+  // "Embarcando" ahora es subfase de DEPARTING — usamos paxDepState para detectarlo
+  const boarding = flights.filter((f) => f.paxDepState === "BOARDED").length;
+  const dispatched = flights.filter((f) => f.state === "DEPARTED" || f.state === "OFF_BLOCKS" || f.state === "DISPATCHED").length;
   const paxInLounge = flights.reduce((sum, f) => {
     let count = 0;
     if (f.paxArrState === "IN_LOUNGE") count += f.paxArrival;

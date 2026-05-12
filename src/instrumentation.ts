@@ -8,7 +8,18 @@
 
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
-    console.log("[instrumentation] register() called, starting live tracking worker");
+    console.log("[instrumentation] register() called");
+
+    // Una sola pasada idempotente para migrar estados 6→5 si quedan rows
+    // viejos (ON_BLOCKS, TURNAROUND, BOARDING, OFF_BLOCKS).
+    try {
+      const { migrateFlightStatesTo5 } = await import("@/lib/stateMigration");
+      const r = await migrateFlightStatesTo5();
+      if (r.updated > 0) console.log(`[stateMigration] total ${r.updated} flights migrados a estados nuevos`);
+    } catch (e) {
+      console.error("[stateMigration] failed:", e instanceof Error ? e.message : e);
+    }
+
     const { startLiveTrackingWorker } = await import("@/lib/liveTrackingWorker");
     startLiveTrackingWorker();
   }

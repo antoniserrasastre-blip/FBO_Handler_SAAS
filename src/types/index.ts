@@ -1,18 +1,29 @@
-// Flight states (workflow real: pre-llegada → en calzos → [pernocta] → preparacion salida → embarque → fuera de calzos)
+// Flight states (workflow real, 5 estados):
+//   pre-llegada → arrival activa → quieto en parking → preparacion+boarding → despegado
 export const FLIGHT_STATES = [
   "EXPECTED",
-  "ON_BLOCKS",
+  "ARRIVING",
   "PARKED",
-  "TURNAROUND",
-  "BOARDING",
-  "OFF_BLOCKS",
+  "DEPARTING",
+  "DEPARTED",
 ] as const;
 export type FlightState = (typeof FLIGHT_STATES)[number];
 
-// Legacy state aliases — mapean estados viejos a los nuevos para tarjetas existentes
+/**
+ * Mapea estados viejos a los nuevos para datos previos a la migracion 6→5.
+ *  - ON_BLOCKS  → ARRIVING  (avion en stand, descarga activa)
+ *  - TURNAROUND → DEPARTING
+ *  - BOARDING   → DEPARTING (boarding ahora es subfase de DEPARTING via paxDepState)
+ *  - OFF_BLOCKS → DEPARTED  (fuera de calzos, despego)
+ *  - ON_GROUND / DISPATCHED → estados todavia mas viejos (pre-2026)
+ */
 export const LEGACY_STATE_MAP: Record<string, FlightState> = {
-  ON_GROUND: "ON_BLOCKS",
-  DISPATCHED: "OFF_BLOCKS",
+  ON_BLOCKS: "ARRIVING",
+  TURNAROUND: "DEPARTING",
+  BOARDING: "DEPARTING",
+  OFF_BLOCKS: "DEPARTED",
+  ON_GROUND: "ARRIVING",
+  DISPATCHED: "DEPARTED",
 };
 
 export function normalizeFlightState(state: string): FlightState {
@@ -94,36 +105,29 @@ export const FLIGHT_STATE_CONFIG: Record<
     text: "text-gray-700",
     progress: 0,
   },
-  ON_BLOCKS: {
-    label: "En calzos",
+  ARRIVING: {
+    label: "Llegando",
     color: "#3B82F6",
     bg: "bg-blue-100",
     text: "text-blue-700",
-    progress: 20,
+    progress: 25,
   },
   PARKED: {
     label: "En plataforma",
     color: "#8B5CF6",
     bg: "bg-purple-100",
     text: "text-purple-700",
-    progress: 40,
+    progress: 50,
   },
-  TURNAROUND: {
+  DEPARTING: {
     label: "Preparacion salida",
     color: "#06B6D4",
     bg: "bg-cyan-100",
     text: "text-cyan-700",
-    progress: 60,
+    progress: 75,
   },
-  BOARDING: {
-    label: "Embarque realizado",
-    color: "#EAB308",
-    bg: "bg-yellow-100",
-    text: "text-yellow-700",
-    progress: 80,
-  },
-  OFF_BLOCKS: {
-    label: "Fuera de calzos",
+  DEPARTED: {
+    label: "Despegado",
     color: "#22C55E",
     bg: "bg-green-100",
     text: "text-green-700",

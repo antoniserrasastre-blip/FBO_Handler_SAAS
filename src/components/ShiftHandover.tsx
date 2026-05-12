@@ -23,10 +23,10 @@ interface ShiftHandoverProps {
 
 export function ShiftHandover({ isOpen, onClose, flights, date }: ShiftHandoverProps) {
   const summary = useMemo(() => {
-    const inProgress = flights.filter((f) => f.state !== "DISPATCHED" && f.state !== "EXPECTED");
+    const inProgress = flights.filter((f) => f.state !== "DEPARTED" && f.state !== "OFF_BLOCKS" && f.state !== "DISPATCHED" && f.state !== "EXPECTED");
     const expected = flights.filter((f) => f.state === "EXPECTED");
-    const dispatched = flights.filter((f) => f.state === "DISPATCHED");
-    const fuelPending = flights.filter((f) => f.state !== "DISPATCHED" && (f.fuelState === "REQUESTED" || f.fuelState === "NOT_REQUESTED"));
+    const dispatched = flights.filter((f) => f.state === "DEPARTED" || f.state === "OFF_BLOCKS" || f.state === "DISPATCHED");
+    const fuelPending = flights.filter((f) => f.state !== "DEPARTED" && f.state !== "OFF_BLOCKS" && f.state !== "DISPATCHED" && (f.fuelState === "REQUESTED" || f.fuelState === "NOT_REQUESTED"));
     const pendingServices = flights.flatMap((f) =>
       (f.services || []).filter((s) => s.state !== "DELIVERED").map((s) => ({ flight: f, service: s }))
     );
@@ -36,7 +36,7 @@ export function ShiftHandover({ isOpen, onClose, flights, date }: ShiftHandoverP
     const openLostItems = flights.flatMap((f) =>
       (f.lostItems || []).filter((li) => li.state !== "DELIVERED").map((li) => ({ flight: f, item: li }))
     );
-    const policiaNeeded = flights.filter((f) => f.state !== "DISPATCHED" && getRequiredAuthorities(f.origin).policia);
+    const policiaNeeded = flights.filter((f) => f.state !== "DEPARTED" && f.state !== "OFF_BLOCKS" && f.state !== "DISPATCHED" && getRequiredAuthorities(f.origin).policia);
 
     return { inProgress, expected, dispatched, fuelPending, pendingServices, overdueServices, openLostItems, policiaNeeded };
   }, [flights]);

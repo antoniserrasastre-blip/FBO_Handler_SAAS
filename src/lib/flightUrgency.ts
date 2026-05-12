@@ -26,13 +26,11 @@ export function getFlightClock(flight: Pick<Flight, "state" | "eta" | "etd">): F
   switch (state) {
     case "EXPECTED":
       return { kind: "ETA", ref: flight.eta ?? null };
-    case "TURNAROUND":
-    case "BOARDING":
-      return { kind: "ETD", ref: flight.etd ?? null };
-    case "ON_BLOCKS":
+    case "ARRIVING":
     case "PARKED":
+    case "DEPARTING":
       return { kind: "ETD", ref: flight.etd ?? null };
-    case "OFF_BLOCKS":
+    case "DEPARTED":
     default:
       return { kind: null, ref: null };
   }
@@ -65,13 +63,15 @@ export function isDepartureReady(services: Pick<Service, "phase" | "state">[]): 
  * Sugerir transición automática a partir del estado actual y los datos del vuelo.
  * Devuelve null si no se debe cambiar.
  *
- * Reglas:
- *   EXPECTED  + fuel/toilet/pax tocados → ON_BLOCKS
- *   ON_BLOCKS + arrival completo + isOvernight → PARKED
- *   ON_BLOCKS + arrival completo + !isOvernight → TURNAROUND
- *   PARKED    + ETD <90min                     → TURNAROUND
- *   TURNAROUND + paxDepState BOARDED            → BOARDING
- *   BOARDING  + (sin condición auto, manual)
+ * Reglas (5 estados):
+ *   EXPECTED  + fuel/toilet/pax tocados → ARRIVING
+ *   ARRIVING  + arrival completo + isOvernight → PARKED
+ *   ARRIVING  + arrival completo + !isOvernight → DEPARTING
+ *   PARKED    + ETD <90min → DEPARTING
+ *   DEPARTING + (sin transicion auto a DEPARTED — manual cuando off-blocks)
+ *
+ * Nota: el antiguo BOARDING ya no es estado top-level; el sub-estado
+ * "esta embarcando" se ve via paxDepState=BOARDED como badge en el UI.
  */
 export function suggestNextState(
   flight: Pick<
@@ -96,21 +96,17 @@ export function suggestNextState(
         flight.fuelState !== "NOT_REQUESTED" ||
         flight.toiletState !== "NOT_REQUESTED" ||
         flight.paxArrState !== "IN_AIRCRAFT";
-      if (arrivalTouched) return "ON_BLOCKS";
+      if (arrivalTouched) return "ARRIVING";
       return null;
     }
-    case "ON_BLOCKS": {
+    case "ARRIVING": {
       if (!arrivalDone) return null;
-      return flight.isOvernight ? "PARKED" : "TURNAROUND";
+      return flight.isOvernight ? "PARKED" : "DEPARTING";
     }
     case "PARKED": {
       if (!flight.etd) return null;
       const minutesUntil = minutesUntil_HHMM(flight.etd, nowMinutes);
-      if (minutesUntil !== null && minutesUntil <= 90 && minutesUntil > -60) return "TURNAROUND";
-      return null;
-    }
-    case "TURNAROUND": {
-      if (flight.paxDepState === "BOARDED") return "BOARDING";
+      if (minutesUntil !== null && minutesUntil <= 90 && minutesUntil > -60) return "DEPARTING";
       return null;
     }
     default:

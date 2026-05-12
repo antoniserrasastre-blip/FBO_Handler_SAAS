@@ -80,9 +80,18 @@ describe("deriveATA", () => {
     expect(deriveATA(f)).toBe("09:42");
   });
 
-  it("uses eventLog timestamp when state went to ON_BLOCKS", () => {
+  it("uses eventLog timestamp when state went to ARRIVING (5-state)", () => {
     const f = mk({
-      state: "ON_BLOCKS",
+      state: "ARRIVING",
+      eventLogs: [
+        { id: "e1", flightId: "f1", userId: null, action: "Estado → ARRIVING", details: null, timestamp: new Date(Date.UTC(2026, 4, 12, 9, 45)) } as never,
+      ],
+    });
+    expect(deriveATA(f)).toBe("09:45");
+  });
+
+  it("acepta tambien el log legado 'Estado → ON_BLOCKS' (pre-migracion)", () => {
+    const f = mk({
       eventLogs: [
         { id: "e1", flightId: "f1", userId: null, action: "Estado → ON_BLOCKS", details: null, timestamp: new Date(Date.UTC(2026, 4, 12, 9, 45)) } as never,
       ],
@@ -115,9 +124,18 @@ describe("deriveATD", () => {
     expect(deriveATD(f)).toBe("12:15");
   });
 
-  it("uses eventLog timestamp when state went to OFF_BLOCKS", () => {
+  it("uses eventLog timestamp when state went to DEPARTED (5-state)", () => {
     const f = mk({
-      state: "OFF_BLOCKS",
+      state: "DEPARTED",
+      eventLogs: [
+        { id: "e1", flightId: "f1", userId: null, action: "Estado → DEPARTED", details: null, timestamp: new Date(Date.UTC(2026, 4, 12, 11, 5)) } as never,
+      ],
+    });
+    expect(deriveATD(f)).toBe("11:05");
+  });
+
+  it("acepta tambien el log legado 'Estado → OFF_BLOCKS'", () => {
+    const f = mk({
       eventLogs: [
         { id: "e1", flightId: "f1", userId: null, action: "Estado → OFF_BLOCKS", details: null, timestamp: new Date(Date.UTC(2026, 4, 12, 11, 5)) } as never,
       ],
@@ -151,29 +169,29 @@ describe("nextEventMinutes", () => {
     const f = mk({ state: "PARKED", etd: "12:30" });
     expect(nextEventMinutes(f, day, now)).toBe(150);
   });
-  it("OFF_BLOCKS → null", () => {
-    const f = mk({ state: "OFF_BLOCKS", etd: "08:00" });
+  it("DEPARTED → null", () => {
+    const f = mk({ state: "DEPARTED", etd: "08:00" });
     expect(nextEventMinutes(f, day, now)).toBeNull();
   });
 });
 
 describe("rowUrgency", () => {
-  it("departed when state=OFF_BLOCKS", () => {
+  it("departed when state=DEPARTED", () => {
+    expect(rowUrgency(mk({ state: "DEPARTED" }), day, now)).toBe("departed");
+  });
+
+  it("departed (compat) cuando state es legacy OFF_BLOCKS", () => {
     expect(rowUrgency(mk({ state: "OFF_BLOCKS" }), day, now)).toBe("departed");
   });
 
-  it("boarding when state=BOARDING", () => {
-    expect(rowUrgency(mk({ state: "BOARDING" }), day, now)).toBe("boarding");
-  });
-
-  it("alert when ETD past with no completion (state still TURNAROUND)", () => {
-    const f = mk({ state: "TURNAROUND", etd: "09:30" }); // 30 min ago
+  it("alert when ETD past with no completion (state DEPARTING)", () => {
+    const f = mk({ state: "DEPARTING", etd: "09:30" }); // 30 min ago
     expect(rowUrgency(f, day, now)).toBe("alert");
   });
 
   it("alert when ETD <30min and pending dep services", () => {
     const f = mk({
-      state: "TURNAROUND",
+      state: "DEPARTING",
       etd: "10:20",
       fuelState: "REQUESTED",
       services: [{ state: "PENDING", phase: "DEPARTURE" }],
@@ -183,7 +201,7 @@ describe("rowUrgency", () => {
 
   it("imminent when ETD <30min but services done", () => {
     const f = mk({
-      state: "TURNAROUND",
+      state: "DEPARTING",
       etd: "10:20",
       fuelState: "SERVED",
       services: [{ state: "DELIVERED", phase: "DEPARTURE" }],
@@ -254,15 +272,15 @@ describe("computeHeaderStats", () => {
   it("counts arrivals, departures, approaching, alerts", () => {
     const flights: FlightLite[] = [
       mk({ id: "1", state: "EXPECTED", eta: "11:00", arrivalDate: "12/05", livePhase: "APPROACHING" }),
-      mk({ id: "2", state: "ON_BLOCKS", etd: "12:00", departureDate: "12/05" }),
-      mk({ id: "3", state: "TURNAROUND", etd: "10:20", departureDate: "12/05", fuelState: "REQUESTED", services: [{ state: "PENDING", phase: "DEPARTURE" }] }),
+      mk({ id: "2", state: "ARRIVING", etd: "12:00", departureDate: "12/05" }),
+      mk({ id: "3", state: "DEPARTING", etd: "10:20", departureDate: "12/05", fuelState: "REQUESTED", services: [{ state: "PENDING", phase: "DEPARTURE" }] }),
     ];
     const s = computeHeaderStats(flights, day, now);
     expect(s.arrivals).toBe(1);
     expect(s.departures).toBe(2);
     expect(s.approaching).toBe(1);
-    // f2 is ON_BLOCKS (arrival activa) — no cuenta como pending DEP services.
-    // f3 está en TURNAROUND con fuel y catering pendientes.
+    // f2 es ARRIVING (arrival activa) — no cuenta como pending DEP services.
+    // f3 esta en DEPARTING con fuel y catering pendientes.
     expect(s.pendingDepServices).toBe(1);
     expect(s.alerts).toBe(1); // f3
   });

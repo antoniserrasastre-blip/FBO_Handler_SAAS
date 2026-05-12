@@ -105,10 +105,13 @@ function matchesSingleToken(flight: FlightWithRelations, token: string): boolean
   // --- Flight state ---
   const stateConfig = FLIGHT_STATE_CONFIG[flight.state as FlightState];
   if (stateConfig?.label.toLowerCase().includes(token)) return true;
-  if (token === "calzos" && flight.state === "ON_GROUND") return true;
+  if (token === "calzos" && (flight.state === "ARRIVING" || flight.state === "ON_BLOCKS" || flight.state === "ON_GROUND")) return true;
+  if (token === "llegando" && (flight.state === "ARRIVING" || flight.state === "ON_BLOCKS")) return true;
+  if (token === "parking" && flight.state === "PARKED") return true;
   if (token === "esperado" && flight.state === "EXPECTED") return true;
-  if (token === "embarque" && flight.state === "BOARDING") return true;
-  if (token === "despachado" && flight.state === "DISPATCHED") return true;
+  if (token === "salida" && (flight.state === "DEPARTING" || flight.state === "TURNAROUND" || flight.state === "BOARDING")) return true;
+  if (token === "embarque" && flight.paxDepState === "BOARDED") return true;
+  if (token === "despachado" && (flight.state === "DEPARTED" || flight.state === "OFF_BLOCKS" || flight.state === "DISPATCHED")) return true;
 
   // --- Origins / destinations ---
   if (flight.origin?.toLowerCase().includes(token)) return true;
