@@ -17,6 +17,7 @@ import {
   arrivalSegmentState,
   departureSegmentState,
   SEGMENT_CELL_CLASS,
+  shortDate,
   type FlightLite,
 } from "./diaHelpers";
 import { FlightDetailPanel } from "./FlightDetailPanel";
@@ -283,7 +284,10 @@ export default function DiaPage() {
                         <td className={`border border-gray-200 p-1 px-2 font-bold ${arrCls || "text-blue-700"}`}>{f.callsign}</td>
                         <td className={`border border-gray-200 p-1 text-center font-mono ${arrCls}`}>{f.origin || "—"}</td>
                         <td className={`border border-gray-200 p-1 text-center font-mono font-medium ${arrCls}`}>
-                          <QuickTimeEdit value={f.eta} onSave={(v) => patchFlight(f.id, { eta: v })} />
+                          <div className="flex flex-col items-center leading-tight">
+                            <QuickTimeEdit value={f.eta} onSave={(v) => patchFlight(f.id, { eta: v })} />
+                            <DateSubscript date={f.arrivalDate} viewDay={date} />
+                          </div>
                         </td>
                         <td className={`border border-gray-200 p-1 text-center font-mono ${arrCls || (ata ? "text-emerald-700 font-semibold" : "text-gray-300")}`}>
                           <QuickTimeEdit
@@ -342,7 +346,10 @@ export default function DiaPage() {
                         <td className={`border border-gray-200 p-1 px-2 font-bold ${depCls || "text-orange-700"}`}>{f.callsign}</td>
                         <td className={`border border-gray-200 p-1 text-center font-mono ${depCls}`}>{f.destination || "—"}</td>
                         <td className={`border border-gray-200 p-1 text-center font-mono font-medium ${depCls}`}>
-                          <QuickTimeEdit value={f.etd} onSave={(v) => patchFlight(f.id, { etd: v })} />
+                          <div className="flex flex-col items-center leading-tight">
+                            <QuickTimeEdit value={f.etd} onSave={(v) => patchFlight(f.id, { etd: v })} />
+                            <DateSubscript date={f.departureDate} viewDay={date} />
+                          </div>
                         </td>
                         <td className={`border border-gray-200 p-1 text-center font-mono ${depCls || (atd ? "text-emerald-700 font-semibold" : "text-gray-300")}`}>
                           <QuickTimeEdit
@@ -410,6 +417,17 @@ export default function DiaPage() {
         </div>
       </footer>
     </div>
+  );
+}
+
+// ─── Subscript de fecha — solo cuando la fecha del segmento difiere del dia visualizado ─
+
+function DateSubscript({ date, viewDay }: { date: string | null; viewDay: Date }) {
+  if (!date) return null;
+  const head = date.slice(0, 5); // "DD/MM"
+  if (head === shortDate(viewDay)) return null; // mismo dia → no ruido
+  return (
+    <span className="mt-0.5 text-[9px] text-current opacity-60 font-sans">{date}</span>
   );
 }
 
