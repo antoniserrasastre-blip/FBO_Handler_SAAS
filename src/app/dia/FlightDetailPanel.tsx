@@ -2,8 +2,9 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { Flight, Service, EventLog, LostItem } from "@prisma/client";
-import { X, Plane, ChevronDown, ChevronRight, Plus, Trash2, ClipboardPaste } from "lucide-react";
-import { FLIGHT_STATE_CONFIG, normalizeFlightState, SERVICE_TYPES, SERVICE_LABELS, type ServiceType } from "@/types";
+import { X, Plane, ChevronDown, ChevronRight, Plus, Trash2, Users, AlertOctagon } from "lucide-react";
+import { FLIGHT_STATE_CONFIG, normalizeFlightState, SERVICE_TYPES, SERVICE_LABELS, LOST_ITEM_LOCATIONS, LOST_ITEM_LOCATION_LABELS, LOST_ITEM_STATE_CONFIG, type ServiceType, type LostItemLocation, type LostItemState } from "@/types";
+import { GenDecPasteSection } from "@/components/GenDecPasteSection";
 
 type FlightWithRelations = Flight & {
   services: Service[];
@@ -16,6 +17,10 @@ interface Props {
   onClose: () => void;
   /** Trigger refetch after mutations (parent owns state). */
   onMutated: () => void;
+  /** Open the full PassengerCrewModal at the given direction. */
+  onOpenPaxCrew: (direction: "ARRIVAL" | "DEPARTURE") => void;
+  /** After flight is deleted (parent should also close panel). */
+  onDeleted: () => void;
 }
 
 const FUEL_CYCLE = ["NOT_REQUESTED", "REQUESTED", "SERVED"] as const;
@@ -27,7 +32,7 @@ function nextInCycle<T extends readonly string[]>(arr: T, current: string): T[nu
   return arr[(i + 1) % arr.length];
 }
 
-export function FlightDetailPanel({ flight, onClose, onMutated }: Props) {
+export function FlightDetailPanel({ flight, onClose, onMutated, onOpenPaxCrew, onDeleted }: Props) {
   const stateNorm = normalizeFlightState(flight.state);
   const stateCfg = FLIGHT_STATE_CONFIG[stateNorm];
 
@@ -112,27 +117,32 @@ export function FlightDetailPanel({ flight, onClose, onMutated }: Props) {
           <NotesPanel flight={flight} patchFlight={patchFlight} />
         </CollapsibleSection>
 
-        <CollapsibleSection title="GenDec — pegar manifiesto">
-          <div className="px-3 py-2 text-[11px] text-gray-500">
-            <p className="mb-2">Para gestionar tripulación y pasajeros usa el modal completo.</p>
-            <a
-              href="#"
-              onClick={(e) => {
-                e.preventDefault();
-                // TODO Phase 5: open PassengerCrewModal directly from here
-                alert("Próxima fase: abrir modal Pax/Crew con pegado GenDec embebido");
-              }}
-              className="inline-flex items-center gap-1 rounded bg-amber-600 px-2 py-1 text-white hover:bg-amber-700"
-            >
-              <ClipboardPaste size={11} /> Abrir modal pasajeros/tripulación
-            </a>
+        <CollapsibleSection title="Pasajeros y tripulación">
+          <PaxCrewPanel flight={flight} onOpenPaxCrew={onOpenPaxCrew} />
+        </CollapsibleSection>
+
+        <CollapsibleSection title="Pegar GenDec (LLEG)">
+          <div className="px-3 py-2">
+            <GenDecPasteSection
+              flightId={flight.id}
+              direction="ARRIVAL"
+              onImported={onMutated}
+            />
+          </div>
+        </CollapsibleSection>
+
+        <CollapsibleSection title="Pegar GenDec (SAL)">
+          <div className="px-3 py-2">
+            <GenDecPasteSection
+              flightId={flight.id}
+              direction="DEPARTURE"
+              onImported={onMutated}
+            />
           </div>
         </CollapsibleSection>
 
         <CollapsibleSection title="Lost items" badge={flight.lostItems?.length ? String(flight.lostItems.length) : undefined}>
-          <div className="px-3 py-2 text-[11px] text-gray-400 italic">
-            Próxima fase: lista + añadir aquí
-          </div>
+          <LostItemsPanel flight={flight} onMutated={onMutated} />
         </CollapsibleSection>
 
         <CollapsibleSection title="Actividad reciente" badge={flight.eventLogs?.length ? String(flight.eventLogs.length) : undefined}>
@@ -150,6 +160,10 @@ export function FlightDetailPanel({ flight, onClose, onMutated }: Props) {
           ) : (
             <div className="px-3 py-2 text-[11px] text-gray-400 italic">Sin actividad registrada</div>
           )}
+        </CollapsibleSection>
+
+        <CollapsibleSection title="Zona peligrosa">
+          <DangerZone flight={flight} onDeleted={onDeleted} />
         </CollapsibleSection>
       </div>
     </aside>
@@ -366,6 +380,250 @@ function AddServiceRow({ flightId, onAdded }: { flightId: string; onAdded: () =>
       >
         <Plus size={10} /> Añadir
       </button>
+    </div>
+  );
+}
+
+// ─── Pasajeros y tripulación ────────────────────────────────────────────────
+
+function PaxCrewPanel({
+  flight,
+  onOpenPaxCrew,
+}: {
+  flight: FlightWithRelations;
+  onOpenPaxCrew: (direction: "ARRIVAL" | "DEPARTURE") => void;
+}) {
+  return (
+    <div className="px-3 py-2 space-y-2 text-xs">
+      <div className="grid grid-cols-2 gap-2">
+        <PaxCrewSummary
+          label="Llegada"
+          crewEst={flight.crewArrival}
+          crewReal={flight.crewArrivalReal}
+          paxEst={flight.paxArrival}
+          paxReal={flight.paxArrivalReal}
+          onClick={() => onOpenPaxCrew("ARRIVAL")}
+        />
+        <PaxCrewSummary
+          label="Salida"
+          crewEst={flight.crewDeparture}
+          crewReal={flight.crewDepartureReal}
+          paxEst={flight.paxDeparture}
+          paxReal={flight.paxDepartureReal}
+          onClick={() => onOpenPaxCrew("DEPARTURE")}
+        />
+      </div>
+      <div className="text-[10px] text-gray-400">
+        Click una caja para abrir el modal completo (alta uno-a-uno o el panel grande de GenDec).
+      </div>
+    </div>
+  );
+}
+
+function PaxCrewSummary({
+  label, crewEst, crewReal, paxEst, paxReal, onClick,
+}: {
+  label: string; crewEst: number; crewReal: number | null; paxEst: number; paxReal: number | null;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="rounded border border-gray-200 bg-gray-50 hover:bg-blue-50 hover:border-blue-300 p-2 text-left transition-colors"
+    >
+      <div className="mb-1 flex items-center gap-1 text-[10px] font-bold uppercase text-gray-500">
+        <Users size={10} /> {label}
+      </div>
+      <div className="text-[11px] text-gray-700">
+        Crew: <span className="font-semibold">{crewReal ?? crewEst}</span>
+        {crewReal !== null && crewReal !== crewEst && <span className="text-gray-400 ml-1">/{crewEst} est</span>}
+      </div>
+      <div className="text-[11px] text-gray-700">
+        Pax: <span className="font-semibold">{paxReal ?? paxEst}</span>
+        {paxReal !== null && paxReal !== paxEst && <span className="text-gray-400 ml-1">/{paxEst} est</span>}
+      </div>
+    </button>
+  );
+}
+
+// ─── Lost items ─────────────────────────────────────────────────────────────
+
+const LOST_ITEM_CYCLE = ["FOUND", "CLAIMED", "DELIVERED"] as const;
+
+function LostItemsPanel({ flight, onMutated }: { flight: FlightWithRelations; onMutated: () => void }) {
+  const [description, setDescription] = useState("");
+  const [location, setLocation] = useState<LostItemLocation>("AIRCRAFT");
+  const [adding, setAdding] = useState(false);
+
+  const items = flight.lostItems ?? [];
+
+  const add = async () => {
+    if (!description.trim()) return;
+    setAdding(true);
+    try {
+      await fetch(`/api/flights/${flight.id}/lost-items`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description, location }),
+      });
+      setDescription("");
+      onMutated();
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const cycle = async (id: string, current: string) => {
+    const next = LOST_ITEM_CYCLE[(LOST_ITEM_CYCLE.indexOf(current as (typeof LOST_ITEM_CYCLE)[number]) + 1) % LOST_ITEM_CYCLE.length];
+    await fetch(`/api/lost-items/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ state: next }),
+    });
+    onMutated();
+  };
+
+  const remove = async (id: string) => {
+    await fetch(`/api/lost-items/${id}`, { method: "DELETE" });
+    onMutated();
+  };
+
+  return (
+    <div className="px-3 py-2 text-xs space-y-2">
+      {items.length === 0 ? (
+        <div className="text-[11px] text-gray-400 italic">Sin objetos perdidos</div>
+      ) : (
+        <ul className="divide-y divide-gray-100 rounded border border-gray-200">
+          {items.map((it) => {
+            const cfg = LOST_ITEM_STATE_CONFIG[it.state as LostItemState];
+            return (
+              <li key={it.id} className="flex items-center justify-between gap-2 px-2 py-1">
+                <div className="min-w-0 flex-1">
+                  <div className="text-[11px] font-medium text-gray-800 truncate">{it.description}</div>
+                  <div className="text-[10px] text-gray-400">{LOST_ITEM_LOCATION_LABELS[it.location as LostItemLocation] ?? it.location}</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => cycle(it.id, it.state)}
+                  className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${cfg?.bg ?? "bg-gray-200"} ${cfg?.text ?? "text-gray-700"}`}
+                  title="Avanzar estado"
+                >
+                  {cfg?.label ?? it.state}
+                </button>
+                <button onClick={() => remove(it.id)} className="text-gray-300 hover:text-red-500" title="Borrar">
+                  <Trash2 size={11} />
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      {/* Add row */}
+      <div className="flex items-center gap-1 rounded border border-gray-200 bg-gray-50/50 p-1.5">
+        <input
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="Descripción del objeto"
+          className="flex-1 rounded border border-gray-200 px-1 py-0.5 text-[11px]"
+          onKeyDown={(e) => { if (e.key === "Enter") add(); }}
+        />
+        <select
+          value={location}
+          onChange={(e) => setLocation(e.target.value as LostItemLocation)}
+          className="rounded border border-gray-200 bg-white px-1 py-0.5 text-[11px]"
+        >
+          {LOST_ITEM_LOCATIONS.map((l) => (
+            <option key={l} value={l}>{LOST_ITEM_LOCATION_LABELS[l]}</option>
+          ))}
+        </select>
+        <button
+          type="button"
+          onClick={add}
+          disabled={adding || !description.trim()}
+          className="inline-flex items-center gap-1 rounded bg-blue-600 px-2 py-0.5 text-[11px] font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+        >
+          <Plus size={10} /> Añadir
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Zona peligrosa — borrar vuelo ─────────────────────────────────────────
+
+function DangerZone({ flight, onDeleted }: { flight: FlightWithRelations; onDeleted: () => void }) {
+  const [confirming, setConfirming] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
+  const [deleting, setDeleting] = useState(false);
+
+  const expected = flight.callsign;
+  const matches = confirmText.trim().toUpperCase() === expected.toUpperCase();
+
+  const doDelete = async () => {
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/flights/${flight.id}`, { method: "DELETE" });
+      if (res.ok) {
+        onDeleted();
+      } else {
+        alert(`Error al borrar: HTTP ${res.status}`);
+      }
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <div className="px-3 py-2 space-y-2 text-xs">
+      <div className="flex items-start gap-2 rounded border border-red-200 bg-red-50 p-2">
+        <AlertOctagon size={14} className="shrink-0 text-red-600 mt-0.5" />
+        <div className="flex-1">
+          <div className="font-semibold text-red-800">Borrar este vuelo</div>
+          <div className="text-[11px] text-red-700/80">
+            Elimina el vuelo y TODOS sus servicios, pasajeros, tripulación, eventos y objetos perdidos. No es reversible.
+          </div>
+        </div>
+      </div>
+      {!confirming ? (
+        <button
+          type="button"
+          onClick={() => setConfirming(true)}
+          className="w-full rounded border border-red-300 bg-white px-2 py-1.5 text-[11px] font-medium text-red-700 hover:bg-red-50"
+        >
+          Quiero borrar el vuelo
+        </button>
+      ) : (
+        <div className="space-y-1">
+          <div className="text-[11px] text-gray-600">
+            Escribe <span className="font-mono font-bold text-red-700">{expected}</span> para confirmar:
+          </div>
+          <input
+            value={confirmText}
+            onChange={(e) => setConfirmText(e.target.value)}
+            className="w-full rounded border border-red-300 px-2 py-1 text-[11px] focus:border-red-500 focus:outline-none"
+            autoFocus
+          />
+          <div className="flex gap-1">
+            <button
+              type="button"
+              onClick={() => { setConfirming(false); setConfirmText(""); }}
+              className="flex-1 rounded border border-gray-300 bg-white px-2 py-1 text-[11px] hover:bg-gray-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={doDelete}
+              disabled={!matches || deleting}
+              className="flex-1 rounded bg-red-600 px-2 py-1 text-[11px] font-semibold text-white hover:bg-red-700 disabled:bg-red-300"
+            >
+              {deleting ? "Borrando..." : "Borrar para siempre"}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

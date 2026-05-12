@@ -22,6 +22,7 @@ import {
   type FlightLite,
 } from "./diaHelpers";
 import { FlightDetailPanel } from "./FlightDetailPanel";
+import { PassengerCrewModal } from "@/components/PassengerCrewModal";
 
 type FlightWithRelations = Flight & {
   services: Service[];
@@ -55,6 +56,7 @@ export default function DiaPage() {
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState(new Date());
   const [selectedFlightId, setSelectedFlightId] = useState<string | null>(null);
+  const [paxCrewModal, setPaxCrewModal] = useState<{ flightId: string; direction: "ARRIVAL" | "DEPARTURE" } | null>(null);
 
   useEffect(() => {
     const interval = setInterval(() => setNow(new Date()), 30_000);
@@ -379,9 +381,25 @@ export default function DiaPage() {
             flight={selectedFlight}
             onClose={() => setSelectedFlightId(null)}
             onMutated={fetchFlights}
+            onOpenPaxCrew={(direction) => setPaxCrewModal({ flightId: selectedFlight.id, direction })}
+            onDeleted={() => {
+              setSelectedFlightId(null);
+              fetchFlights();
+            }}
           />
         )}
       </main>
+
+      {/* PassengerCrewModal montado fuera del flex para que no afecte al layout */}
+      {paxCrewModal && selectedFlight && (
+        <PassengerCrewModal
+          isOpen={true}
+          onClose={() => { setPaxCrewModal(null); fetchFlights(); }}
+          flightId={paxCrewModal.flightId}
+          direction={paxCrewModal.direction}
+          flightLabel={`${selectedFlight.callsign} (${selectedFlight.registration})`}
+        />
+      )}
 
       {/* FOOTER */}
       <footer className="bg-white border-t border-gray-300 px-4 py-1 text-[11px] text-gray-500 flex flex-wrap justify-between gap-2">
