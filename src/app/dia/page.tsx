@@ -6,9 +6,11 @@ import { useRouter } from "next/navigation";
 import { Flight, Service, EventLog, LostItem } from "@prisma/client";
 import { palmaDayUtc, dateToSqlString } from "@/lib/time";
 import { useEventStream } from "@/hooks/useEventStream";
-import { ChevronLeft, ChevronRight, Maximize2, PlaneLanding, ParkingSquare, PlaneTakeoff, Plane, AlertTriangle } from "lucide-react";
+import { ChevronLeft, ChevronRight, Maximize2, PlaneLanding, ParkingSquare, PlaneTakeoff, Plane, AlertTriangle, Plus } from "lucide-react";
 import { QuickTimeEdit } from "@/components/QuickTimeEdit";
 import { InlineTextEdit } from "@/components/InlineTextEdit";
+import { QuickAddFlight } from "@/components/QuickAddFlight";
+import { Modal } from "@/components/Modal";
 import {
   deriveATA,
   deriveATD,
@@ -56,6 +58,8 @@ export default function DiaPage() {
   const [now, setNow] = useState(new Date());
   const [selectedFlightId, setSelectedFlightId] = useState<string | null>(null);
   const [paxCrewModal, setPaxCrewModal] = useState<{ flightId: string; direction: "ARRIVAL" | "DEPARTURE" } | null>(null);
+  const [showAddFlight, setShowAddFlight] = useState(false);
+  const [addFlightError, setAddFlightError] = useState<string | null>(null);
 
   useEffect(() => {
     const interval = setInterval(() => setNow(new Date()), 30_000);
@@ -197,6 +201,13 @@ export default function DiaPage() {
               <AlertTriangle size={11} className="inline mb-0.5 mr-1" />{stats.alerts} alerta
             </span>
           )}
+          <button
+            onClick={() => setShowAddFlight(true)}
+            className="inline-flex items-center gap-1 rounded bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700"
+            title="Crear nuevo vuelo en este dia"
+          >
+            <Plus size={12} /> Nuevo vuelo
+          </button>
           <button onClick={() => router.push("/")} className="rounded bg-gray-700 p-1.5 hover:bg-gray-600" title="Volver a tarjetas">
             <Maximize2 size={16} />
           </button>
@@ -376,7 +387,15 @@ export default function DiaPage() {
           </table>
 
           {flights.length === 0 && (
-            <div className="p-12 text-center text-gray-400 italic">No hay vuelos registrados para este dia.</div>
+            <div className="p-12 text-center">
+              <p className="text-gray-400 italic">No hay vuelos registrados para este dia.</p>
+              <button
+                onClick={() => setShowAddFlight(true)}
+                className="mt-3 inline-flex items-center gap-1 rounded bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700"
+              >
+                <Plus size={12} /> Crear primer vuelo
+              </button>
+            </div>
           )}
         </div>
 
@@ -405,6 +424,26 @@ export default function DiaPage() {
           flightLabel={`${selectedFlight.callsign} (${selectedFlight.registration})`}
         />
       )}
+
+      {/* Modal "Nuevo vuelo" — reusa el QuickAddFlight existente */}
+      <Modal
+        isOpen={showAddFlight}
+        onClose={() => { setShowAddFlight(false); setAddFlightError(null); }}
+        title={`Nuevo vuelo — ${date.toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "2-digit" })}`}
+        wide
+      >
+        {addFlightError && (
+          <div className="mx-5 mt-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{addFlightError}</div>
+        )}
+        <div className="px-2 pb-2">
+          <QuickAddFlight
+            date={date}
+            onCreated={() => { setShowAddFlight(false); setAddFlightError(null); fetchFlights(); }}
+            onCancel={() => { setShowAddFlight(false); setAddFlightError(null); }}
+            onError={(msg) => setAddFlightError(msg)}
+          />
+        </div>
+      </Modal>
 
       {/* FOOTER */}
       <footer className="bg-white border-t border-gray-300 px-4 py-1 text-[11px] text-gray-500 flex flex-wrap justify-between gap-2">
