@@ -1,9 +1,25 @@
-// Helpers para la vista /timeline (24h horizontal scale).
+// Helpers para la vista /timeline (eje horizontal con rango configurable).
+// Por defecto operamos en la ventana 06:00 - 24:00 (jornada operativa LEPA).
 // Lógica pura, fácil de testear.
 
 import type { Flight, Service } from "@prisma/client";
 
-const MIN_PER_DAY = 24 * 60;
+export type TimelineRange = { startMin: number; endMin: number };
+
+/** Rango por defecto: 06:00 → 24:00 Zulu. */
+export const OPS_RANGE: TimelineRange = { startMin: 6 * 60, endMin: 24 * 60 };
+
+/** Variantes de zoom — la ventana se centra alrededor del NOW Zulu. */
+export function zoomedRange(zoom: 6 | 12 | 24, now: Date = new Date()): TimelineRange {
+  if (zoom === 24) return OPS_RANGE;
+  const nowMin = now.getUTCHours() * 60 + now.getUTCMinutes();
+  const half = (zoom * 60) / 2;
+  let start = nowMin - half;
+  let end = nowMin + half;
+  if (start < 0) { end -= start; start = 0; }
+  if (end > 24 * 60) { start -= end - 24 * 60; end = 24 * 60; }
+  return { startMin: Math.max(0, start), endMin: Math.min(24 * 60, end) };
+}
 
 /** Parsea HH:MM Zulu a minutos desde 00:00. Devuelve null si invalido. */
 export function parseHHMM(hhmm: string | null | undefined): number | null {
@@ -16,39 +32,36 @@ export function parseHHMM(hhmm: string | null | undefined): number | null {
   return hh * 60 + mm;
 }
 
-/** Convierte minutos-del-dia a porcentaje 0..100 del eje. */
-export function minutesToPercent(min: number | null): number | null {
-  if (min === null) return null;
-  return (min / MIN_PER_DAY) * 100;
+/** Convierte minutos-del-dia a porcentaje 0..100 dentro de la ventana visible. */
+export function minToPct(min: number, range: TimelineRange = OPS_RANGE): number {
+  const total = range.endMin - range.startMin;
+  return ((min - range.startMin) / total) * 100;
 }
 
-/** Posicion NOW (Zulu) como porcentaje del dia. */
-export function nowZuluPercent(now: Date = new Date()): number {
+/** Posicion NOW (Zulu) como porcentaje del rango. */
+export function nowPctInRange(now: Date = new Date(), range: TimelineRange = OPS_RANGE): number {
   const m = now.getUTCHours() * 60 + now.getUTCMinutes();
-  return (m / MIN_PER_DAY) * 100;
+  return minToPct(m, range);
 }
 
 export type BarBounds = {
-  /** Inicio en % (0-100) */
   startPct: number;
-  /** Fin en % (0-100) */
   endPct: number;
-  /** Si es una "estancia" real (eta+etd) o un marker corto (solo eta o solo etd). */
   kind: "stay" | "arrival-only" | "departure-only";
 };
 
-const ARRIVAL_ONLY_BAR_MINUTES = 90;   // si solo hay ETA (sin ETD), pinta 90 min de bar
-const DEPARTURE_ONLY_BAR_MINUTES = 90; // si solo hay ETD (sin ETA), pinta 90 min antes
-const MIN_BAR_PCT = 1.5;               // ancho mínimo visible (~21 min)
+const ARRIVAL_ONLY_BAR_MINUTES = 90;
+const DEPARTURE_ONLY_BAR_MINUTES = 90;
+const MIN_BAR_PCT = 0.5;
 
 /**
- * Calcula el bar para un vuelo en /timeline. Si el vuelo es overnight con
- * arrivalDate previa al dia visualizado, el bar empieza en 0%. Si la
- * departureDate es posterior, el bar termina en 100%.
+ * Bar para un vuelo. Maneja overnight (desde ayer / hasta mañana).
+ * Devuelve null si ni eta ni etd estan presentes (o el bar caeria fuera del rango).
  */
 export function computeBarBounds(
   flight: Pick<Flight, "eta" | "etd" | "arrivalDate" | "departureDate">,
   viewDayShort: string, // "DD/MM"
+  range: TimelineRange = OPS_RANGE,
 ): BarBounds | null {
   const etaMin = parseHHMM(flight.eta);
   const etdMin = parseHHMM(flight.etd);
@@ -57,90 +70,146 @@ export function computeBarBounds(
   const arrToday = !flight.arrivalDate || flight.arrivalDate.slice(0, 5) === viewDayShort;
   const depToday = !flight.departureDate || flight.departureDate.slice(0, 5) === viewDayShort;
 
-  // Estancia completa: arr y dep hoy → bar de eta a etd
+  let startMinAbs: number | null = null;
+  let endMinAbs: number | null = null;
+  let kind: BarBounds["kind"] = "stay";
+
   if (etaMin !== null && etdMin !== null && arrToday && depToday) {
-    let start = (etaMin / MIN_PER_DAY) * 100;
-    let end = (etdMin / MIN_PER_DAY) * 100;
-    if (end < start) end = 100; // proteccion overflow medianoche
-    if (end - start < MIN_BAR_PCT) end = start + MIN_BAR_PCT;
-    return { startPct: start, endPct: end, kind: "stay" };
+    startMinAbs = etaMin;
+    endMinAbs = etdMin;
+    if (endMinAbs < startMinAbs) endMinAbs = range.endMin; // proteccion
+  } else if (!arrToday && depToday && etdMin !== null) {
+    startMinAbs = range.startMin;
+    endMinAbs = etdMin;
+  } else if (arrToday && !depToday && etaMin !== null) {
+    startMinAbs = etaMin;
+    endMinAbs = range.endMin;
+  } else if (arrToday && etaMin !== null) {
+    startMinAbs = etaMin;
+    endMinAbs = etaMin + ARRIVAL_ONLY_BAR_MINUTES;
+    kind = "arrival-only";
+  } else if (depToday && etdMin !== null) {
+    startMinAbs = etdMin - DEPARTURE_ONLY_BAR_MINUTES;
+    endMinAbs = etdMin;
+    kind = "departure-only";
+  } else {
+    return null;
   }
 
-  // Overnight que llega ayer y sale hoy: empieza en 0%, termina en etd
-  if (!arrToday && depToday && etdMin !== null) {
-    return {
-      startPct: 0,
-      endPct: Math.max((etdMin / MIN_PER_DAY) * 100, MIN_BAR_PCT),
-      kind: "stay",
-    };
-  }
+  // Clip al rango visible
+  const clippedStart = Math.max(startMinAbs, range.startMin);
+  const clippedEnd = Math.min(endMinAbs, range.endMin);
+  if (clippedEnd <= clippedStart + 1) return null; // fuera de rango
 
-  // Overnight que llega hoy y sale mañana: empieza en eta, termina en 100%
-  if (arrToday && !depToday && etaMin !== null) {
-    const start = (etaMin / MIN_PER_DAY) * 100;
-    return { startPct: start, endPct: 100, kind: "stay" };
-  }
+  const startPct = minToPct(clippedStart, range);
+  let endPct = minToPct(clippedEnd, range);
+  if (endPct - startPct < MIN_BAR_PCT) endPct = startPct + MIN_BAR_PCT;
 
-  // Solo arrival hoy (sin etd o etd no de hoy): bar corto a partir de ETA
-  if (arrToday && etaMin !== null) {
-    const start = (etaMin / MIN_PER_DAY) * 100;
-    return {
-      startPct: start,
-      endPct: Math.min(start + (ARRIVAL_ONLY_BAR_MINUTES / MIN_PER_DAY) * 100, 100),
-      kind: "arrival-only",
-    };
-  }
-
-  // Solo departure hoy: bar corto antes de ETD
-  if (depToday && etdMin !== null) {
-    const end = (etdMin / MIN_PER_DAY) * 100;
-    return {
-      startPct: Math.max(end - (DEPARTURE_ONLY_BAR_MINUTES / MIN_PER_DAY) * 100, 0),
-      endPct: end,
-      kind: "departure-only",
-    };
-  }
-
-  return null;
+  return { startPct, endPct, kind };
 }
 
 export type Pip = {
   pct: number;
-  kind: "fuel-req" | "fuel-served" | "toilet-req" | "toilet-done" | "svc-arrived" | "svc-delivered";
+  letter: "F" | "C" | "T" | "S";
+  state: "ok" | "req" | "no";
   label: string;
 };
 
-/** Lista de pips (eventos timestamped) para superponer al bar del vuelo. */
+/**
+ * Pips para fuel (F), toilet (T) y servicios (C catering, S extras).
+ * Posiciones derivadas de los timestamps cuando estan; si no, distribuidos
+ * uniformemente sobre el bar. Filtra los que caigan fuera del rango.
+ */
 export function flightPips(
-  flight: Pick<Flight, "fuelRequestedAt" | "fuelServedAt" | "toiletRequestedAt" | "toiletCompletedAt">,
-  services: Pick<Service, "type" | "arrivedAt" | "deliveredAt">[],
+  flight: Pick<Flight, "fuelState" | "fuelRequestedAt" | "fuelServedAt" | "toiletState" | "toiletRequestedAt" | "toiletCompletedAt">,
+  services: Pick<Service, "type" | "state" | "arrivedAt" | "deliveredAt">[],
+  bar: BarBounds,
+  range: TimelineRange = OPS_RANGE,
 ): Pip[] {
   const pips: Pip[] = [];
-  const add = (raw: string | null, kind: Pip["kind"], label: string) => {
+
+  // Helper to bucket timestamps into a single pip per service kind
+  const addTimePip = (raw: string | null, fallbackPct: number, letter: Pip["letter"], state: Pip["state"], label: string) => {
     const m = parseHHMM(raw);
-    if (m !== null) pips.push({ pct: (m / MIN_PER_DAY) * 100, kind, label });
+    const pct = m !== null ? minToPct(m, range) : fallbackPct;
+    if (pct < 0 || pct > 100) return;
+    pips.push({ pct, letter, state, label });
   };
-  add(flight.fuelRequestedAt, "fuel-req", `Fuel pedido ${flight.fuelRequestedAt}`);
-  add(flight.fuelServedAt, "fuel-served", `Fuel servido ${flight.fuelServedAt}`);
-  add(flight.toiletRequestedAt, "toilet-req", `Toilet pedido ${flight.toiletRequestedAt}`);
-  add(flight.toiletCompletedAt, "toilet-done", `Toilet ok ${flight.toiletCompletedAt}`);
-  for (const s of services) {
-    add(s.arrivedAt, "svc-arrived", `${s.type} llegado ${s.arrivedAt}`);
-    add(s.deliveredAt, "svc-delivered", `${s.type} entregado ${s.deliveredAt}`);
+
+  // Distribute fallback positions uniformly across the bar
+  const buckets = countActiveServices(flight, services);
+  let bucketIdx = 0;
+  const nextFallback = () => {
+    bucketIdx++;
+    return bar.startPct + (bar.endPct - bar.startPct) * (bucketIdx / (buckets + 1));
+  };
+
+  // FUEL
+  if (flight.fuelState !== "NOT_REQUESTED") {
+    const ts = flight.fuelState === "SERVED" ? flight.fuelServedAt : flight.fuelRequestedAt;
+    const state: Pip["state"] = flight.fuelState === "SERVED" ? "ok" : "req";
+    addTimePip(ts, nextFallback(), "F", state, `Fuel ${flight.fuelState}`);
   }
+
+  // TOILET
+  if (flight.toiletState !== "NOT_REQUESTED") {
+    const ts = flight.toiletState === "COMPLETED" ? flight.toiletCompletedAt : flight.toiletRequestedAt;
+    const state: Pip["state"] = flight.toiletState === "COMPLETED" ? "ok" : "req";
+    addTimePip(ts, nextFallback(), "T", state, `Toilet ${flight.toiletState}`);
+  }
+
+  // SERVICES (catering = C, otros = S)
+  for (const s of services) {
+    const letter: Pip["letter"] = s.type === "CATERING" ? "C" : "S";
+    const state: Pip["state"] = s.state === "DELIVERED" ? "ok" : s.state === "ARRIVED" ? "req" : "no";
+    const ts = s.state === "DELIVERED" ? s.deliveredAt : s.arrivedAt;
+    addTimePip(ts, nextFallback(), letter, state, `${s.type} ${s.state}`);
+  }
+
   return pips;
 }
 
-/** Color del bar según estado. Tailwind classes (bg + ring). */
-export const BAR_COLOR: Record<string, { bar: string; bg: string; text: string }> = {
-  EXPECTED: { bar: "bg-gray-300",     bg: "bg-gray-200",   text: "text-gray-700" },
-  ARRIVING: { bar: "bg-blue-500",     bg: "bg-blue-100",   text: "text-blue-800" },
-  PARKED:   { bar: "bg-purple-500",   bg: "bg-purple-100", text: "text-purple-800" },
-  DEPARTING:{ bar: "bg-cyan-500",     bg: "bg-cyan-100",   text: "text-cyan-800" },
-  DEPARTED: { bar: "bg-emerald-600",  bg: "bg-emerald-100",text: "text-emerald-800" },
-  // Legacy compat
-  ON_BLOCKS: { bar: "bg-blue-500",     bg: "bg-blue-100",   text: "text-blue-800" },
-  TURNAROUND:{ bar: "bg-cyan-500",     bg: "bg-cyan-100",   text: "text-cyan-800" },
-  BOARDING:  { bar: "bg-orange-500",   bg: "bg-orange-100", text: "text-orange-800" },
-  OFF_BLOCKS:{ bar: "bg-emerald-600",  bg: "bg-emerald-100",text: "text-emerald-800" },
-};
+function countActiveServices(
+  flight: Pick<Flight, "fuelState" | "toiletState">,
+  services: { type: string }[],
+): number {
+  let n = 0;
+  if (flight.fuelState !== "NOT_REQUESTED") n++;
+  if (flight.toiletState !== "NOT_REQUESTED") n++;
+  n += services.length;
+  return n;
+}
+
+/** Detecta si el callsign es comercial (codigos ICAO de aerolinea conocidos)
+ * o privado (matricula como callsign). Usado por el filtro de pills. */
+const COMMERCIAL_PREFIXES = new Set([
+  "VLG", "RYR", "EJU", "EZY", "IBE", "IBS", "AEA", "BAW", "DLH", "AFR", "KLM",
+  "SAS", "FIN", "AUA", "SWR", "TAP", "EWG", "ITY", "ROT", "TUI", "TFL", "WZZ",
+]);
+
+export function isCommercialCallsign(callsign: string | null | undefined): boolean {
+  if (!callsign) return false;
+  const head = callsign.slice(0, 3).toUpperCase();
+  return COMMERCIAL_PREFIXES.has(head);
+}
+
+/** Fases de turnaround para colorear los segmentos del bar en vuelos activos. */
+export type BarSegment = "land" | "turn-parked" | "turn-svc" | "turn-board" | "depart";
+
+/** Determina los segmentos visibles del bar segun el estado del vuelo. */
+export function barSegments(state: string, paxDepBoarded: boolean): BarSegment[] {
+  switch (state) {
+    case "ARRIVING":
+    case "ON_BLOCKS":
+      return ["turn-parked"];
+    case "PARKED":
+      return ["turn-parked"];
+    case "DEPARTING":
+    case "TURNAROUND":
+      return paxDepBoarded ? ["turn-svc", "turn-board"] : ["turn-svc"];
+    case "BOARDING":
+      return ["turn-board"];
+    default:
+      return [];
+  }
+}
