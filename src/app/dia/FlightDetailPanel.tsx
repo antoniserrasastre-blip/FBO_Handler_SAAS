@@ -3,8 +3,23 @@
 import { useState, useCallback, useEffect } from "react";
 import { Flight, Service, EventLog, LostItem } from "@prisma/client";
 import { X, Plane, ChevronDown, ChevronRight, Plus, Trash2, Users, AlertOctagon } from "lucide-react";
-import { FLIGHT_STATE_CONFIG, normalizeFlightState, SERVICE_TYPES, SERVICE_LABELS, LOST_ITEM_LOCATIONS, LOST_ITEM_LOCATION_LABELS, LOST_ITEM_STATE_CONFIG, type ServiceType, type LostItemLocation, type LostItemState } from "@/types";
+import {
+  FLIGHT_STATES, FLIGHT_STATE_CONFIG, normalizeFlightState,
+  SERVICE_TYPES, SERVICE_LABELS,
+  LOST_ITEM_LOCATIONS, LOST_ITEM_LOCATION_LABELS, LOST_ITEM_STATE_CONFIG,
+  PAX_ARR_STATES, PAX_ARR_STATE_LABELS,
+  PAX_DEP_STATES, PAX_DEP_STATE_LABELS,
+  BAGS_ARR_STATES, BAGS_ARR_STATE_LABELS,
+  BAGS_DEP_STATES, BAGS_DEP_STATE_LABELS,
+  TRANSPORT_TYPES, TRANSPORT_LABELS, TRANSPORT_STATE_LABELS,
+  CREW_ARR_LOCATION_LABELS, CREW_DEP_LOCATION_LABELS,
+  type ServiceType, type LostItemLocation, type LostItemState,
+} from "@/types";
 import { GenDecPasteSection } from "@/components/GenDecPasteSection";
+import { InlineTextEdit } from "@/components/InlineTextEdit";
+import { InlineNumber } from "@/components/InlineNumber";
+import { InlineSelect } from "@/components/InlineSelect";
+import { QuickTimeEdit } from "@/components/QuickTimeEdit";
 
 type FlightWithRelations = Flight & {
   services: Service[];
@@ -104,6 +119,18 @@ export function FlightDetailPanel({ flight, onClose, onMutated, onOpenPaxCrew, o
 
       {/* SECCIONES COLAPSABLES */}
       <div className="flex-1 overflow-auto">
+        <CollapsibleSection title="Datos del vuelo">
+          <FlightFieldsPanel flight={flight} patchFlight={patchFlight} />
+        </CollapsibleSection>
+
+        <CollapsibleSection title="Datos LLEGADA">
+          <ArrivalFieldsPanel flight={flight} patchFlight={patchFlight} />
+        </CollapsibleSection>
+
+        <CollapsibleSection title="Datos SALIDA">
+          <DepartureFieldsPanel flight={flight} patchFlight={patchFlight} />
+        </CollapsibleSection>
+
         <CollapsibleSection title="Servicios" defaultOpen badge={`${flight.services.length}+ ${flight.fuelState !== "NOT_REQUESTED" ? "fuel" : ""} ${flight.toiletState !== "NOT_REQUESTED" ? "toilet" : ""}`.trim()}>
           <ServicesPanel
             flight={flight}
@@ -380,6 +407,261 @@ function AddServiceRow({ flightId, onAdded }: { flightId: string; onAdded: () =>
       >
         <Plus size={10} /> Añadir
       </button>
+    </div>
+  );
+}
+
+// ─── Form helpers ───────────────────────────────────────────────────────────
+
+function FormRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-2 py-0.5">
+      <span className="w-28 shrink-0 text-[10px] uppercase font-medium text-gray-500">{label}</span>
+      <div className="flex-1 min-w-0 text-xs">{children}</div>
+    </div>
+  );
+}
+
+function FormGroup({ title, children }: { title?: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded border border-gray-200 bg-gray-50/30 p-2">
+      {title && <div className="mb-1 text-[10px] font-bold uppercase tracking-wide text-gray-400">{title}</div>}
+      <div className="space-y-0.5">{children}</div>
+    </div>
+  );
+}
+
+// ─── Datos del vuelo (general) ──────────────────────────────────────────────
+
+function FlightFieldsPanel({
+  flight, patchFlight,
+}: { flight: FlightWithRelations; patchFlight: (d: Partial<Flight>) => void }) {
+  return (
+    <div className="px-3 py-2 space-y-2">
+      <FormGroup>
+        <FormRow label="Callsign">
+          <InlineTextEdit value={flight.callsign} onSave={(v) => patchFlight({ callsign: v })} />
+        </FormRow>
+        <FormRow label="Matrícula">
+          <InlineTextEdit value={flight.registration} onSave={(v) => patchFlight({ registration: v })} />
+        </FormRow>
+        <FormRow label="Tipo avión">
+          <InlineTextEdit value={flight.aircraftType} onSave={(v) => patchFlight({ aircraftType: v })} />
+        </FormRow>
+        <FormRow label="Parking">
+          <InlineTextEdit value={flight.parking || ""} onSave={(v) => patchFlight({ parking: v || null })} placeholder="tbd" />
+        </FormRow>
+        <FormRow label="TOBT">
+          <QuickTimeEdit value={flight.tobt} onSave={(v) => patchFlight({ tobt: v || null })} />
+        </FormRow>
+        <FormRow label="Estado">
+          <InlineSelect
+            value={normalizeFlightState(flight.state)}
+            options={FLIGHT_STATES}
+            labels={Object.fromEntries(FLIGHT_STATES.map((s) => [s, FLIGHT_STATE_CONFIG[s].label]))}
+            onSave={(v) => patchFlight({ state: v })}
+          />
+        </FormRow>
+        <FormRow label="Pernocta">
+          <input
+            type="checkbox"
+            checked={flight.isOvernight}
+            onChange={(e) => patchFlight({ isOvernight: e.target.checked })}
+            onClick={(e) => e.stopPropagation()}
+            className="h-3.5 w-3.5 cursor-pointer"
+          />
+        </FormRow>
+      </FormGroup>
+    </div>
+  );
+}
+
+// ─── Datos LLEGADA ──────────────────────────────────────────────────────────
+
+function ArrivalFieldsPanel({
+  flight, patchFlight,
+}: { flight: FlightWithRelations; patchFlight: (d: Partial<Flight>) => void }) {
+  return (
+    <div className="px-3 py-2 space-y-2">
+      <FormGroup title="Vuelo">
+        <FormRow label="Origen">
+          <InlineTextEdit value={flight.origin || ""} onSave={(v) => patchFlight({ origin: v || null })} placeholder="ICAO" />
+        </FormRow>
+        <FormRow label="Fecha (DD/MM/YY)">
+          <InlineTextEdit value={flight.arrivalDate || ""} onSave={(v) => patchFlight({ arrivalDate: v || null })} placeholder="DD/MM/YY" />
+        </FormRow>
+        <FormRow label="ETA Zulu">
+          <QuickTimeEdit value={flight.eta} onSave={(v) => patchFlight({ eta: v || null })} />
+        </FormRow>
+        <FormRow label="ATA Zulu">
+          <QuickTimeEdit value={flight.ata} onSave={(v) => patchFlight({ ata: v || null })} />
+        </FormRow>
+      </FormGroup>
+
+      <FormGroup title="Tripulación">
+        <FormRow label="Crew estimado">
+          <InlineNumber value={flight.crewArrival} onSave={(v) => patchFlight({ crewArrival: v ?? 0 })} />
+        </FormRow>
+        <FormRow label="Crew real">
+          <InlineNumber value={flight.crewArrivalReal} onSave={(v) => patchFlight({ crewArrivalReal: v })} nullable />
+        </FormRow>
+        <FormRow label="Ubicación crew">
+          <InlineSelect
+            value={flight.crewArrLocation}
+            options={Object.keys(CREW_ARR_LOCATION_LABELS) as (keyof typeof CREW_ARR_LOCATION_LABELS)[]}
+            labels={CREW_ARR_LOCATION_LABELS}
+            onSave={(v) => patchFlight({ crewArrLocation: v })}
+          />
+        </FormRow>
+      </FormGroup>
+
+      <FormGroup title="Pasajeros">
+        <FormRow label="Pax estimado">
+          <InlineNumber value={flight.paxArrival} onSave={(v) => patchFlight({ paxArrival: v ?? 0 })} />
+        </FormRow>
+        <FormRow label="Pax real">
+          <InlineNumber value={flight.paxArrivalReal} onSave={(v) => patchFlight({ paxArrivalReal: v })} nullable />
+        </FormRow>
+        <FormRow label="Estado pax">
+          <InlineSelect
+            value={flight.paxArrState}
+            options={PAX_ARR_STATES}
+            labels={PAX_ARR_STATE_LABELS}
+            onSave={(v) => patchFlight({ paxArrState: v })}
+          />
+        </FormRow>
+      </FormGroup>
+
+      <FormGroup title="Equipaje">
+        <FormRow label="Maletas facturadas">
+          <InlineNumber value={flight.paxArrBagsChecked} onSave={(v) => patchFlight({ paxArrBagsChecked: v ?? 0 })} />
+        </FormRow>
+        <FormRow label="Maletas cabina">
+          <InlineNumber value={flight.paxArrBagsCabin} onSave={(v) => patchFlight({ paxArrBagsCabin: v ?? 0 })} />
+        </FormRow>
+        <FormRow label="Estado maletas">
+          <InlineSelect
+            value={flight.paxArrBagsState}
+            options={BAGS_ARR_STATES}
+            labels={BAGS_ARR_STATE_LABELS}
+            onSave={(v) => patchFlight({ paxArrBagsState: v })}
+          />
+        </FormRow>
+      </FormGroup>
+
+      <FormGroup title="Transporte">
+        <FormRow label="Tipo">
+          <InlineSelect
+            value={flight.paxArrTransportType}
+            options={TRANSPORT_TYPES}
+            labels={TRANSPORT_LABELS}
+            onSave={(v) => patchFlight({ paxArrTransportType: v })}
+          />
+        </FormRow>
+        <FormRow label="Estado">
+          <InlineSelect
+            value={flight.paxArrTransportState}
+            options={["PENDING", "CONFIRMED"] as const}
+            labels={TRANSPORT_STATE_LABELS}
+            onSave={(v) => patchFlight({ paxArrTransportState: v })}
+          />
+        </FormRow>
+      </FormGroup>
+    </div>
+  );
+}
+
+// ─── Datos SALIDA ───────────────────────────────────────────────────────────
+
+function DepartureFieldsPanel({
+  flight, patchFlight,
+}: { flight: FlightWithRelations; patchFlight: (d: Partial<Flight>) => void }) {
+  return (
+    <div className="px-3 py-2 space-y-2">
+      <FormGroup title="Vuelo">
+        <FormRow label="Destino">
+          <InlineTextEdit value={flight.destination || ""} onSave={(v) => patchFlight({ destination: v || null })} placeholder="ICAO" />
+        </FormRow>
+        <FormRow label="Fecha (DD/MM/YY)">
+          <InlineTextEdit value={flight.departureDate || ""} onSave={(v) => patchFlight({ departureDate: v || null })} placeholder="DD/MM/YY" />
+        </FormRow>
+        <FormRow label="ETD Zulu">
+          <QuickTimeEdit value={flight.etd} onSave={(v) => patchFlight({ etd: v || null })} />
+        </FormRow>
+        <FormRow label="ATD Zulu">
+          <QuickTimeEdit value={flight.atd} onSave={(v) => patchFlight({ atd: v || null })} />
+        </FormRow>
+      </FormGroup>
+
+      <FormGroup title="Tripulación">
+        <FormRow label="Crew estimado">
+          <InlineNumber value={flight.crewDeparture} onSave={(v) => patchFlight({ crewDeparture: v ?? 0 })} />
+        </FormRow>
+        <FormRow label="Crew real">
+          <InlineNumber value={flight.crewDepartureReal} onSave={(v) => patchFlight({ crewDepartureReal: v })} nullable />
+        </FormRow>
+        <FormRow label="Ubicación crew">
+          <InlineSelect
+            value={flight.crewDepLocation}
+            options={Object.keys(CREW_DEP_LOCATION_LABELS) as (keyof typeof CREW_DEP_LOCATION_LABELS)[]}
+            labels={CREW_DEP_LOCATION_LABELS}
+            onSave={(v) => patchFlight({ crewDepLocation: v })}
+          />
+        </FormRow>
+      </FormGroup>
+
+      <FormGroup title="Pasajeros">
+        <FormRow label="Pax estimado">
+          <InlineNumber value={flight.paxDeparture} onSave={(v) => patchFlight({ paxDeparture: v ?? 0 })} />
+        </FormRow>
+        <FormRow label="Pax real">
+          <InlineNumber value={flight.paxDepartureReal} onSave={(v) => patchFlight({ paxDepartureReal: v })} nullable />
+        </FormRow>
+        <FormRow label="Estado pax">
+          <InlineSelect
+            value={flight.paxDepState}
+            options={PAX_DEP_STATES}
+            labels={PAX_DEP_STATE_LABELS}
+            onSave={(v) => patchFlight({ paxDepState: v })}
+          />
+        </FormRow>
+      </FormGroup>
+
+      <FormGroup title="Equipaje">
+        <FormRow label="Maletas facturadas">
+          <InlineNumber value={flight.paxDepBagsChecked} onSave={(v) => patchFlight({ paxDepBagsChecked: v ?? 0 })} />
+        </FormRow>
+        <FormRow label="Maletas cabina">
+          <InlineNumber value={flight.paxDepBagsCabin} onSave={(v) => patchFlight({ paxDepBagsCabin: v ?? 0 })} />
+        </FormRow>
+        <FormRow label="Estado maletas">
+          <InlineSelect
+            value={flight.paxDepBagsState}
+            options={BAGS_DEP_STATES}
+            labels={BAGS_DEP_STATE_LABELS}
+            onSave={(v) => patchFlight({ paxDepBagsState: v })}
+          />
+        </FormRow>
+      </FormGroup>
+
+      <FormGroup title="Transporte">
+        <FormRow label="Tipo">
+          <InlineSelect
+            value={flight.paxDepTransportType}
+            options={TRANSPORT_TYPES}
+            labels={TRANSPORT_LABELS}
+            onSave={(v) => patchFlight({ paxDepTransportType: v })}
+          />
+        </FormRow>
+        <FormRow label="Estado">
+          <InlineSelect
+            value={flight.paxDepTransportState}
+            options={["PENDING", "CONFIRMED"] as const}
+            labels={TRANSPORT_STATE_LABELS}
+            onSave={(v) => patchFlight({ paxDepTransportState: v })}
+          />
+        </FormRow>
+      </FormGroup>
     </div>
   );
 }
