@@ -375,7 +375,11 @@ export default function DiaPage() {
 
         {/* PANEL DETALLE — solo cuando hay seleccion */}
         {selectedFlight && (
-          <FlightDetailPanel flight={selectedFlight} onClose={() => setSelectedFlightId(null)} />
+          <FlightDetailPanel
+            flight={selectedFlight}
+            onClose={() => setSelectedFlightId(null)}
+            onMutated={fetchFlights}
+          />
         )}
       </main>
 
