@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ParsedFlight } from "@/lib/pdfParser";
 import { SERVICE_LABELS, ServiceType } from "@/types";
 import { ServiceIcon, PdfIcon, ExcelIcon, SuccessIcon } from "@/components/Icons";
+import { ViewTabs } from "@/components/ViewTabs";
 
 type Tab = "pdf" | "extras";
 
@@ -45,9 +46,7 @@ export default function ImportPage() {
             <h1 className="text-xl font-bold text-gray-900">Importar datos</h1>
             <p className="mt-1 text-sm text-gray-500">Importa vuelos desde PDF o extras desde Excel</p>
           </div>
-          <button onClick={() => router.push("/")} className="text-sm text-gray-500 hover:text-gray-700">
-            Volver al panel
-          </button>
+          <ViewTabs tone="light" />
         </div>
 
         {/* Tabs */}

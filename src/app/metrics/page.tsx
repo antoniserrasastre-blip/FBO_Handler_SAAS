@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { SERVICE_LABELS, ServiceType } from "@/types";
+import { ViewTabs } from "@/components/ViewTabs";
 
 interface Metrics {
   range: number;
@@ -79,12 +80,7 @@ export default function MetricsPage() {
               <option value={90}>90 dias</option>
               <option value={365}>1 ano</option>
             </select>
-            <button
-              onClick={() => router.push("/")}
-              className="rounded-lg border border-gray-300 px-4 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
-            >
-              Volver
-            </button>
+            <ViewTabs tone="light" />
           </div>
         </div>
 

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { palmaDayUtc } from "@/lib/time";
+import { ViewTabs } from "@/components/ViewTabs";
 
 interface DaySheetSummary {
   id: string;
@@ -58,12 +59,7 @@ export default function HistoricoPage() {
               Consulta y exporta datos de dias anteriores
             </p>
           </div>
-          <button
-            onClick={() => router.push("/")}
-            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
-            Volver al panel
-          </button>
+          <ViewTabs tone="light" />
         </div>
 
         {daySheets.length === 0 ? (
