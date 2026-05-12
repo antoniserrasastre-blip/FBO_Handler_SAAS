@@ -44,11 +44,19 @@ describe("isArrivalToday / isDepartureToday", () => {
   it("treats no arrivalDate as today", () => {
     expect(isArrivalToday({ eta: "10:00", arrivalDate: null }, day)).toBe(true);
   });
-  it("matches when arrivalDate equals shortDate", () => {
+  it("matches when arrivalDate equals shortDate (DD/MM)", () => {
     expect(isArrivalToday({ eta: "10:00", arrivalDate: "12/05" }, day)).toBe(true);
   });
-  it("rejects when arrivalDate is different day", () => {
-    expect(isArrivalToday({ eta: "10:00", arrivalDate: "13/05" }, day)).toBe(false);
+  it("matches when arrivalDate is DD/MM/YY (formato real del PDF parser)", () => {
+    // Regression: el parser guarda "12/05/26"; mi helper antes solo aceptaba "12/05"
+    // y por eso /dia mostraba "sin llegada hoy" para todos los vuelos.
+    expect(isArrivalToday({ eta: "10:00", arrivalDate: "12/05/26" }, day)).toBe(true);
+  });
+  it("departure with DD/MM/YY also works", () => {
+    expect(isDepartureToday({ etd: "14:00", departureDate: "12/05/26" }, day)).toBe(true);
+  });
+  it("rejects when arrivalDate is different day (with year)", () => {
+    expect(isArrivalToday({ eta: "10:00", arrivalDate: "13/05/26" }, day)).toBe(false);
   });
   it("rejects when no eta", () => {
     expect(isArrivalToday({ eta: null, arrivalDate: null }, day)).toBe(false);

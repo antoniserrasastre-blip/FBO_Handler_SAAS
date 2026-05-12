@@ -20,25 +20,41 @@ export type FlightLite = Pick<
   | "liveOnGround"
 > & { services: { state: string; phase: string }[]; eventLogs?: EventLog[] };
 
-/** "DD/MM" del día de referencia (fechas guardadas como string DD/MM). */
+/** "DD/MM" del día de referencia. */
 export function shortDate(date: Date): string {
   const day = String(date.getUTCDate()).padStart(2, "0");
   const month = String(date.getUTCMonth() + 1).padStart(2, "0");
   return `${day}/${month}`;
 }
 
+/** "DD/MM/YY" del día de referencia (formato real en DB tras parser PDF). */
+export function shortDateYY(date: Date): string {
+  const yy = String(date.getUTCFullYear()).slice(-2);
+  return `${shortDate(date)}/${yy}`;
+}
+
+/**
+ * Match flexible: el campo arrivalDate / departureDate puede venir como
+ * "DD/MM" o "DD/MM/YY" (depende del parser y de datos antiguos). Aceptamos
+ * los dos comparando solo los primeros 5 caracteres.
+ */
+function dateMatches(stored: string | null, day: Date): boolean {
+  if (!stored) return false;
+  return stored.slice(0, 5) === shortDate(day);
+}
+
 /** Si el vuelo es llegada en este día. */
 export function isArrivalToday(f: Pick<Flight, "eta" | "arrivalDate">, date: Date): boolean {
   if (!f.eta) return false;
   if (!f.arrivalDate) return true; // sin fecha explícita → asumimos hoy
-  return f.arrivalDate === shortDate(date);
+  return dateMatches(f.arrivalDate, date);
 }
 
 /** Si el vuelo es salida en este día. */
 export function isDepartureToday(f: Pick<Flight, "etd" | "departureDate">, date: Date): boolean {
   if (!f.etd) return false;
   if (!f.departureDate) return true;
-  return f.departureDate === shortDate(date);
+  return dateMatches(f.departureDate, date);
 }
 
 /**
