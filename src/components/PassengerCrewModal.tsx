@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Passenger, CrewMember } from "@prisma/client";
 import { Modal } from "./Modal";
 import { CloseIcon } from "./Icons";
+import { GenDecPasteSection } from "./GenDecPasteSection";
 import {
   PASSENGER_STATUS_CONFIG,
   PassengerStatus,
@@ -106,6 +107,9 @@ export function PassengerCrewModal({ isOpen, onClose, flightId, direction, fligh
         <div className="py-8 text-center text-sm text-gray-400">Cargando...</div>
       ) : (
         <div className="space-y-6">
+          {/* GenDec paste — extract crew + pax from email text */}
+          <GenDecPasteSection flightId={flightId} direction={direction} onImported={fetchData} />
+
           {/* Crew Section */}
           <div>
             <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-gray-500">

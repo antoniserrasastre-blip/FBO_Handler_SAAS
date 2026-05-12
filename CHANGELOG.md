@@ -9,6 +9,47 @@
 
 ---
 
+## v0.4 — Pegar GenDec en vez de teclear (2026-05-12)
+
+**Qué ve distinto el handler**: en el modal de Tripulación/Pasajeros de cada
+vuelo aparece un panel ámbar "Pegar GenDec". Pegas el texto del email
+(o copias del PDF que llega de las aerolíneas y pegas), pulsas **Extraer**,
+y sale una tabla con todos los nombres, pasaportes, nacionalidades y
+fechas de nacimiento ya separados. Revisas, corriges si hace falta, y
+"Añadir 7 entradas" → todos guardados de golpe.
+
+**Qué se puede hacer que antes no**:
+
+- Convertir un email de manifiesto en 7-15 personas guardadas en < 30
+  segundos, sin teclear nada (vs ~5 min antes).
+- Las nacionalidades en cualquier idioma (ESP/Spain/spanish/española/...)
+  se reconocen y se normalizan a código ISO de 3 letras.
+- Las fechas en cualquier formato europeo (DD/MM/YYYY, DD.MM.YY,
+  21 May 1985, 21 abr 85) se normalizan a DD/MM/YYYY.
+- Las filas con baja confianza salen marcadas en amarillo para revisar.
+- Los roles de tripulación (CAPITÁN / F/O / FA / PIC / SIC) se detectan
+  y se pre-rellenan.
+
+**Cómo funciona por dentro**: parser determinista en JS — regex + tabla
+de nacionalidades. **Nada sale del container**, los datos de pasaporte
+no viajan a ninguna API externa. Si el email viene en un formato muy
+raro y el parser no lo entiende, simplemente añade manualmente como
+hasta ahora — el panel viejo sigue ahí.
+
+**Bonus**: el PDF GenDec ya existente (`/api/export/blank-declaration`
+y exportación por vuelo) sale ahora **relleno** automáticamente, sin
+cambiar nada del template. Lo único que faltaba eran los datos en la DB.
+
+**Limitaciones conocidas**:
+
+- PDFs escaneados (imagen): hay que abrirlos, seleccionar texto, copiar,
+  pegar. Si el PDF es solo imagen, no hay texto que pegar — eso lo
+  resolvemos más adelante con OCR si os hace falta.
+- Para los manifiestos de NetJets (formato muy específico), ya existe un
+  parser dedicado en `pdf-microservice/` pero no está conectado todavía.
+
+---
+
 ## v0.3 (POC) — Seguimiento en vivo de vuelos (2026-05-11)
 
 **Qué ve distinto el handler**: en cada tarjeta de vuelo aparece
