@@ -35,19 +35,19 @@ jobs:
     steps:
       - name: Pull latest code
         run: |
-          cd /home/randomite/FBO_Handler_SAAS
+          cd /srv/fbo-handler-saas
           git fetch origin main
           git reset --hard origin/main
 
       - name: Build and restart containers
         run: |
-          cd /home/randomite/FBO_Handler_SAAS
+          cd /srv/fbo-handler-saas
           docker compose build --no-cache
           docker compose up -d
 
       - name: Sync database schema (idempotente)
         run: |
-          cd /home/randomite/FBO_Handler_SAAS
+          cd /srv/fbo-handler-saas
           # Espera a que el container esté listo para `exec` (no a que Next
           # responda — Next puede crashear si el schema está stale).
           for i in $(seq 1 15); do
@@ -76,5 +76,5 @@ jobs:
             sleep 2
           done
           echo "AVISO: FBO no respondió tras 60s"
-          docker compose -f /home/randomite/FBO_Handler_SAAS/docker-compose.yml logs --tail=30
+          docker compose -f /srv/fbo-handler-saas/docker-compose.yml logs --tail=30
           exit 1
