@@ -4,8 +4,6 @@ import { useState, useEffect, useCallback } from "react";
 import { Passenger, CrewMember } from "@prisma/client";
 import { Modal } from "./Modal";
 import { CloseIcon } from "./Icons";
-import { GenDecPasteSection } from "./GenDecPasteSection";
-import { InlineTextEdit as InlineEdit } from "./InlineTextEdit";
 import {
   PASSENGER_STATUS_CONFIG,
   PassengerStatus,
@@ -105,21 +103,18 @@ export function PassengerCrewModal({ isOpen, onClose, flightId, direction, fligh
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={`${DIRECTION_LABELS[direction]} — ${flightLabel}`} wide>
       {loading ? (
-        <div className="py-8 text-center text-sm text-gray-400">Cargando...</div>
+        <div className="py-8 text-center text-sm text-ink-muted">Cargando...</div>
       ) : (
         <div className="space-y-6">
-          {/* GenDec paste — extract crew + pax from email text */}
-          <GenDecPasteSection flightId={flightId} direction={direction} onImported={fetchData} />
-
           {/* Crew Section */}
           <div>
-            <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-gray-500">
+            <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-ink-3">
               Tripulacion ({crew.length})
             </h3>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
-                  <tr className="border-b text-left text-gray-400">
+                  <tr className="border-b text-left text-ink-muted">
                     <th className="pb-1 pr-2 font-medium">Nombre</th>
                     <th className="pb-1 pr-2 font-medium">Rol</th>
                     <th className="pb-1 pr-2 font-medium">Pasaporte</th>
@@ -140,15 +135,15 @@ export function PassengerCrewModal({ isOpen, onClose, flightId, direction, fligh
 
           {/* Passenger Section */}
           <div>
-            <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-gray-500">
+            <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-ink-3">
               Pasajeros ({passengers.length})
-              {noShowPax > 0 && <span className="ml-1 text-red-500">({noShowPax} no-show)</span>}
-              {addedPax > 0 && <span className="ml-1 text-blue-500">({addedPax} anadidos)</span>}
+              {noShowPax > 0 && <span className="ml-1 text-danger-strong">({noShowPax} no-show)</span>}
+              {addedPax > 0 && <span className="ml-1 text-brand-active">({addedPax} anadidos)</span>}
             </h3>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
-                  <tr className="border-b text-left text-gray-400">
+                  <tr className="border-b text-left text-ink-muted">
                     <th className="pb-1 pr-2 font-medium">Estado</th>
                     <th className="pb-1 pr-2 font-medium">Nombre</th>
                     <th className="pb-1 pr-2 font-medium">Genero</th>
@@ -170,7 +165,7 @@ export function PassengerCrewModal({ isOpen, onClose, flightId, direction, fligh
           </div>
 
           {/* Summary */}
-          <div className="rounded-lg bg-gray-50 px-4 py-2 text-xs text-gray-500">
+          <div className="rounded-lg bg-bg-subtle px-4 py-2 text-xs text-ink-3">
             Crew: {crew.length} | Pax: {confirmedPax} activos
             {noShowPax > 0 ? `, ${noShowPax} no-show` : ""}
             {addedPax > 0 ? `, ${addedPax} anadidos` : ""}
@@ -189,7 +184,7 @@ function CrewRow({ member, onUpdate, onDelete }: {
   onDelete: (id: string) => void;
 }) {
   return (
-    <tr className="border-b border-gray-50 hover:bg-gray-50">
+    <tr className="border-b border-line-subtle hover:bg-bg-subtle">
       <td className="py-1.5 pr-2">
         <InlineEdit value={member.fullName} onSave={(v) => onUpdate(member.id, { fullName: v })} />
       </td>
@@ -197,7 +192,7 @@ function CrewRow({ member, onUpdate, onDelete }: {
         <select
           value={member.role}
           onChange={(e) => onUpdate(member.id, { role: e.target.value })}
-          className="rounded border border-transparent px-1 py-0.5 text-xs hover:border-gray-200 focus:border-blue-400 focus:outline-none"
+          className="rounded border border-transparent px-1 py-0.5 text-xs hover:border-line-subtle focus:border-brand focus:outline-none"
         >
           {CREW_ROLES.map((r) => (
             <option key={r} value={r}>{CREW_ROLE_LABELS[r]}</option>
@@ -214,7 +209,7 @@ function CrewRow({ member, onUpdate, onDelete }: {
         <InlineEdit value={member.dateOfBirth || ""} onSave={(v) => onUpdate(member.id, { dateOfBirth: v })} placeholder="DD/MM/AAAA" />
       </td>
       <td className="py-1.5">
-        <button onClick={() => onDelete(member.id)} className="text-red-400 hover:text-red-600"><CloseIcon size={12} /></button>
+        <button onClick={() => onDelete(member.id)} className="text-danger hover:text-danger-strong"><CloseIcon size={12} /></button>
       </td>
     </tr>
   );
@@ -234,7 +229,7 @@ function PassengerRow({ passenger, onUpdate, onDelete }: {
   };
 
   return (
-    <tr className={`border-b border-gray-50 hover:bg-gray-50 ${isNoShow ? "opacity-50" : ""}`}>
+    <tr className={`border-b border-line-subtle hover:bg-bg-subtle ${isNoShow ? "opacity-50" : ""}`}>
       <td className="py-1.5 pr-2">
         <button
           onClick={cycleStatus}
@@ -250,7 +245,7 @@ function PassengerRow({ passenger, onUpdate, onDelete }: {
       <td className="py-1.5 pr-2">
         <button
           onClick={() => onUpdate(passenger.id, { gender: passenger.gender === "M" ? "F" : "M" })}
-          className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${passenger.gender === "F" ? "bg-pink-100 text-pink-700" : "bg-blue-100 text-blue-700"}`}
+          className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${passenger.gender === "F" ? "bg-pink-100 text-pink-700" : "bg-info-bg text-brand-active"}`}
         >
           {passenger.gender || "?"}
         </button>
@@ -269,11 +264,11 @@ function PassengerRow({ passenger, onUpdate, onDelete }: {
           type="checkbox"
           checked={passenger.verified}
           onChange={(e) => onUpdate(passenger.id, { verified: e.target.checked })}
-          className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+          className="h-3.5 w-3.5 rounded border-line text-brand-active focus:ring-brand-tint"
         />
       </td>
       <td className="py-1.5">
-        <button onClick={() => onDelete(passenger.id)} className="text-red-400 hover:text-red-600"><CloseIcon size={12} /></button>
+        <button onClick={() => onDelete(passenger.id)} className="text-danger hover:text-danger-strong"><CloseIcon size={12} /></button>
       </td>
     </tr>
   );
@@ -286,7 +281,7 @@ function AddCrewRow({ onAdd }: { onAdd: (data: Partial<CrewMember>) => void }) {
 
   if (!show) {
     return (
-      <button onClick={() => setShow(true)} className="mt-2 rounded-md border border-dashed border-gray-300 px-2 py-1 text-xs text-gray-400 hover:border-gray-400 hover:text-gray-500">
+      <button onClick={() => setShow(true)} className="mt-2 rounded-md border border-dashed border-line px-2 py-1 text-xs text-ink-muted hover:border-line-strong hover:text-ink-3">
         + Anadir tripulante
       </button>
     );
@@ -301,12 +296,12 @@ function AddCrewRow({ onAdd }: { onAdd: (data: Partial<CrewMember>) => void }) {
 
   return (
     <div className="mt-2 flex flex-wrap items-center gap-2">
-      <input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Nombre completo..." className="min-w-[150px] flex-1 rounded border border-gray-200 px-2 py-1 text-xs" autoFocus onKeyDown={(e) => { if (e.key === "Enter") submit(); }} />
-      <select value={role} onChange={(e) => setRole(e.target.value)} className="rounded border border-gray-200 px-2 py-1 text-xs">
+      <input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Nombre completo..." className="min-w-[150px] flex-1 rounded border border-line-subtle px-2 py-1 text-xs" autoFocus onKeyDown={(e) => { if (e.key === "Enter") submit(); }} />
+      <select value={role} onChange={(e) => setRole(e.target.value)} className="rounded border border-line-subtle px-2 py-1 text-xs">
         {CREW_ROLES.map((r) => <option key={r} value={r}>{CREW_ROLE_LABELS[r]}</option>)}
       </select>
-      <button onClick={submit} disabled={!fullName.trim()} className="rounded bg-blue-500 px-2 py-1 text-xs text-white hover:bg-blue-600 disabled:opacity-50">Anadir</button>
-      <button onClick={() => { setShow(false); setFullName(""); }} className="text-xs text-gray-400 hover:text-gray-600">Cancelar</button>
+      <button onClick={submit} disabled={!fullName.trim()} className="rounded bg-brand px-2 py-1 text-xs text-white hover:bg-brand-hover disabled:opacity-50">Anadir</button>
+      <button onClick={() => { setShow(false); setFullName(""); }} className="text-xs text-ink-muted hover:text-ink-2">Cancelar</button>
     </div>
   );
 }
@@ -318,7 +313,7 @@ function AddPassengerRow({ onAdd }: { onAdd: (data: Partial<Passenger>) => void 
 
   if (!show) {
     return (
-      <button onClick={() => setShow(true)} className="mt-2 rounded-md border border-dashed border-gray-300 px-2 py-1 text-xs text-gray-400 hover:border-gray-400 hover:text-gray-500">
+      <button onClick={() => setShow(true)} className="mt-2 rounded-md border border-dashed border-line px-2 py-1 text-xs text-ink-muted hover:border-line-strong hover:text-ink-3">
         + Anadir pasajero
       </button>
     );
@@ -333,11 +328,41 @@ function AddPassengerRow({ onAdd }: { onAdd: (data: Partial<Passenger>) => void 
 
   return (
     <div className="mt-2 flex flex-wrap items-center gap-2">
-      <input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Nombre completo..." className="min-w-[150px] flex-1 rounded border border-gray-200 px-2 py-1 text-xs" autoFocus onKeyDown={(e) => { if (e.key === "Enter") submit(); }} />
-      <button onClick={() => setGender(gender === "M" ? "F" : "M")} className={`rounded px-2 py-1 text-xs font-bold ${gender === "F" ? "bg-pink-100 text-pink-700" : "bg-blue-100 text-blue-700"}`}>{gender}</button>
-      <button onClick={submit} disabled={!fullName.trim()} className="rounded bg-blue-500 px-2 py-1 text-xs text-white hover:bg-blue-600 disabled:opacity-50">Anadir</button>
-      <button onClick={() => { setShow(false); setFullName(""); }} className="text-xs text-gray-400 hover:text-gray-600">Cancelar</button>
+      <input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Nombre completo..." className="min-w-[150px] flex-1 rounded border border-line-subtle px-2 py-1 text-xs" autoFocus onKeyDown={(e) => { if (e.key === "Enter") submit(); }} />
+      <button onClick={() => setGender(gender === "M" ? "F" : "M")} className={`rounded px-2 py-1 text-xs font-bold ${gender === "F" ? "bg-pink-100 text-pink-700" : "bg-info-bg text-brand-active"}`}>{gender}</button>
+      <button onClick={submit} disabled={!fullName.trim()} className="rounded bg-brand px-2 py-1 text-xs text-white hover:bg-brand-hover disabled:opacity-50">Anadir</button>
+      <button onClick={() => { setShow(false); setFullName(""); }} className="text-xs text-ink-muted hover:text-ink-2">Cancelar</button>
     </div>
   );
 }
 
+function InlineEdit({ value, onSave, placeholder }: { value: string; onSave: (v: string) => void; placeholder?: string }) {
+  const [editing, setEditing] = useState(false);
+  const [local, setLocal] = useState(value);
+
+  if (!editing) {
+    return (
+      <span
+        onClick={() => { setLocal(value); setEditing(true); }}
+        className="cursor-text rounded px-1 py-0.5 hover:bg-brand-tint"
+        title="Click para editar"
+      >
+        {value || <span className="text-ink-disabled">{placeholder || "---"}</span>}
+      </span>
+    );
+  }
+
+  return (
+    <input
+      value={local}
+      onChange={(e) => setLocal(e.target.value)}
+      onBlur={() => {
+        if (local !== value) onSave(local);
+        setEditing(false);
+      }}
+      onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") setEditing(false); }}
+      autoFocus
+      className="w-full rounded border border-brand px-1 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-brand-tint"
+    />
+  );
+}

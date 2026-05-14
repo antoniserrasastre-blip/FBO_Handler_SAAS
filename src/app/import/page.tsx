@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { ParsedFlight } from "@/lib/pdfParser";
 import { SERVICE_LABELS, ServiceType } from "@/types";
 import { ServiceIcon, PdfIcon, ExcelIcon, SuccessIcon } from "@/components/Icons";
-import { ViewTabs } from "@/components/ViewTabs";
+import { HelixButton, SegmentedControl } from "@/components/helix";
 
 type Tab = "pdf" | "extras";
 
@@ -39,34 +39,27 @@ export default function ImportPage() {
   const [tab, setTab] = useState<Tab>("pdf");
 
   return (
-    <div className="min-h-screen bg-gray-50 px-4 py-8">
+    <div className="min-h-[calc(100vh-96px)] bg-bg px-4 py-8">
       <div className="mx-auto max-w-6xl">
-        <div className="mb-6 flex items-center justify-between">
+        <div className="mb-6 flex items-end justify-between">
           <div>
-            <h1 className="text-xl font-bold text-gray-900">Importar datos</h1>
-            <p className="mt-1 text-sm text-gray-500">Importa vuelos desde PDF o extras desde Excel</p>
+            <h1 className="text-2xl font-semibold tracking-tight text-ink-1">Importar datos</h1>
+            <p className="mt-1 text-sm text-ink-3">Importa vuelos desde PDF o extras desde Excel.</p>
           </div>
-          <ViewTabs tone="light" />
+          <HelixButton variant="secondary" size="sm" onClick={() => router.push("/")}>
+            Volver al panel
+          </HelixButton>
         </div>
 
-        {/* Tabs */}
-        <div className="mb-6 flex gap-1 rounded-lg bg-gray-200 p-1">
-          <button
-            onClick={() => setTab("pdf")}
-            className={`flex-1 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
-              tab === "pdf" ? "bg-white text-gray-900 shadow-sm" : "text-gray-600 hover:text-gray-800"
-            }`}
-          >
-            Orden del dia (PDF)
-          </button>
-          <button
-            onClick={() => setTab("extras")}
-            className={`flex-1 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
-              tab === "extras" ? "bg-white text-gray-900 shadow-sm" : "text-gray-600 hover:text-gray-800"
-            }`}
-          >
-            Extras (Excel)
-          </button>
+        <div className="mb-6">
+          <SegmentedControl<Tab>
+            value={tab}
+            onChange={setTab}
+            options={[
+              { value: "pdf", label: "Orden del día (PDF)" },
+              { value: "extras", label: "Extras (Excel)" },
+            ]}
+          />
         </div>
 
         {tab === "pdf" ? <PdfImportTab /> : <ExtrasImportTab />}
@@ -142,50 +135,68 @@ function PdfImportTab() {
       {result && result.flights.length > 0 && !saveResult && (
         <div className="mt-6">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-gray-700">{result.flights.length} vuelos — {result.date}</h2>
-            <button onClick={toggleAll} className="text-xs font-medium text-blue-600">{selectedFlights.size === result.flights.length ? "Deseleccionar" : "Seleccionar"} todo</button>
+            <h2 className="text-sm font-semibold text-ink-1">
+              <span className="font-mono [font-variant-numeric:tabular-nums]">{result.flights.length}</span>{" "}
+              vuelos — <span className="font-mono">{result.date}</span>
+            </h2>
+            <button
+              onClick={toggleAll}
+              className="font-mono text-xs font-semibold text-brand-active hover:text-brand-hover"
+            >
+              {selectedFlights.size === result.flights.length ? "Deseleccionar" : "Seleccionar"} todo
+            </button>
           </div>
-          <div className="overflow-x-auto rounded-lg bg-white shadow-sm">
+          <div className="overflow-x-auto rounded-hx-md border border-line bg-bg">
             <table className="w-full text-left text-xs">
-              <thead className="border-b bg-gray-50 text-gray-500">
-                <tr>
-                  <th className="px-3 py-2"><input type="checkbox" checked={selectedFlights.size === result.flights.length} onChange={toggleAll} /></th>
-                  <th className="px-3 py-2">Matricula</th>
-                  <th className="px-3 py-2">Indicativo</th>
-                  <th className="px-3 py-2">Tipo</th>
-                  <th className="px-3 py-2">Origen</th>
-                  <th className="px-3 py-2">ETA</th>
-                  <th className="px-3 py-2">Destino</th>
-                  <th className="px-3 py-2">ETD</th>
-                  <th className="px-3 py-2">Parking</th>
-                  <th className="px-3 py-2">Crew</th>
-                  <th className="px-3 py-2">Pax</th>
+              <thead className="bg-bg-subtle">
+                <tr className="font-mono text-[10px] uppercase tracking-wider text-ink-muted">
+                  <th className="border-b border-line px-3 py-2">
+                    <input type="checkbox" checked={selectedFlights.size === result.flights.length} onChange={toggleAll} />
+                  </th>
+                  <th className="border-b border-line px-3 py-2">Matrícula</th>
+                  <th className="border-b border-line px-3 py-2">Indicativo</th>
+                  <th className="border-b border-line px-3 py-2">Tipo</th>
+                  <th className="border-b border-line px-3 py-2">Origen</th>
+                  <th className="border-b border-line px-3 py-2">ETA</th>
+                  <th className="border-b border-line px-3 py-2">Destino</th>
+                  <th className="border-b border-line px-3 py-2">ETD</th>
+                  <th className="border-b border-line px-3 py-2">Parking</th>
+                  <th className="border-b border-line px-3 py-2">Crew</th>
+                  <th className="border-b border-line px-3 py-2">Pax</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="font-mono [font-variant-numeric:tabular-nums]">
                 {result.flights.map((f, i) => (
-                  <tr key={i} className={`${selectedFlights.has(i) ? "bg-white" : "bg-gray-50 opacity-50"} cursor-pointer hover:bg-blue-50`} onClick={() => toggleFlight(i)}>
+                  <tr
+                    key={i}
+                    className={`cursor-pointer border-b border-line-subtle transition-colors hover:bg-bg-subtle ${
+                      selectedFlights.has(i) ? "" : "opacity-50"
+                    }`}
+                    onClick={() => toggleFlight(i)}
+                  >
                     <td className="px-3 py-2"><input type="checkbox" checked={selectedFlights.has(i)} onChange={() => toggleFlight(i)} /></td>
-                    <td className="px-3 py-2 font-bold text-gray-900">{f.registration}</td>
-                    <td className="px-3 py-2 text-gray-500">{f.callsign}</td>
-                    <td className="px-3 py-2 text-gray-600">{f.aircraftType}</td>
-                    <td className="px-3 py-2 text-gray-600">{f.origin}</td>
-                    <td className="px-3 py-2 text-gray-600">{f.arrivalDate !== result.date ? f.arrivalDate + " " : ""}{f.eta}</td>
-                    <td className="px-3 py-2 text-gray-600">{f.destination}</td>
-                    <td className="px-3 py-2 text-gray-600">{f.departureDate !== result.date ? f.departureDate + " " : ""}{f.etd}</td>
-                    <td className="px-3 py-2 text-gray-600">{f.parking}</td>
-                    <td className="px-3 py-2 text-gray-600">{f.crewArrival}/{f.crewDeparture}</td>
-                    <td className="px-3 py-2 text-gray-600">{f.paxArrival}/{f.paxDeparture}</td>
+                    <td className="px-3 py-2 font-semibold text-ink-1">{f.registration}</td>
+                    <td className="px-3 py-2 text-ink-3">{f.callsign}</td>
+                    <td className="px-3 py-2 text-ink-2">{f.aircraftType}</td>
+                    <td className="px-3 py-2 text-ink-2">{f.origin}</td>
+                    <td className="px-3 py-2 text-ink-2">{f.arrivalDate !== result.date ? f.arrivalDate + " " : ""}{f.eta}</td>
+                    <td className="px-3 py-2 text-ink-2">{f.destination}</td>
+                    <td className="px-3 py-2 text-ink-2">{f.departureDate !== result.date ? f.departureDate + " " : ""}{f.etd}</td>
+                    <td className="px-3 py-2 text-ink-2">{f.parking}</td>
+                    <td className="px-3 py-2 text-ink-2">{f.crewArrival}/{f.crewDeparture}</td>
+                    <td className="px-3 py-2 text-ink-2">{f.paxArrival}/{f.paxDeparture}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          <div className="mt-4 flex justify-end gap-3">
-            <button onClick={() => { setResult(null); setError(""); }} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600">Cancelar</button>
-            <button onClick={handleConfirm} disabled={saving || !selectedFlights.size} className="rounded-lg bg-blue-600 px-6 py-2 text-sm font-medium text-white disabled:opacity-50">
-              {saving ? "Importando..." : `Importar ${selectedFlights.size} vuelo${selectedFlights.size !== 1 ? "s" : ""}`}
-            </button>
+          <div className="mt-4 flex justify-end gap-2">
+            <HelixButton variant="secondary" onClick={() => { setResult(null); setError(""); }}>
+              Cancelar
+            </HelixButton>
+            <HelixButton variant="primary" onClick={handleConfirm} disabled={saving || !selectedFlights.size}>
+              {saving ? "Importando…" : `Importar ${selectedFlights.size} vuelo${selectedFlights.size !== 1 ? "s" : ""}`}
+            </HelixButton>
           </div>
         </div>
       )}
@@ -270,30 +281,31 @@ function ExtrasImportTab() {
 
       {result && result.extras.length > 0 && !saveResult && (
         <div className="mt-6">
-          <h2 className="mb-3 text-sm font-semibold text-gray-700">
-            {result.extras.length} aviones con extras — {groupedByDate.length === 1 ? groupedByDate[0][0] : `${groupedByDate.length} fechas`}
+          <h2 className="mb-3 text-sm font-semibold text-ink-1">
+            <span className="font-mono [font-variant-numeric:tabular-nums]">{result.extras.length}</span>{" "}
+            aviones con extras — {groupedByDate.length === 1 ? groupedByDate[0][0] : `${groupedByDate.length} fechas`}
           </h2>
 
           {groupedByDate.map(([date, extras]) => (
             <div key={date} className="mb-4">
               {groupedByDate.length > 1 && (
-                <div className="mb-2 flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-2">
-                  <span className="text-sm font-semibold text-blue-800">{date}</span>
-                  <span className="text-xs text-blue-600">{extras.length} aviones</span>
+                <div className="mb-2 flex items-center gap-2 rounded-hx-md border border-line-subtle bg-brand-tint px-3 py-2">
+                  <span className="font-mono text-sm font-semibold text-brand-active">{date}</span>
+                  <span className="font-mono text-xs text-brand-active">{extras.length} aviones</span>
                 </div>
               )}
               <div className="space-y-2">
                 {extras.map((extra, i) => (
-                  <div key={i} className="rounded-lg bg-white px-4 py-3 shadow-sm">
+                  <div key={i} className="rounded-hx-md border border-line bg-bg px-4 py-3 shadow-hx-sm">
                     <div className="flex items-start justify-between">
-                      <span className="text-sm font-bold text-gray-900">{extra.registration}</span>
-                      <span className="text-xs text-gray-400">{extra.services.length} servicios</span>
+                      <span className="font-mono text-sm font-semibold text-ink-1">{extra.registration}</span>
+                      <span className="font-mono text-xs text-ink-muted">{extra.services.length} servicios</span>
                     </div>
                     <div className="mt-1.5 flex flex-wrap gap-1">
                       {extra.services.map((svc, j) => {
                         const label = svc.type === "CUSTOM" ? svc.name : (SERVICE_LABELS[svc.type as ServiceType] || svc.type);
                         return (
-                          <span key={j} className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
+                          <span key={j} className="inline-flex items-center gap-1 rounded-hx-pill bg-bg-muted px-2 py-0.5 text-xs text-ink-2">
                             <ServiceIcon type={svc.type} size={12} /> {(svc.quantity || 1) > 1 ? `${svc.quantity}x ` : ""}{label}
                           </span>
                         );
@@ -305,11 +317,13 @@ function ExtrasImportTab() {
             </div>
           ))}
 
-          <div className="mt-4 flex justify-end gap-3">
-            <button onClick={() => { setResult(null); setError(""); }} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600">Cancelar</button>
-            <button onClick={handleConfirm} disabled={saving} className="rounded-lg bg-blue-600 px-6 py-2 text-sm font-medium text-white disabled:opacity-50">
-              {saving ? "Importando..." : `Importar extras`}
-            </button>
+          <div className="mt-4 flex justify-end gap-2">
+            <HelixButton variant="secondary" onClick={() => { setResult(null); setError(""); }}>
+              Cancelar
+            </HelixButton>
+            <HelixButton variant="primary" onClick={handleConfirm} disabled={saving}>
+              {saving ? "Importando…" : "Importar extras"}
+            </HelixButton>
           </div>
         </div>
       )}
@@ -345,21 +359,21 @@ function UploadArea({ accept, icon, label, sublabel, loading, loadingText, onFil
   }
   return (
     <div
-      className="rounded-xl border-2 border-dashed border-gray-300 bg-white p-12 text-center transition-colors hover:border-blue-400"
-      onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add("border-blue-400", "bg-blue-50"); }}
-      onDragLeave={(e) => { e.currentTarget.classList.remove("border-blue-400", "bg-blue-50"); }}
-      onDrop={(e) => { e.preventDefault(); e.currentTarget.classList.remove("border-blue-400", "bg-blue-50"); const files = filterByType(Array.from(e.dataTransfer.files)); if (files.length) onFiles(files); }}
+      className="rounded-hx-md border-2 border-dashed border-line bg-bg p-12 text-center transition-colors hover:border-brand"
+      onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add("border-brand", "bg-brand-tint"); }}
+      onDragLeave={(e) => { e.currentTarget.classList.remove("border-brand", "bg-brand-tint"); }}
+      onDrop={(e) => { e.preventDefault(); e.currentTarget.classList.remove("border-brand", "bg-brand-tint"); const files = filterByType(Array.from(e.dataTransfer.files)); if (files.length) onFiles(files); }}
     >
       {loading ? (
-        <div className="text-gray-500"><div className="mb-2 text-lg">{loadingText}</div></div>
+        <div className="text-ink-3"><div className="mb-2 text-lg">{loadingText}</div></div>
       ) : (
         <>
-          <div className="mb-4 flex justify-center">{icon}</div>
-          <p className="text-gray-600">
+          <div className="mb-4 flex justify-center text-ink-muted">{icon}</div>
+          <p className="text-ink-2">
             {label.split(" o ")[0]} o{" "}
-            <button onClick={() => inputRef.current?.click()} className="font-medium text-blue-600 hover:text-blue-500">selecciona archivos</button>
+            <button onClick={() => inputRef.current?.click()} className="font-semibold text-brand-active hover:text-brand-hover">selecciona archivos</button>
           </p>
-          <p className="mt-2 text-xs text-gray-400">{sublabel}</p>
+          <p className="mt-2 text-xs text-ink-muted">{sublabel}</p>
           <input ref={inputRef} type="file" accept={accept} multiple className="hidden" onChange={(e) => { const files = Array.from(e.target.files || []); if (files.length) onFiles(files); e.target.value = ""; }} />
         </>
       )}
@@ -368,13 +382,13 @@ function UploadArea({ accept, icon, label, sublabel, loading, loadingText, onFil
 }
 
 function ErrorBanner({ message }: { message: string }) {
-  return <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{message}</div>;
+  return <div className="mt-4 rounded-hx-md border border-danger-strong bg-danger-bg px-4 py-3 text-sm text-danger-strong">{message}</div>;
 }
 
 function WarningBanner({ items }: { items: string[] }) {
   return (
-    <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
-      {items.map((e, i) => <p key={i} className="text-xs text-amber-600">{e}</p>)}
+    <div className="mt-4 rounded-hx-md border border-warning-strong bg-warning-bg px-4 py-3">
+      {items.map((e, i) => <p key={i} className="text-xs text-warning-strong">{e}</p>)}
     </div>
   );
 }
@@ -382,15 +396,15 @@ function WarningBanner({ items }: { items: string[] }) {
 function SuccessResult({ lines, onReset, resetLabel }: { lines: (string | null)[]; onReset: () => void; resetLabel: string }) {
   const router = useRouter();
   return (
-    <div className="mt-6 rounded-xl bg-white p-8 text-center shadow-sm">
-      <div className="mb-3 flex justify-center"><SuccessIcon size={40} className="text-green-500" /></div>
-      <h2 className="text-lg font-bold text-gray-900">Importacion completada</h2>
-      <div className="mt-3 space-y-1 text-sm text-gray-600">
+    <div className="mt-6 rounded-hx-md border border-line bg-bg p-8 text-center shadow-hx-sm">
+      <div className="mb-3 flex justify-center"><SuccessIcon size={40} className="text-success" /></div>
+      <h2 className="text-lg font-semibold text-ink-1">Importación completada</h2>
+      <div className="mt-3 space-y-1 text-sm text-ink-2">
         {lines.filter(Boolean).map((l, i) => <p key={i}>{l}</p>)}
       </div>
-      <div className="mt-6 flex justify-center gap-3">
-        <button onClick={onReset} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600">{resetLabel}</button>
-        <button onClick={() => router.push("/")} className="rounded-lg bg-blue-600 px-6 py-2 text-sm font-medium text-white">Ir al panel</button>
+      <div className="mt-6 flex justify-center gap-2">
+        <HelixButton variant="secondary" onClick={onReset}>{resetLabel}</HelixButton>
+        <HelixButton variant="primary" onClick={() => router.push("/")}>Ir al panel</HelixButton>
       </div>
     </div>
   );

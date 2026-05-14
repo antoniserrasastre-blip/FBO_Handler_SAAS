@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { Suspense, useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Flight, Service, EventLog, LostItem } from "@prisma/client";
@@ -17,11 +17,11 @@ import { PendingServicesPanel } from "@/components/PendingServicesPanel";
 import { QuickAddFlight } from "@/components/QuickAddFlight";
 import { useOverdueAlert } from "@/hooks/useOverdueAlert";
 import { Volume2, VolumeX, FileCheck2, Printer } from "lucide-react";
-import { ViewTabs } from "@/components/ViewTabs";
 import { ShiftHandover } from "@/components/ShiftHandover";
 import { detectParkingConflicts } from "@/lib/parkingConflicts";
+import { HelixButton, Stat, StatBand, useDate } from "@/components/helix";
 
-import { getSpainToday, dateToSqlString } from "@/lib/time";
+import { dateToSqlString } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +32,14 @@ type FlightWithRelations = Flight & {
 };
 
 export default function HomePage() {
+  return (
+    <Suspense fallback={null}>
+      <HomePageInner />
+    </Suspense>
+  );
+}
+
+function HomePageInner() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [flights, setFlights] = useState<FlightWithRelations[]>([]);
@@ -46,30 +54,20 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const toastIdRef = useRef(0);
-  
-  // Initialize with a safe date for SSR, will be corrected in useEffect
-  const [date, setDate] = useState(() => getSpainToday());
 
-  // Handle client-side hydration to ensure the date is always fresh on load
+  // Operations date is owned by the global Helix header via the URL (?d=).
+  const { date, isToday, setDate } = useDate();
+
+  // Compat: /historico parks the date it wants to view in sessionStorage,
+  // then router.push("/"). Pick that up and translate it into the URL so the
+  // header reflects the right day.
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const viewDate = sessionStorage.getItem("viewDate");
-      if (viewDate) {
-        sessionStorage.removeItem("viewDate");
-        const d = new Date(viewDate);
-        // Normalize to midnight UTC
-        setDate(new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0)));
-      } else {
-        // Re-calculate today on the client to fix server-side UTC lag
-        setDate(getSpainToday());
-      }
-    }
-  }, []);
-
-  const isToday = useMemo(() => {
-    const today = getSpainToday();
-    return date.getTime() === today.getTime();
-  }, [date]);
+    if (typeof window === "undefined") return;
+    const viewDate = sessionStorage.getItem("viewDate");
+    if (!viewDate) return;
+    sessionStorage.removeItem("viewDate");
+    setDate(new Date(viewDate));
+  }, [setDate]);
 
   const allServices = useMemo(() => flights.flatMap((f) => f.services || []), [flights]);
   const overdueCount = useOverdueAlert(allServices, soundEnabled && isToday);
@@ -151,11 +149,11 @@ export default function HomePage() {
     return () => clearInterval(interval);
   }, [isToday]);
 
-  const handleDateChange = useCallback((newDate: Date) => {
-    setDate(newDate);
+  // Clear list + show loading on date change so we don't display stale rows.
+  useEffect(() => {
     setFlights([]);
     setLoading(true);
-  }, []);
+  }, [date]);
 
   // --- Mutation handlers with error feedback ---
   const handleFlightUpdate = async (id: string, data: Partial<Flight>) => {
@@ -415,23 +413,42 @@ export default function HomePage() {
 
   if (status === "loading" || loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-gray-500">Cargando...</div>
+      <div className="flex min-h-[calc(100vh-96px)] items-center justify-center text-ink-3">
+        Cargando…
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <DaySummary
-        flights={flights}
-        date={date}
-        connected={connected}
-        isToday={isToday}
-        onDateChange={handleDateChange}
-      />
+    <div className="min-h-[calc(100vh-96px)] bg-bg">
+      <DaySummary flights={flights} />
 
-      {isToday && <TurnaroundAlerts flights={flights} dayUtc={date} />}
+      {/* KPI band — replaces the gray "X aviones (Y + Z)" caption-as-heading. */}
+      {flights.length > 0 && (
+        <StatBand>
+          <Stat
+            label="Vuelos"
+            value={
+              filteredFlights.length === flights.length
+                ? flights.length
+                : `${filteredFlights.length} / ${flights.length}`
+            }
+            sub={filteredFlights.length === flights.length ? "del día" : "filtrados"}
+          />
+          <Stat label="Llegadas" value={movementStats.arrivals} />
+          <Stat label="Salidas" value={movementStats.departures} />
+          {overdueCount > 0 ? (
+            <Stat
+              label="Retrasados"
+              value={overdueCount}
+              sub={overdueCount === 1 ? "vuelo" : "vuelos"}
+              tone="alert"
+            />
+          ) : null}
+        </StatBand>
+      )}
+
+      {isToday && <TurnaroundAlerts flights={flights} />}
 
       <PendingServicesPanel flights={flights} onQuickFilter={setSearchQuery} />
 
@@ -452,100 +469,46 @@ export default function HomePage() {
           />
         )}
 
-        {/* Action bar */}
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 sm:mb-4">
-          <h2 className="text-xs font-medium text-gray-500 sm:text-sm">
-            {filteredFlights.length === flights.length
-              ? `${flights.length} aviones (${movementStats.arrivals} llegadas + ${movementStats.departures} salidas)`
-              : `${filteredFlights.length} de ${flights.length} aviones`
-            }
-          </h2>
-          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-            {overdueCount > 0 && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-1 text-xs font-bold text-red-700 overdue-pulse">
-                &#9888; {overdueCount} retrasado{overdueCount !== 1 ? "s" : ""}
-              </span>
-            )}
-            <ViewTabs tone="light" />
-            {flights.length > 0 && (
-              <button
-                onClick={() => window.print()}
-                className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 sm:px-3 sm:py-2 sm:text-sm"
-                title="Imprimir hoja del dia"
-              >
-                <Printer size={14} /> Imprimir
-              </button>
-            )}
-            {flights.length > 0 && (
-              <button
-                onClick={() => setShowHandover(true)}
-                className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 sm:px-3 sm:py-2 sm:text-sm"
-                title="Resumen para pasar turno"
-              >
-                <FileCheck2 size={14} /> Traspaso
-              </button>
-            )}
-            <button
-              onClick={() => setSoundEnabled(!soundEnabled)}
-              className="rounded-lg border border-gray-300 p-1.5 text-gray-600 hover:bg-gray-50"
-              title={soundEnabled ? "Desactivar sonido" : "Activar sonido de alertas"}
+        {/* Action bar — secondary actions are ghost (visually subordinate); only
+            "Nuevo vuelo" is the primary CTA. */}
+        <div className="mb-3 flex flex-wrap items-center justify-end gap-1.5 sm:mb-4 sm:gap-2">
+          {overdueCount > 0 && (
+            <span className="hx-pill hx-pill-danger overdue-pulse mr-auto">
+              ⚠ {overdueCount} retrasado{overdueCount !== 1 ? "s" : ""}
+            </span>
+          )}
+          {flights.length > 0 && (
+            <HelixButton variant="ghost" size="sm" onClick={() => window.print()} title="Imprimir hoja del día">
+              <Printer size={14} /> Imprimir
+            </HelixButton>
+          )}
+          {flights.length > 0 && (
+            <HelixButton
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowHandover(true)}
+              title="Resumen para pasar turno"
             >
-              {soundEnabled ? <Volume2 size={14} /> : <VolumeX size={14} />}
-            </button>
-            {flights.length > 0 && (
-              <div className="relative group">
-                <button className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 sm:px-3 sm:py-2 sm:text-sm">
-                  Exportar <ChevronDown size={14} className="inline" />
-                </button>
-                <div className="absolute right-0 top-full z-10 mt-1 hidden min-w-[140px] rounded-lg border bg-white py-1 shadow-lg group-hover:block">
-                  <button
-                    onClick={() => handleExport("flights")}
-                    className="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
-                  >
-                    Vuelos (CSV)
-                  </button>
-                  <button
-                    onClick={() => handleExport("services")}
-                    className="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
-                  >
-                    Servicios (CSV)
-                  </button>
-                  <div className="mx-2 my-1 border-t border-gray-100" />
-                  <button
-                    onClick={() => window.open(`/api/export/daily/pdf?date=${date.toISOString().slice(0, 10)}`, "_blank")}
-                    className="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
-                  >
-                    PDF Diario (AENA)
-                  </button>
-                  <button
-                    onClick={() => window.open(`/api/export/daily/excel?date=${date.toISOString().slice(0, 10)}`, "_blank")}
-                    className="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
-                  >
-                    Excel Diario
-                  </button>
-                  <div className="mx-2 my-1 border-t border-gray-100" />
-                  <button
-                    onClick={() => window.open("/api/export/blank-declaration", "_blank")}
-                    className="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
-                  >
-                    Declaracion en blanco
-                  </button>
-                </div>
-              </div>
-            )}
-            <button
-              onClick={() => router.push("/import")}
-              className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 sm:px-4 sm:py-2 sm:text-sm"
-            >
-              Importar PDF
-            </button>
-            <button
-              onClick={() => setShowQuickAdd(true)}
-              className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-blue-500 sm:px-4 sm:py-2 sm:text-sm"
-            >
-              + Nuevo vuelo
-            </button>
-          </div>
+              <FileCheck2 size={14} /> Traspaso
+            </HelixButton>
+          )}
+          <HelixButton
+            variant="ghost"
+            size="icon"
+            onClick={() => setSoundEnabled(!soundEnabled)}
+            title={soundEnabled ? "Desactivar sonido" : "Activar sonido de alertas"}
+          >
+            {soundEnabled ? <Volume2 size={14} /> : <VolumeX size={14} />}
+          </HelixButton>
+          {flights.length > 0 && (
+            <ExportMenu date={date} onExport={handleExport} />
+          )}
+          <HelixButton variant="secondary" size="sm" onClick={() => router.push("/import")}>
+            Importar PDF
+          </HelixButton>
+          <HelixButton variant="primary" size="sm" onClick={() => setShowQuickAdd(true)}>
+            + Nuevo vuelo
+          </HelixButton>
         </div>
 
         {/* Quick add form */}
@@ -560,22 +523,24 @@ export default function HomePage() {
 
         {/* Flight list */}
         {flights.length === 0 ? (
-          <div className="rounded-lg border-2 border-dashed border-gray-200 p-12 text-center">
-            <p className="text-gray-500">
-              {isToday ? "No hay vuelos para hoy." : "No hay datos para este dia."}
+          <div className="rounded-hx-md border border-dashed border-line p-12 text-center">
+            <p className="text-ink-3">
+              {isToday ? "No hay vuelos para hoy." : "No hay datos para este día."}
             </p>
             {isToday && !showQuickAdd && (
-              <button
+              <HelixButton
+                variant="ghost"
+                size="sm"
+                className="mt-3"
                 onClick={() => setShowQuickAdd(true)}
-                className="mt-3 text-sm font-medium text-blue-600 hover:text-blue-500"
               >
                 Crear primer vuelo
-              </button>
+              </HelixButton>
             )}
           </div>
         ) : filteredFlights.length === 0 ? (
-          <div className="rounded-lg border-2 border-dashed border-gray-200 p-8 text-center">
-            <p className="text-gray-400 text-sm">Ningun vuelo coincide con la busqueda</p>
+          <div className="rounded-hx-md border border-dashed border-line p-8 text-center">
+            <p className="text-sm italic text-ink-muted">Ningún vuelo coincide con la búsqueda.</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -603,7 +568,6 @@ export default function HomePage() {
                       .join(", ");
                   })()}
                   readOnly={false}
-                  dayUtc={date}
                 />
               </div>
             ))}
@@ -614,6 +578,84 @@ export default function HomePage() {
       <ShortcutsHelp isOpen={showShortcuts} onClose={() => setShowShortcuts(false)} />
       <ShiftHandover isOpen={showHandover} onClose={() => setShowHandover(false)} flights={flights} date={date} />
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+    </div>
+  );
+}
+
+function ExportMenu({
+  date,
+  onExport,
+}: {
+  date: Date;
+  onExport: (type: "flights" | "services") => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDoc(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const ymd = date.toISOString().slice(0, 10);
+  const item =
+    "block w-full px-4 py-2 text-left text-sm text-ink-2 hover:bg-bg-muted";
+
+  return (
+    <div className="relative" ref={ref}>
+      <HelixButton
+        variant="ghost"
+        size="sm"
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+      >
+        Exportar <ChevronDown size={14} />
+      </HelixButton>
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 top-full z-20 mt-1 min-w-[180px] rounded-hx-md border border-line bg-bg py-1 shadow-hx-lg"
+        >
+          <button onClick={() => { onExport("flights"); setOpen(false); }} className={item}>
+            Vuelos (CSV)
+          </button>
+          <button onClick={() => { onExport("services"); setOpen(false); }} className={item}>
+            Servicios (CSV)
+          </button>
+          <div className="mx-2 my-1 border-t border-line-subtle" />
+          <button
+            onClick={() => { window.open(`/api/export/daily/pdf?date=${ymd}`, "_blank"); setOpen(false); }}
+            className={item}
+          >
+            PDF Diario (AENA)
+          </button>
+          <button
+            onClick={() => { window.open(`/api/export/daily/excel?date=${ymd}`, "_blank"); setOpen(false); }}
+            className={item}
+          >
+            Excel Diario
+          </button>
+          <div className="mx-2 my-1 border-t border-line-subtle" />
+          <button
+            onClick={() => { window.open("/api/export/blank-declaration", "_blank"); setOpen(false); }}
+            className={item}
+          >
+            Declaración en blanco
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -23,15 +23,19 @@ interface ShortcutsHelpProps {
 export function ShortcutsHelp({ isOpen, onClose }: ShortcutsHelpProps) {
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Atajos de teclado">
-      <div className="space-y-1">
+      <div className="divide-y divide-line-subtle">
         {SHORTCUTS.map((s) => (
-          <div key={s.key} className="flex items-center justify-between py-1.5">
-            <span className="text-sm text-gray-600">{s.action}</span>
-            <kbd className="rounded bg-gray-100 px-2 py-0.5 font-mono text-xs text-gray-700">{s.key}</kbd>
+          <div key={s.key} className="flex items-center justify-between py-2">
+            <span className="text-sm text-ink-2">{s.action}</span>
+            <kbd className="rounded-hx-sm border border-line bg-bg-subtle px-2 py-0.5 font-mono text-xs font-semibold text-ink-1 shadow-hx-sm">
+              {s.key}
+            </kbd>
           </div>
         ))}
       </div>
-      <p className="mt-4 text-xs text-gray-400">Los atajos no funcionan mientras se edita un campo de texto.</p>
+      <p className="mt-4 font-mono text-xs text-ink-muted">
+        Los atajos no funcionan mientras se edita un campo de texto.
+      </p>
     </Modal>
   );
 }

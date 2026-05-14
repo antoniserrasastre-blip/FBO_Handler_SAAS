@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { ROLE_LABELS, Role, ROLES } from "@/types";
 import { palmaDayUtc } from "@/lib/time";
-import { ViewTabs } from "@/components/ViewTabs";
 
 interface User {
   id: string;
@@ -132,8 +131,13 @@ export default function AdminPage() {
             <h1 className="text-xl font-bold text-gray-900">{isAdmin ? "Administracion" : "Panel supervisor"}</h1>
             <p className="mt-1 text-sm text-gray-500">{isAdmin ? `${users.length} usuarios registrados` : "Gestion de datos"}</p>
           </div>
-          <div className="flex gap-2 items-center">
-            <ViewTabs tone="light" />
+          <div className="flex gap-2">
+            <button
+              onClick={() => router.push("/")}
+              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              Volver
+            </button>
             {isAdmin && !showForm && (
               <button
                 onClick={() => { resetForm(); setShowForm(true); }}

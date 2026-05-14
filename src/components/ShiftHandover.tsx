@@ -23,10 +23,10 @@ interface ShiftHandoverProps {
 
 export function ShiftHandover({ isOpen, onClose, flights, date }: ShiftHandoverProps) {
   const summary = useMemo(() => {
-    const inProgress = flights.filter((f) => f.state !== "DEPARTED" && f.state !== "OFF_BLOCKS" && f.state !== "DISPATCHED" && f.state !== "EXPECTED");
+    const inProgress = flights.filter((f) => f.state !== "DISPATCHED" && f.state !== "EXPECTED");
     const expected = flights.filter((f) => f.state === "EXPECTED");
-    const dispatched = flights.filter((f) => f.state === "DEPARTED" || f.state === "OFF_BLOCKS" || f.state === "DISPATCHED");
-    const fuelPending = flights.filter((f) => f.state !== "DEPARTED" && f.state !== "OFF_BLOCKS" && f.state !== "DISPATCHED" && (f.fuelState === "REQUESTED" || f.fuelState === "NOT_REQUESTED"));
+    const dispatched = flights.filter((f) => f.state === "DISPATCHED");
+    const fuelPending = flights.filter((f) => f.state !== "DISPATCHED" && (f.fuelState === "REQUESTED" || f.fuelState === "NOT_REQUESTED"));
     const pendingServices = flights.flatMap((f) =>
       (f.services || []).filter((s) => s.state !== "DELIVERED").map((s) => ({ flight: f, service: s }))
     );
@@ -36,7 +36,7 @@ export function ShiftHandover({ isOpen, onClose, flights, date }: ShiftHandoverP
     const openLostItems = flights.flatMap((f) =>
       (f.lostItems || []).filter((li) => li.state !== "DELIVERED").map((li) => ({ flight: f, item: li }))
     );
-    const policiaNeeded = flights.filter((f) => f.state !== "DEPARTED" && f.state !== "OFF_BLOCKS" && f.state !== "DISPATCHED" && getRequiredAuthorities(f.origin).policia);
+    const policiaNeeded = flights.filter((f) => f.state !== "DISPATCHED" && getRequiredAuthorities(f.origin).policia);
 
     return { inProgress, expected, dispatched, fuelPending, pendingServices, overdueServices, openLostItems, policiaNeeded };
   }, [flights]);
@@ -48,31 +48,41 @@ export function ShiftHandover({ isOpen, onClose, flights, date }: ShiftHandoverP
       <div className="space-y-4 text-sm">
         {/* Quick stats */}
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <Stat label="En tierra / Embarque" value={summary.inProgress.length} color="text-blue-700" />
-          <Stat label="Esperados" value={summary.expected.length} color="text-gray-600" />
-          <Stat label="Despachados" value={summary.dispatched.length} color="text-green-700" />
-          <Stat label="Retrasados" value={summary.overdueServices.length} color="text-red-700" />
+          <Stat label="En tierra / Embarque" value={summary.inProgress.length} tone="onblocks" />
+          <Stat label="Esperados" value={summary.expected.length} tone="expected" />
+          <Stat label="Despachados" value={summary.dispatched.length} tone="departed" />
+          <Stat label="Retrasados" value={summary.overdueServices.length} tone="alert" />
         </div>
 
-        {/* Vuelos en curso */}
         {summary.inProgress.length > 0 && (
-          <Section title={`Vuelos en curso (${summary.inProgress.length})`} color="text-blue-700">
+          <Section title={`Vuelos en curso (${summary.inProgress.length})`}>
             <div className="space-y-1">
               {summary.inProgress.map((f) => {
                 const stateConfig = FLIGHT_STATE_CONFIG[f.state as FlightState];
                 const opName = getOperatorName(f.callsign);
                 return (
-                  <div key={f.id} className="flex items-center justify-between rounded bg-gray-50 px-3 py-1.5 text-xs">
+                  <div
+                    key={f.id}
+                    className="flex items-center justify-between rounded-hx-sm bg-bg-subtle px-3 py-1.5 font-mono text-xs"
+                  >
                     <span className="flex items-center gap-2">
-                      <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${stateConfig?.bg} ${stateConfig?.text}`}>
+                      <span
+                        className={`rounded-hx-sm px-1.5 py-0.5 text-[10px] font-semibold ${stateConfig?.bg ?? "bg-bg-muted"} ${stateConfig?.text ?? "text-ink-2"}`}
+                      >
                         {stateConfig?.label}
                       </span>
-                      <span className="font-semibold">{f.registration}</span>
-                      <span className="text-gray-500">{f.callsign}</span>
-                      {opName !== "Privado" && <span className="text-indigo-600">{opName}</span>}
-                      {f.parking && <span className="rounded bg-gray-200 px-1 text-[10px]">{f.parking}</span>}
+                      <span className="font-semibold text-ink-1">{f.registration}</span>
+                      <span className="text-ink-3">{f.callsign}</span>
+                      {opName !== "Privado" ? (
+                        <span className="text-brand-active">{opName}</span>
+                      ) : null}
+                      {f.parking ? (
+                        <span className="rounded-hx-sm bg-bg-muted px-1 text-[10px] text-ink-2">
+                          {f.parking}
+                        </span>
+                      ) : null}
                     </span>
-                    <span className="text-gray-400">
+                    <span className="text-ink-muted [font-variant-numeric:tabular-nums]">
                       ETD {f.etd || "--:--"}
                     </span>
                   </div>
@@ -82,43 +92,53 @@ export function ShiftHandover({ isOpen, onClose, flights, date }: ShiftHandoverP
           </Section>
         )}
 
-        {/* Servicios pendientes */}
         {summary.pendingServices.length > 0 && (
-          <Section title={`Servicios pendientes (${summary.pendingServices.length})`} color="text-amber-700">
+          <Section title={`Servicios pendientes (${summary.pendingServices.length})`}>
             <div className="space-y-1">
               {summary.pendingServices.slice(0, 20).map(({ flight, service }) => (
-                <div key={service.id} className="flex items-center justify-between rounded bg-gray-50 px-3 py-1 text-xs">
+                <div
+                  key={service.id}
+                  className="flex items-center justify-between rounded-hx-sm bg-bg-subtle px-3 py-1 font-mono text-xs"
+                >
                   <span>
-                    <span className="font-semibold">{flight.registration}</span>
-                    {" "}
-                    <span className="text-gray-600">{service.customName || service.type}</span>
-                    {service.origin && <span className="text-gray-400"> ({service.origin})</span>}
+                    <span className="font-semibold text-ink-1">{flight.registration}</span>{" "}
+                    <span className="text-ink-2">{service.customName || service.type}</span>
+                    {service.origin ? (
+                      <span className="text-ink-muted"> ({service.origin})</span>
+                    ) : null}
                   </span>
-                  <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
-                    service.state === "ARRIVED" ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-600"
-                  }`}>
+                  <span
+                    className={`rounded-hx-sm px-1.5 py-0.5 text-[10px] font-semibold ${
+                      service.state === "ARRIVED"
+                        ? "bg-info-bg text-info-strong"
+                        : "bg-bg-muted text-ink-2"
+                    }`}
+                  >
                     {service.state === "ARRIVED" ? "Llegado, sin entregar" : "Pendiente"}
                   </span>
                 </div>
               ))}
-              {summary.pendingServices.length > 20 && (
-                <p className="text-xs text-gray-400">...y {summary.pendingServices.length - 20} mas</p>
-              )}
+              {summary.pendingServices.length > 20 ? (
+                <p className="font-mono text-xs text-ink-muted">
+                  …y {summary.pendingServices.length - 20} más
+                </p>
+              ) : null}
             </div>
           </Section>
         )}
 
-        {/* Retrasados (urgente) */}
         {summary.overdueServices.length > 0 && (
-          <Section title={`Servicios retrasados (${summary.overdueServices.length})`} color="text-red-700">
+          <Section title={`Servicios retrasados (${summary.overdueServices.length})`} tone="danger">
             <div className="space-y-1">
               {summary.overdueServices.map(({ flight, service }) => (
-                <div key={service.id} className="flex items-center justify-between rounded border border-red-200 bg-red-50 px-3 py-1 text-xs">
+                <div
+                  key={service.id}
+                  className="flex items-center justify-between rounded-hx-sm border border-danger-strong bg-danger-bg px-3 py-1 font-mono text-xs"
+                >
                   <span>
-                    <span className="text-red-600">&#9888;</span>{" "}
-                    <span className="font-semibold">{flight.registration}</span>
-                    {" "}
-                    <span className="text-gray-700">{service.customName || service.type}</span>
+                    <span className="text-danger-strong">⚠</span>{" "}
+                    <span className="font-semibold text-ink-1">{flight.registration}</span>{" "}
+                    <span className="text-ink-2">{service.customName || service.type}</span>
                   </span>
                 </div>
               ))}
@@ -126,12 +146,14 @@ export function ShiftHandover({ isOpen, onClose, flights, date }: ShiftHandoverP
           </Section>
         )}
 
-        {/* Fuel pendiente */}
         {summary.fuelPending.length > 0 && (
-          <Section title={`Fuel pendiente (${summary.fuelPending.length})`} color="text-yellow-700">
+          <Section title={`Fuel pendiente (${summary.fuelPending.length})`} tone="warning">
             <div className="flex flex-wrap gap-1">
               {summary.fuelPending.map((f) => (
-                <span key={f.id} className="rounded bg-yellow-100 px-2 py-0.5 text-xs text-yellow-800">
+                <span
+                  key={f.id}
+                  className="rounded-hx-sm bg-warning-bg px-2 py-0.5 font-mono text-xs text-warning-strong"
+                >
                   {f.registration} {f.fuelState === "REQUESTED" ? "(pedido)" : "(no pedido)"}
                 </span>
               ))}
@@ -139,12 +161,14 @@ export function ShiftHandover({ isOpen, onClose, flights, date }: ShiftHandoverP
           </Section>
         )}
 
-        {/* Policia */}
         {summary.policiaNeeded.length > 0 && (
-          <Section title={`Policia necesaria (${summary.policiaNeeded.length})`} color="text-purple-700">
+          <Section title={`Policía necesaria (${summary.policiaNeeded.length})`}>
             <div className="flex flex-wrap gap-1">
               {summary.policiaNeeded.map((f) => (
-                <span key={f.id} className="rounded bg-purple-100 px-2 py-0.5 text-xs text-purple-800">
+                <span
+                  key={f.id}
+                  className="rounded-hx-sm bg-bg-muted px-2 py-0.5 font-mono text-xs text-ink-1"
+                >
                   {f.registration} ({f.origin})
                 </span>
               ))}
@@ -152,50 +176,81 @@ export function ShiftHandover({ isOpen, onClose, flights, date }: ShiftHandoverP
           </Section>
         )}
 
-        {/* Objetos olvidados abiertos */}
         {summary.openLostItems.length > 0 && (
-          <Section title={`Objetos sin reclamar (${summary.openLostItems.length})`} color="text-orange-700">
+          <Section title={`Objetos sin reclamar (${summary.openLostItems.length})`} tone="warning">
             <div className="space-y-1">
               {summary.openLostItems.map(({ flight, item }) => (
-                <div key={item.id} className="rounded bg-orange-50 px-3 py-1 text-xs">
-                  <span className="font-semibold">{flight.registration}</span>
+                <div key={item.id} className="rounded-hx-sm bg-warning-bg px-3 py-1 font-mono text-xs">
+                  <span className="font-semibold text-ink-1">{flight.registration}</span>
                   {" — "}
-                  <span className="text-gray-700">{item.description}</span>
-                  {" "}
-                  <span className="text-gray-400">({item.location})</span>
-                  {item.state === "CLAIMED" && item.claimedBy && (
-                    <span className="ml-2 text-blue-600">&rarr; {item.claimedBy}</span>
-                  )}
+                  <span className="text-ink-2">{item.description}</span>{" "}
+                  <span className="text-ink-muted">({item.location})</span>
+                  {item.state === "CLAIMED" && item.claimedBy ? (
+                    <span className="ml-2 text-brand-active">→ {item.claimedBy}</span>
+                  ) : null}
                 </div>
               ))}
             </div>
           </Section>
         )}
 
-        {/* Todo OK */}
-        {summary.inProgress.length === 0 && summary.pendingServices.length === 0 && summary.openLostItems.length === 0 && summary.overdueServices.length === 0 && (
-          <div className="rounded-lg bg-green-50 p-4 text-center text-sm text-green-700">
+        {summary.inProgress.length === 0 &&
+        summary.pendingServices.length === 0 &&
+        summary.openLostItems.length === 0 &&
+        summary.overdueServices.length === 0 ? (
+          <div className="rounded-hx-md border border-success-strong bg-success-bg p-4 text-center text-sm text-success-strong">
             Todo resuelto para este turno. Buen trabajo.
           </div>
-        )}
+        ) : null}
       </div>
     </Modal>
   );
 }
 
-function Stat({ label, value, color }: { label: string; value: number; color: string }) {
+const STAT_TONE: Record<string, string> = {
+  onblocks: "text-fbo-onblocks",
+  expected: "text-ink-2",
+  departed: "text-fbo-departed",
+  alert: "text-danger-strong",
+};
+
+function Stat({ label, value, tone }: { label: string; value: number; tone: keyof typeof STAT_TONE }) {
   return (
-    <div className="rounded-lg bg-gray-50 px-3 py-2">
-      <div className="text-[10px] uppercase tracking-wide text-gray-500">{label}</div>
-      <div className={`text-xl font-bold ${color}`}>{value}</div>
+    <div className="rounded-hx-md border border-line-subtle bg-bg-subtle px-3 py-2">
+      <div className="font-mono text-[10px] font-semibold uppercase tracking-wider text-ink-muted">
+        {label}
+      </div>
+      <div
+        className={`font-mono text-xl font-semibold [font-variant-numeric:tabular-nums] ${STAT_TONE[tone]}`}
+      >
+        {value}
+      </div>
     </div>
   );
 }
 
-function Section({ title, color, children }: { title: string; color: string; children: React.ReactNode }) {
+const SECTION_TONE: Record<string, string> = {
+  default: "text-ink-2",
+  warning: "text-warning-strong",
+  danger: "text-danger-strong",
+};
+
+function Section({
+  title,
+  children,
+  tone = "default",
+}: {
+  title: string;
+  children: React.ReactNode;
+  tone?: keyof typeof SECTION_TONE;
+}) {
   return (
     <div>
-      <h3 className={`mb-1.5 text-xs font-bold uppercase tracking-wider ${color}`}>{title}</h3>
+      <h3
+        className={`mb-1.5 font-mono text-[11px] font-semibold uppercase tracking-wider ${SECTION_TONE[tone]}`}
+      >
+        {title}
+      </h3>
       {children}
     </div>
   );

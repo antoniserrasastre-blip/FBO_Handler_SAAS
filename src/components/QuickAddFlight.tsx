@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Flight } from "@prisma/client";
 import { CloseIcon } from "./Icons";
+import { HelixButton } from "./helix";
 
 interface QuickAddFlightProps {
   date: Date;
@@ -59,10 +60,16 @@ export function QuickAddFlight({ date, onCreated, onCancel, onError }: QuickAddF
   }
 
   return (
-    <div className="mb-3 rounded-lg border-l-4 border-blue-400 bg-blue-50/50 p-3 shadow-sm">
+    <div className="mb-3 rounded-hx-md border border-line border-l-[3px] border-l-brand bg-brand-tint p-3 shadow-hx-sm">
       <div className="mb-2 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-blue-800">Nuevo vuelo</h3>
-        <button onClick={onCancel} className="rounded p-1 text-gray-400 hover:bg-white hover:text-gray-600">
+        <h3 className="font-mono text-xs font-semibold uppercase tracking-wider text-brand-active">
+          Nuevo vuelo
+        </h3>
+        <button
+          onClick={onCancel}
+          className="rounded-hx-sm p-1 text-ink-muted hover:bg-bg hover:text-ink-1"
+          aria-label="Cerrar"
+        >
           <CloseIcon size={14} />
         </button>
       </div>
@@ -83,36 +90,50 @@ export function QuickAddFlight({ date, onCreated, onCancel, onError }: QuickAddF
       </div>
 
       <div className="mt-3 flex justify-end gap-2">
-        <button onClick={onCancel} className="rounded-md border border-gray-300 px-3 py-1 text-xs text-gray-600 hover:bg-white">
+        <HelixButton variant="secondary" size="sm" onClick={onCancel}>
           Cancelar
-        </button>
-        <button
+        </HelixButton>
+        <HelixButton
+          variant="primary"
+          size="sm"
           onClick={submit}
           disabled={saving || !form.callsign || !form.registration || !form.aircraftType}
-          className="rounded-md bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-500 disabled:opacity-50"
         >
-          {saving ? "Creando..." : "Crear vuelo"}
-        </button>
+          {saving ? "Creando…" : "Crear vuelo"}
+        </HelixButton>
       </div>
     </div>
   );
 }
 
+function FieldShell({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="block font-mono text-[10px] font-semibold uppercase tracking-wider text-ink-muted">
+        {label}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+const FIELD_CLASS =
+  "mt-0.5 block w-full rounded-hx-sm border border-line bg-bg px-2 py-1 font-mono text-xs text-ink-1 uppercase placeholder:normal-case placeholder:text-ink-disabled focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand-tint";
+
 function Field({ label, value, onChange, placeholder, autoFocus }: {
   label: string; value: string; onChange: (v: string) => void; placeholder?: string; autoFocus?: boolean;
 }) {
   return (
-    <div>
-      <label className="block text-[10px] font-medium text-gray-500">{label}</label>
+    <FieldShell label={label}>
       <input
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         autoFocus={autoFocus}
-        className="mt-0.5 block w-full rounded border border-gray-300 bg-white px-2 py-1 text-xs uppercase placeholder:normal-case placeholder:text-gray-400 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+        className={FIELD_CLASS}
       />
-    </div>
+    </FieldShell>
   );
 }
 
@@ -120,15 +141,14 @@ function NumField({ label, value, onChange }: {
   label: string; value: number; onChange: (v: number) => void;
 }) {
   return (
-    <div>
-      <label className="block text-[10px] font-medium text-gray-500">{label}</label>
+    <FieldShell label={label}>
       <input
         type="number"
         min={0}
         value={value}
         onChange={(e) => onChange(parseInt(e.target.value) || 0)}
-        className="mt-0.5 block w-full rounded border border-gray-300 bg-white px-2 py-1 text-xs focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+        className={`${FIELD_CLASS} normal-case [font-variant-numeric:tabular-nums]`}
       />
-    </div>
+    </FieldShell>
   );
 }

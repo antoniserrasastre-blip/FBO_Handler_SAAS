@@ -46,7 +46,6 @@ import {
 } from "@/types";
 import { ServiceIcon, ArrivedIcon, DeliveredIcon, ChevronUp, ChevronDown, CloseIcon, LostItemIcon, PdfIcon, ExcelIcon } from "./Icons";
 import { ArrowRight, Trash2, Users, StickyNote } from "lucide-react";
-import { LiveStatusBadge } from "./LiveStatusBadge";
 import { ServiceBadges } from "./ServiceCheckbox";
 import { PassengerCrewModal } from "./PassengerCrewModal";
 import { getOperatorName, findOperator } from "@/lib/operators";
@@ -78,8 +77,6 @@ interface FlightCardProps {
   onBadgeClick?: (searchTerm: string) => void;
   parkingConflict?: string | null;
   readOnly?: boolean;
-  /** DaySheet UTC date — used to anchor the countdown to the correct day. */
-  dayUtc?: Date | null;
 }
 
 export const FlightCard = memo(function FlightCard({
@@ -97,7 +94,6 @@ export const FlightCard = memo(function FlightCard({
   onBadgeClick,
   parkingConflict,
   readOnly = false,
-  dayUtc,
 }: FlightCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [paxModal, setPaxModal] = useState<{ direction: Direction } | null>(null);
@@ -112,7 +108,7 @@ export const FlightCard = memo(function FlightCard({
 
   return (
     <div
-      className={`overflow-hidden rounded-lg border-l-4 bg-white shadow-sm transition-shadow hover:shadow-md ${isSelected ? "ring-2 ring-blue-400 ring-offset-1" : ""}`}
+      className={`overflow-hidden rounded-lg border-l-4 bg-white shadow-sm transition-shadow hover:shadow-md ${isSelected ? "ring-2 ring-info ring-offset-1" : ""}`}
       style={{ borderLeftColor: stateConfig.color }}
       onClick={() => onSelect?.(flight.id)}
     >
@@ -131,7 +127,7 @@ export const FlightCard = memo(function FlightCard({
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                 <span
-                  className="cursor-pointer text-base font-bold text-gray-900 hover:bg-yellow-50 hover:text-blue-700 sm:text-lg"
+                  className="cursor-pointer text-base font-bold text-ink-1 hover:bg-warning-bg hover:text-info-strong sm:text-lg"
                   onClick={(e) => {
                     e.stopPropagation();
                     navigator.clipboard?.writeText(flight.registration);
@@ -140,9 +136,9 @@ export const FlightCard = memo(function FlightCard({
                 >
                   {flight.registration}
                 </span>
-                <span className="text-xs text-gray-500 sm:text-sm">{flight.aircraftType}</span>
+                <span className="text-xs text-ink-3 sm:text-sm">{flight.aircraftType}</span>
                 <span
-                  className="cursor-pointer text-xs text-gray-400 hover:text-blue-600 sm:text-sm"
+                  className="cursor-pointer text-xs text-ink-muted hover:text-info-strong sm:text-sm"
                   onClick={(e) => {
                     e.stopPropagation();
                     navigator.clipboard?.writeText(flight.callsign);
@@ -153,7 +149,7 @@ export const FlightCard = memo(function FlightCard({
                 </span>
                 {(() => { const opName = getOperatorName(flight.callsign); return opName !== "Privado" ? (
                   <span
-                    className="cursor-pointer rounded bg-indigo-50 px-1 py-0.5 text-[10px] font-medium text-indigo-600 hover:bg-indigo-100 sm:px-1.5 sm:text-xs"
+                    className="cursor-pointer rounded bg-brand-tint px-1 py-0.5 text-[10px] font-medium text-brand-active hover:bg-brand-tint sm:px-1.5 sm:text-xs"
                     onClick={(e) => { e.stopPropagation(); onBadgeClick?.(opName.toLowerCase()); }}
                     title={`Filtrar por ${opName}`}
                   >
@@ -164,16 +160,16 @@ export const FlightCard = memo(function FlightCard({
                   const compat = checkCompatibility(flight.aircraftType, flight.parking);
                   const farFromGA = isFarFromGA(flight.parking);
                   const desc = getStandDescription(flight.parking);
-                  let badgeClass = "bg-gray-100 text-gray-600 hover:bg-gray-200";
+                  let badgeClass = "bg-bg-muted text-ink-2 hover:bg-bg-sunken";
                   let tip = `Filtrar por parking ${flight.parking} — ${desc}`;
                   if (parkingConflict) {
-                    badgeClass = "bg-red-100 text-red-700 ring-1 ring-red-400 hover:bg-red-200";
+                    badgeClass = "bg-danger-bg text-danger-strong ring-1 ring-danger hover:bg-danger-bg";
                     tip = `Conflicto con ${parkingConflict}`;
                   } else if (compat.severity === "error") {
-                    badgeClass = "bg-red-100 text-red-700 ring-1 ring-red-400 hover:bg-red-200";
+                    badgeClass = "bg-danger-bg text-danger-strong ring-1 ring-danger hover:bg-danger-bg";
                     tip = compat.message || tip;
                   } else if (farFromGA) {
-                    badgeClass = "bg-orange-100 text-orange-700 ring-1 ring-orange-300 hover:bg-orange-200";
+                    badgeClass = "bg-warning-bg text-warning-strong ring-1 ring-warning hover:bg-warning-bg";
                     tip = `${desc} — lejos del GA apron`;
                   }
                   return (
@@ -189,83 +185,71 @@ export const FlightCard = memo(function FlightCard({
                   );
                 })()}
                 {isOvernight && (
-                  <span className="rounded bg-purple-100 px-1 py-0.5 text-[10px] font-medium text-purple-600 sm:px-1.5 sm:text-xs">
+                  <span className="rounded bg-bg-muted px-1 py-0.5 text-[10px] font-medium text-fbo-overnight sm:px-1.5 sm:text-xs">
                     PERNOCTA
                   </span>
                 )}
-                <LiveStatusBadge
-                  livePhase={flight.livePhase}
-                  liveLastSeenAt={flight.liveLastSeenAt}
-                  liveAltitudeM={flight.liveAltitudeM}
-                  liveVelocityMs={flight.liveVelocityMs}
-                  liveOnGround={flight.liveOnGround}
-                />
-                {flight.parking && flight.livePhase === "ON_BLOCKS" && flight.liveLastSeenAt && (
-                  <span className="inline-flex items-center gap-0.5 rounded bg-emerald-50 px-1 py-0.5 text-[10px] font-medium text-emerald-700 ring-1 ring-emerald-200 sm:text-xs" title="Avión detectado en parking">
-                    OK
-                  </span>
-                )}
                 {flight.notes && (
-                  <span className="inline-flex items-center gap-0.5 rounded bg-amber-100 px-1 py-0.5 text-[10px] font-medium text-amber-700" title={flight.notes}>
+                  <span className="inline-flex items-center gap-0.5 rounded bg-warning-bg px-1 py-0.5 text-[10px] font-medium text-warning-strong" title={flight.notes}>
                     <StickyNote size={10} /> Nota
                   </span>
                 )}
               </div>
-              <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-gray-600 sm:mt-1 sm:gap-x-2 sm:text-sm">
-                <span className="text-gray-400">LLEG</span>
+              <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-ink-2 sm:mt-1 sm:gap-x-2 sm:text-sm">
+                <span className="text-ink-muted">LLEG</span>
                 <span className="font-medium">{flight.origin || "----"}</span>
-                {flight.arrivalDate && <span className="text-[10px] text-gray-400">{flight.arrivalDate}</span>}
+                {flight.arrivalDate && <span className="text-[10px] text-ink-muted">{flight.arrivalDate}</span>}
                 {readOnly ? (
-                  <span className="text-gray-400">{flight.eta || "--:--"}</span>
+                  <span className="text-ink-muted">{flight.eta || "--:--"}</span>
                 ) : (
-                  <QuickTimeEdit value={flight.eta} onSave={(v) => onUpdate(flight.id, { eta: v })} className="text-gray-500" />
+                  <QuickTimeEdit value={flight.eta} onSave={(v) => onUpdate(flight.id, { eta: v })} className="text-ink-3" />
                 )}
-                <ArrowRight size={12} className="shrink-0 text-gray-300" />
-                <span className="text-gray-400">SAL</span>
+                <ArrowRight size={12} className="shrink-0 text-ink-disabled" />
+                <span className="text-ink-muted">SAL</span>
                 <span className="font-medium">{flight.destination || "----"}</span>
-                {flight.departureDate && <span className="text-[10px] text-gray-400">{flight.departureDate}</span>}
+                {flight.departureDate && <span className="text-[10px] text-ink-muted">{flight.departureDate}</span>}
                 {readOnly ? (
-                  <span className="text-gray-400">{flight.etd || "--:--"}</span>
+                  <span className="text-ink-muted">{flight.etd || "--:--"}</span>
                 ) : (
-                  <QuickTimeEdit value={flight.etd} onSave={(v) => onUpdate(flight.id, { etd: v })} className="text-gray-500" />
+                  <QuickTimeEdit value={flight.etd} onSave={(v) => onUpdate(flight.id, { etd: v })} className="text-ink-3" />
                 )}
-                <TurnaroundCountdown eta={flight.eta} etd={flight.etd} flightState={flight.state} dayUtc={dayUtc} />
+                <TurnaroundCountdown eta={flight.eta} etd={flight.etd} flightState={flight.state} />
               </div>
             </div>
           </div>
 
-          <div className="hidden shrink-0 items-center gap-4 text-xs text-gray-500 sm:flex">
+          <div className="hidden shrink-0 items-center gap-4 text-xs text-ink-3 sm:flex">
             <div className="text-center">
-              <div className="text-gray-400">CREW</div>
+              <div className="text-ink-muted">CREW</div>
               <div>{flight.crewArrival}/{flight.crewDeparture}</div>
             </div>
             <div className="text-center">
-              <div className="text-gray-400">PAX</div>
+              <div className="text-ink-muted">PAX</div>
               <div>{flight.paxArrival}/{flight.paxDeparture}</div>
             </div>
             <div className="text-center">
-              <div className="text-gray-400">FUEL</div>
-              <div className={flight.fuelState === "SERVED" ? "text-green-600" : flight.fuelState === "REQUESTED" ? "text-yellow-600" : ""}>
+              <div className="text-ink-muted">FUEL</div>
+              <div className={flight.fuelState === "SERVED" ? "text-success-strong" : flight.fuelState === "REQUESTED" ? "text-warning-strong" : ""}>
                 {FUEL_LABELS[flight.fuelState as FuelState] || flight.fuelState}
               </div>
             </div>
-            {expanded ? <ChevronUp size={16} className="text-gray-300" /> : <ChevronDown size={16} className="text-gray-300" />}
+            {expanded ? <ChevronUp size={16} className="text-ink-disabled" /> : <ChevronDown size={16} className="text-ink-disabled" />}
           </div>
 
-          <span className="sm:hidden">{expanded ? <ChevronUp size={16} className="text-gray-300" /> : <ChevronDown size={16} className="text-gray-300" />}</span>
+          <span className="sm:hidden">{expanded ? <ChevronUp size={16} className="text-ink-disabled" /> : <ChevronDown size={16} className="text-ink-disabled" />}</span>
         </div>
 
-        <div className="mt-1.5 h-1.5 w-full rounded-full bg-gray-100 sm:mt-2">
+        <div className="mt-1.5 h-1.5 w-full rounded-full bg-bg-muted sm:mt-2">
           <div
             className="h-full rounded-full transition-all duration-500"
             style={{ width: `${Math.max(progress, 2)}%`, backgroundColor: stateConfig.color }}
           />
         </div>
 
-        <div className="mt-1 flex flex-wrap gap-x-3 text-[10px] text-gray-500 sm:hidden">
+        <div className="mt-1 flex flex-wrap gap-x-3 text-[10px] text-ink-3 sm:hidden">
           <span>C:{flight.crewArrival}/{flight.crewDeparture}</span>
           <span>P:{flight.paxArrival}/{flight.paxDeparture}</span>
-          <span className={flight.fuelState === "SERVED" ? "text-green-600" : flight.fuelState === "REQUESTED" ? "text-yellow-600" : ""}>
+          <span className={flight.fuelState === "SERVED" ? "text-success-strong" : flight.fuelState === "REQUESTED" ? "text-warning-strong" : ""}>
             F:{FUEL_LABELS[flight.fuelState as FuelState] || flight.fuelState}
           </span>
         </div>
@@ -279,7 +263,7 @@ export const FlightCard = memo(function FlightCard({
                 )}
               </div>
               {(flight.lostItems || []).filter((li) => li.state !== "DELIVERED").length > 0 && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                <span className="inline-flex items-center gap-1 rounded-full bg-warning-bg px-2 py-0.5 text-[10px] font-medium text-warning-strong">
                   <LostItemIcon size={10} />
                   {(flight.lostItems || []).filter((li) => li.state !== "DELIVERED").length} objeto{(flight.lostItems || []).filter((li) => li.state !== "DELIVERED").length !== 1 ? "s" : ""}
                 </span>
@@ -294,7 +278,7 @@ export const FlightCard = memo(function FlightCard({
 
       {/* ========== EXPANDED VIEW ========== */}
       {expanded && (
-        <div className="border-t border-gray-100 px-3 pb-3 pt-2 sm:px-4 sm:pb-4 sm:pt-3" onClick={(e) => e.stopPropagation()}>
+        <div className="border-t border-line-subtle px-3 pb-3 pt-2 sm:px-4 sm:pb-4 sm:pt-3" onClick={(e) => e.stopPropagation()}>
           {/* Delete button */}
           {!readOnly && (
             <div className="mb-3 flex justify-end">
@@ -304,7 +288,7 @@ export const FlightCard = memo(function FlightCard({
                     onDelete(flight.id);
                   }
                 }}
-                className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-red-500 hover:bg-red-50 hover:text-red-700"
+                className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-danger-strong hover:bg-danger-bg hover:text-danger-strong"
               >
                 <Trash2 size={12} />
                 Eliminar vuelo
@@ -315,9 +299,9 @@ export const FlightCard = memo(function FlightCard({
           <div className={`grid gap-4 lg:grid-cols-3 ${readOnly ? "pointer-events-none opacity-75" : ""}`}>
 
             {/* ===== LEFT COLUMN — LLEGADA ===== */}
-            <div className="space-y-4 rounded-lg bg-blue-50/40 p-3">
-              <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-blue-700">
-                <span className="flex h-5 w-5 items-center justify-center rounded bg-blue-100 text-[10px]">&#x2193;</span>
+            <div className="space-y-4 rounded-lg bg-info-bg p-3">
+              <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-info-strong">
+                <span className="flex h-5 w-5 items-center justify-center rounded bg-info-bg text-[10px]">&#x2193;</span>
                 Llegada
               </h2>
 
@@ -336,7 +320,7 @@ export const FlightCard = memo(function FlightCard({
               <Section title={
                 <span className="flex items-center gap-1.5">
                   Tripulacion
-                  <button onClick={() => setPaxModal({ direction: "ARRIVAL" })} className="rounded p-0.5 text-blue-400 hover:bg-blue-100 hover:text-blue-600" title="Ver nombres crew/pax llegada">
+                  <button onClick={() => setPaxModal({ direction: "ARRIVAL" })} className="rounded p-0.5 text-info hover:bg-info-bg hover:text-info-strong" title="Ver nombres crew/pax llegada">
                     <Users size={11} />
                   </button>
                 </span>
@@ -350,9 +334,9 @@ export const FlightCard = memo(function FlightCard({
                     label="Ubicacion"
                     value={flight.crewArrLocation}
                     options={[
-                      { value: "IN_AIRCRAFT", label: CREW_ARR_LOCATION_LABELS.IN_AIRCRAFT, activeClass: "bg-blue-100 text-blue-700 ring-1 ring-blue-400" },
-                      { value: "IN_LOUNGE", label: CREW_ARR_LOCATION_LABELS.IN_LOUNGE, activeClass: "bg-amber-100 text-amber-700 ring-1 ring-amber-400" },
-                      { value: "HOTEL", label: CREW_ARR_LOCATION_LABELS.HOTEL, activeClass: "bg-purple-100 text-purple-700 ring-1 ring-purple-400" },
+                      { value: "IN_AIRCRAFT", label: CREW_ARR_LOCATION_LABELS.IN_AIRCRAFT, activeClass: "bg-info-bg text-info-strong ring-1 ring-info" },
+                      { value: "IN_LOUNGE", label: CREW_ARR_LOCATION_LABELS.IN_LOUNGE, activeClass: "bg-warning-bg text-warning-strong ring-1 ring-warning" },
+                      { value: "HOTEL", label: CREW_ARR_LOCATION_LABELS.HOTEL, activeClass: "bg-bg-muted text-fbo-overnight ring-1 ring-fbo-overnight" },
                     ]}
                     onChange={(v) => onUpdate(flight.id, { crewArrLocation: v })}
                   />
@@ -376,8 +360,8 @@ export const FlightCard = memo(function FlightCard({
                     options={BAGS_ARR_STATES.map((s) => ({
                       value: s,
                       label: BAGS_ARR_STATE_LABELS[s],
-                      activeClass: s === "DELIVERED" ? "bg-green-100 text-green-700 ring-1 ring-green-400"
-                        : s === "UNLOADED" ? "bg-yellow-100 text-yellow-700 ring-1 ring-yellow-400"
+                      activeClass: s === "DELIVERED" ? "bg-success-bg text-success-strong ring-1 ring-success"
+                        : s === "UNLOADED" ? "bg-warning-bg text-warning-strong ring-1 ring-warning"
                         : undefined,
                     }))}
                     onChange={(v) => onUpdate(flight.id, { paxArrBagsState: v })}
@@ -388,8 +372,8 @@ export const FlightCard = memo(function FlightCard({
                     options={PAX_ARR_STATES.map((s) => ({
                       value: s,
                       label: PAX_ARR_STATE_LABELS[s],
-                      activeClass: s === "COMPLETED" ? "bg-green-100 text-green-700 ring-1 ring-green-400"
-                        : s === "IN_LOUNGE" ? "bg-yellow-100 text-yellow-700 ring-1 ring-yellow-400"
+                      activeClass: s === "COMPLETED" ? "bg-success-bg text-success-strong ring-1 ring-success"
+                        : s === "IN_LOUNGE" ? "bg-warning-bg text-warning-strong ring-1 ring-warning"
                         : undefined,
                     }))}
                     onChange={(v) => onUpdate(flight.id, { paxArrState: v })}
@@ -405,7 +389,7 @@ export const FlightCard = memo(function FlightCard({
                     value={flight.paxArrTransportState}
                     options={[
                       { value: "PENDING", label: TRANSPORT_STATE_LABELS.PENDING },
-                      { value: "CONFIRMED", label: TRANSPORT_STATE_LABELS.CONFIRMED, activeClass: "bg-green-100 text-green-700 ring-1 ring-green-400" },
+                      { value: "CONFIRMED", label: TRANSPORT_STATE_LABELS.CONFIRMED, activeClass: "bg-success-bg text-success-strong ring-1 ring-success" },
                     ]}
                     onChange={(v) => onUpdate(flight.id, { paxArrTransportState: v })}
                   />
@@ -425,7 +409,7 @@ export const FlightCard = memo(function FlightCard({
                       className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
                         normalizedState === s
                           ? `${FLIGHT_STATE_CONFIG[s].bg} ${FLIGHT_STATE_CONFIG[s].text} ring-1 ring-current`
-                          : "bg-gray-50 text-gray-400 hover:bg-gray-100"
+                          : "bg-bg-subtle text-ink-muted hover:bg-bg-muted"
                       }`}
                     >
                       {FLIGHT_STATE_CONFIG[s].label}
@@ -468,10 +452,10 @@ export const FlightCard = memo(function FlightCard({
                         }}
                         className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
                           flight.fuelState === s
-                            ? s === "SERVED" ? "bg-green-100 text-green-700 ring-1 ring-green-400"
-                              : s === "REQUESTED" ? "bg-yellow-100 text-yellow-700 ring-1 ring-yellow-400"
-                              : "bg-gray-100 text-gray-700 ring-1 ring-gray-400"
-                            : "bg-gray-50 text-gray-400 hover:bg-gray-100"
+                            ? s === "SERVED" ? "bg-success-bg text-success-strong ring-1 ring-success"
+                              : s === "REQUESTED" ? "bg-warning-bg text-warning-strong ring-1 ring-warning"
+                              : "bg-bg-muted text-ink-1 ring-1 ring-gray-400"
+                            : "bg-bg-subtle text-ink-muted hover:bg-bg-muted"
                         }`}
                       >
                         {FUEL_LABELS[s]}
@@ -479,10 +463,10 @@ export const FlightCard = memo(function FlightCard({
                     ))}
                   </div>
                   {flight.fuelRequestedAt && (
-                    <p className="mt-1 flex items-center gap-1 text-xs text-yellow-600"><span className="text-[10px]">&#9201;</span> Pedido: {flight.fuelRequestedAt}</p>
+                    <p className="mt-1 flex items-center gap-1 text-xs text-warning-strong"><span className="text-[10px]">&#9201;</span> Pedido: {flight.fuelRequestedAt}</p>
                   )}
                   {flight.fuelServedAt && (
-                    <p className="mt-0.5 flex items-center gap-1 text-xs text-green-600"><span className="text-[10px]">&#9989;</span> Servido: {flight.fuelServedAt}</p>
+                    <p className="mt-0.5 flex items-center gap-1 text-xs text-success-strong"><span className="text-[10px]">&#9989;</span> Servido: {flight.fuelServedAt}</p>
                   )}
                 </div>
               </Section>
@@ -506,10 +490,10 @@ export const FlightCard = memo(function FlightCard({
                         }}
                         className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
                           flight.toiletState === s
-                            ? s === "COMPLETED" ? "bg-green-100 text-green-700 ring-1 ring-green-400"
-                              : s === "REQUESTED" ? "bg-yellow-100 text-yellow-700 ring-1 ring-yellow-400"
-                              : "bg-gray-100 text-gray-700 ring-1 ring-gray-400"
-                            : "bg-gray-50 text-gray-400 hover:bg-gray-100"
+                            ? s === "COMPLETED" ? "bg-success-bg text-success-strong ring-1 ring-success"
+                              : s === "REQUESTED" ? "bg-warning-bg text-warning-strong ring-1 ring-warning"
+                              : "bg-bg-muted text-ink-1 ring-1 ring-gray-400"
+                            : "bg-bg-subtle text-ink-muted hover:bg-bg-muted"
                         }`}
                       >
                         {TOILET_LABELS[s]}
@@ -517,10 +501,10 @@ export const FlightCard = memo(function FlightCard({
                     ))}
                   </div>
                   {flight.toiletRequestedAt && (
-                    <p className="mt-1 flex items-center gap-1 text-xs text-yellow-600"><span className="text-[10px]">&#9201;</span> Pedido: {flight.toiletRequestedAt}</p>
+                    <p className="mt-1 flex items-center gap-1 text-xs text-warning-strong"><span className="text-[10px]">&#9201;</span> Pedido: {flight.toiletRequestedAt}</p>
                   )}
                   {flight.toiletCompletedAt && (
-                    <p className="mt-0.5 flex items-center gap-1 text-xs text-green-600"><span className="text-[10px]">&#9989;</span> Completado: {flight.toiletCompletedAt}</p>
+                    <p className="mt-0.5 flex items-center gap-1 text-xs text-success-strong"><span className="text-[10px]">&#9989;</span> Completado: {flight.toiletCompletedAt}</p>
                   )}
                 </div>
               </Section>
@@ -544,7 +528,7 @@ export const FlightCard = memo(function FlightCard({
                             for (const s of pending) onServiceToggle(s.id, "DELIVERED");
                           }
                         }}
-                        className="rounded-md border border-green-200 bg-green-50 px-2 py-1 text-xs font-medium text-green-700 hover:border-green-300 hover:bg-green-100"
+                        className="rounded-md border border-success-strong bg-success-bg px-2 py-1 text-xs font-medium text-success-strong hover:border-green-300 hover:bg-success-bg"
                         title="Marcar todos los servicios como entregados"
                       >
                         &#10003; Todos entregados
@@ -558,31 +542,31 @@ export const FlightCard = memo(function FlightCard({
                         return (
                         <div
                           key={service.id}
-                          className={`flex items-center justify-between gap-2 text-xs text-gray-500 ${overdue ? "overdue-pulse rounded border border-red-300 px-1.5 py-1" : ""}`}
+                          className={`flex items-center justify-between gap-2 text-xs text-ink-3 ${overdue ? "overdue-pulse rounded border border-danger-strong px-1.5 py-1" : ""}`}
                         >
                           <span className="flex min-w-0 items-center gap-1">
-                            {overdue && <span className="shrink-0 text-red-600" title="Retrasado">&#9888;</span>}
-                            <ServiceIcon type={service.type} size={12} className="shrink-0 text-gray-400" />
+                            {overdue && <span className="shrink-0 text-danger-strong" title="Retrasado">&#9888;</span>}
+                            <ServiceIcon type={service.type} size={12} className="shrink-0 text-ink-muted" />
                             {service.type === "CUSTOM" ? service.customName : SERVICE_LABELS[service.type as ServiceType]}{" "}
                             {service.phase && service.phase !== "DEPARTURE" && (
-                              <span className={`rounded px-1 py-0.5 text-[10px] font-bold ${service.phase === "ARRIVAL" ? "bg-blue-100 text-blue-600" : "bg-gray-100 text-gray-600"}`}>
+                              <span className={`rounded px-1 py-0.5 text-[10px] font-bold ${service.phase === "ARRIVAL" ? "bg-info-bg text-info-strong" : "bg-bg-muted text-ink-2"}`}>
                                 {service.phase === "ARRIVAL" ? "LLEG" : "AMB"}
                               </span>
                             )}
                             {service.target && (
-                              <span className={`rounded px-1 py-0.5 text-[10px] font-bold ${service.target === "CREW" ? "bg-orange-100 text-orange-600" : "bg-blue-100 text-blue-600"}`}>
+                              <span className={`rounded px-1 py-0.5 text-[10px] font-bold ${service.target === "CREW" ? "bg-warning-bg text-warning-strong" : "bg-info-bg text-info-strong"}`}>
                                 {SERVICE_TARGET_LABELS[service.target as ServiceTarget]}
                               </span>
                             )}
-                            {service.reference && <span className="text-blue-500">#{service.reference}</span>}
-                            {service.origin && <span className="text-gray-400">({service.origin})</span>}
+                            {service.reference && <span className="text-info-strong">#{service.reference}</span>}
+                            {service.origin && <span className="text-ink-muted">({service.origin})</span>}
                           </span>
                           <div className="flex shrink-0 items-center gap-2">
-                            {service.arrivedAt && <span className="flex items-center gap-0.5 text-blue-500"><ArrivedIcon size={10} /> {service.arrivedAt}</span>}
-                            {service.deliveredAt && <span className="flex items-center gap-0.5 text-green-600"><DeliveredIcon size={10} /> {service.deliveredAt}</span>}
+                            {service.arrivedAt && <span className="flex items-center gap-0.5 text-info-strong"><ArrivedIcon size={10} /> {service.arrivedAt}</span>}
+                            {service.deliveredAt && <span className="flex items-center gap-0.5 text-success-strong"><DeliveredIcon size={10} /> {service.deliveredAt}</span>}
                             <button
                               onClick={() => onDeleteService(service.id)}
-                              className="text-red-400 hover:text-red-600"
+                              className="text-danger hover:text-danger-strong"
                               title="Eliminar servicio"
                             >
                               <CloseIcon size={12} />
@@ -615,28 +599,28 @@ export const FlightCard = memo(function FlightCard({
                   <a
                     href={`/api/export/flight/${flight.id}/pdf?direction=ARRIVAL`}
                     target="_blank"
-                    className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2 py-1 text-[10px] font-medium text-gray-600 hover:bg-gray-50"
+                    className="inline-flex items-center gap-1 rounded-md border border-line-subtle px-2 py-1 text-[10px] font-medium text-ink-2 hover:bg-bg-subtle"
                   >
                     <PdfIcon size={10} /> PDF Llegada
                   </a>
                   <a
                     href={`/api/export/flight/${flight.id}/pdf?direction=DEPARTURE`}
                     target="_blank"
-                    className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2 py-1 text-[10px] font-medium text-gray-600 hover:bg-gray-50"
+                    className="inline-flex items-center gap-1 rounded-md border border-line-subtle px-2 py-1 text-[10px] font-medium text-ink-2 hover:bg-bg-subtle"
                   >
                     <PdfIcon size={10} /> PDF Salida
                   </a>
                   <a
                     href={`/api/export/flight/${flight.id}/excel`}
                     target="_blank"
-                    className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2 py-1 text-[10px] font-medium text-gray-600 hover:bg-gray-50"
+                    className="inline-flex items-center gap-1 rounded-md border border-line-subtle px-2 py-1 text-[10px] font-medium text-ink-2 hover:bg-bg-subtle"
                   >
                     <ExcelIcon size={10} /> Excel
                   </a>
                   <a
                     href={`/api/export/blank-declaration?flightId=${flight.id}`}
                     target="_blank"
-                    className="inline-flex items-center gap-1 rounded-md border border-dashed border-gray-200 px-2 py-1 text-[10px] font-medium text-gray-400 hover:bg-gray-50 hover:text-gray-600"
+                    className="inline-flex items-center gap-1 rounded-md border border-dashed border-line-subtle px-2 py-1 text-[10px] font-medium text-ink-muted hover:bg-bg-subtle hover:text-ink-2"
                   >
                     <PdfIcon size={10} /> En blanco
                   </a>
@@ -649,7 +633,7 @@ export const FlightCard = memo(function FlightCard({
                   <LostItemIcon size={12} />
                   Objetos olvidados
                   {(flight.lostItems || []).filter((li) => li.state !== "DELIVERED").length > 0 && (
-                    <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+                    <span className="rounded-full bg-warning-bg px-1.5 py-0.5 text-[10px] font-medium text-warning-strong">
                       {(flight.lostItems || []).filter((li) => li.state !== "DELIVERED").length}
                     </span>
                   )}
@@ -663,7 +647,7 @@ export const FlightCard = memo(function FlightCard({
                         const stateConfig = LOST_ITEM_STATE_CONFIG[item.state as LostItemState] || LOST_ITEM_STATE_CONFIG.FOUND;
                         const nextState = LOST_ITEM_STATES[(LOST_ITEM_STATES.indexOf(item.state as LostItemState) + 1) % LOST_ITEM_STATES.length];
                         return (
-                          <div key={item.id} className="flex items-center justify-between gap-2 text-xs text-gray-500">
+                          <div key={item.id} className="flex items-center justify-between gap-2 text-xs text-ink-3">
                             <span className="flex min-w-0 items-center gap-1">
                               <button
                                 onClick={() => onLostItemToggle(item.id, nextState)}
@@ -673,16 +657,16 @@ export const FlightCard = memo(function FlightCard({
                                 {stateConfig.label}
                               </button>
                               <span className="truncate">{item.description}</span>
-                              <span className="shrink-0 text-[10px] text-gray-400">
+                              <span className="shrink-0 text-[10px] text-ink-muted">
                                 ({LOST_ITEM_LOCATION_LABELS[item.location as LostItemLocation] || item.location})
                               </span>
                             </span>
                             <div className="flex shrink-0 items-center gap-2">
-                              {item.foundAt && <span className="text-[10px] text-gray-400">{item.foundAt}</span>}
-                              {item.claimedBy && <span className="text-[10px] text-blue-500">{item.claimedBy}</span>}
+                              {item.foundAt && <span className="text-[10px] text-ink-muted">{item.foundAt}</span>}
+                              {item.claimedBy && <span className="text-[10px] text-info-strong">{item.claimedBy}</span>}
                               <button
                                 onClick={() => onDeleteLostItem(item.id)}
-                                className="text-red-400 hover:text-red-600"
+                                className="text-danger hover:text-danger-strong"
                                 title="Eliminar"
                               >
                                 <CloseIcon size={12} />
@@ -698,9 +682,9 @@ export const FlightCard = memo(function FlightCard({
             </div>
 
             {/* ===== RIGHT COLUMN — SALIDA ===== */}
-            <div className="space-y-4 rounded-lg bg-orange-50/40 p-3">
-              <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-orange-700">
-                <span className="flex h-5 w-5 items-center justify-center rounded bg-orange-100 text-[10px]">&#x2191;</span>
+            <div className="space-y-4 rounded-lg bg-warning-bg p-3">
+              <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-warning-strong">
+                <span className="flex h-5 w-5 items-center justify-center rounded bg-warning-bg text-[10px]">&#x2191;</span>
                 Salida
               </h2>
 
@@ -719,7 +703,7 @@ export const FlightCard = memo(function FlightCard({
               <Section title={
                 <span className="flex items-center gap-1.5">
                   Tripulacion
-                  <button onClick={() => setPaxModal({ direction: "DEPARTURE" })} className="rounded p-0.5 text-orange-400 hover:bg-orange-100 hover:text-orange-600" title="Ver nombres crew/pax salida">
+                  <button onClick={() => setPaxModal({ direction: "DEPARTURE" })} className="rounded p-0.5 text-warning hover:bg-warning-bg hover:text-warning-strong" title="Ver nombres crew/pax salida">
                     <Users size={11} />
                   </button>
                 </span>
@@ -733,9 +717,9 @@ export const FlightCard = memo(function FlightCard({
                     label="Ubicacion"
                     value={flight.crewDepLocation}
                     options={[
-                      { value: "NOT_ARRIVED", label: CREW_DEP_LOCATION_LABELS.NOT_ARRIVED, activeClass: "bg-gray-200 text-gray-700 ring-1 ring-gray-400" },
-                      { value: "IN_AIRCRAFT", label: CREW_DEP_LOCATION_LABELS.IN_AIRCRAFT, activeClass: "bg-blue-100 text-blue-700 ring-1 ring-blue-400" },
-                      { value: "IN_LOUNGE", label: CREW_DEP_LOCATION_LABELS.IN_LOUNGE, activeClass: "bg-amber-100 text-amber-700 ring-1 ring-amber-400" },
+                      { value: "NOT_ARRIVED", label: CREW_DEP_LOCATION_LABELS.NOT_ARRIVED, activeClass: "bg-bg-sunken text-ink-1 ring-1 ring-gray-400" },
+                      { value: "IN_AIRCRAFT", label: CREW_DEP_LOCATION_LABELS.IN_AIRCRAFT, activeClass: "bg-info-bg text-info-strong ring-1 ring-info" },
+                      { value: "IN_LOUNGE", label: CREW_DEP_LOCATION_LABELS.IN_LOUNGE, activeClass: "bg-warning-bg text-warning-strong ring-1 ring-warning" },
                     ]}
                     onChange={(v) => onUpdate(flight.id, { crewDepLocation: v })}
                   />
@@ -759,8 +743,8 @@ export const FlightCard = memo(function FlightCard({
                     options={BAGS_DEP_STATES.map((s) => ({
                       value: s,
                       label: BAGS_DEP_STATE_LABELS[s],
-                      activeClass: s === "SENT_TO_AIRCRAFT" ? "bg-green-100 text-green-700 ring-1 ring-green-400"
-                        : s === "TAGGED" ? "bg-yellow-100 text-yellow-700 ring-1 ring-yellow-400"
+                      activeClass: s === "SENT_TO_AIRCRAFT" ? "bg-success-bg text-success-strong ring-1 ring-success"
+                        : s === "TAGGED" ? "bg-warning-bg text-warning-strong ring-1 ring-warning"
                         : undefined,
                     }))}
                     onChange={(v) => onUpdate(flight.id, { paxDepBagsState: v })}
@@ -771,8 +755,8 @@ export const FlightCard = memo(function FlightCard({
                     options={PAX_DEP_STATES.map((s) => ({
                       value: s,
                       label: PAX_DEP_STATE_LABELS[s],
-                      activeClass: s === "BOARDED" ? "bg-green-100 text-green-700 ring-1 ring-green-400"
-                        : s === "IN_LOUNGE" ? "bg-yellow-100 text-yellow-700 ring-1 ring-yellow-400"
+                      activeClass: s === "BOARDED" ? "bg-success-bg text-success-strong ring-1 ring-success"
+                        : s === "IN_LOUNGE" ? "bg-warning-bg text-warning-strong ring-1 ring-warning"
                         : undefined,
                     }))}
                     onChange={(v) => onUpdate(flight.id, { paxDepState: v })}
@@ -788,7 +772,7 @@ export const FlightCard = memo(function FlightCard({
                     value={flight.paxDepTransportState}
                     options={[
                       { value: "PENDING", label: TRANSPORT_STATE_LABELS.PENDING },
-                      { value: "CONFIRMED", label: TRANSPORT_STATE_LABELS.CONFIRMED, activeClass: "bg-green-100 text-green-700 ring-1 ring-green-400" },
+                      { value: "CONFIRMED", label: TRANSPORT_STATE_LABELS.CONFIRMED, activeClass: "bg-success-bg text-success-strong ring-1 ring-success" },
                     ]}
                     onChange={(v) => onUpdate(flight.id, { paxDepTransportState: v })}
                   />
@@ -802,20 +786,20 @@ export const FlightCard = memo(function FlightCard({
             <div className="mt-4">
               <Section title="Log de eventos">
                 <div className="max-h-48 overflow-y-auto">
-                  <div className="relative border-l-2 border-gray-200 pl-4">
+                  <div className="relative border-l-2 border-line-subtle pl-4">
                     {flight.eventLogs.map((log, i) => (
                       <div key={log.id} className="relative pb-3">
-                        <div className={`absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full border-2 border-white ${i === 0 ? "bg-blue-500" : "bg-gray-300"}`} />
+                        <div className={`absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full border-2 border-white ${i === 0 ? "bg-brand" : "bg-bg-sunken"}`} />
                         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                          <span className={`text-xs font-medium ${i === 0 ? "text-gray-700" : "text-gray-500"}`}>
+                          <span className={`text-xs font-medium ${i === 0 ? "text-ink-1" : "text-ink-3"}`}>
                             {log.action}
                           </span>
                           {log.user && (
-                            <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500">
+                            <span className="rounded bg-bg-muted px-1.5 py-0.5 text-[10px] font-medium text-ink-3">
                               {log.user.name}
                             </span>
                           )}
-                          <span className="text-[10px] text-gray-400">
+                          <span className="text-[10px] text-ink-muted">
                             {new Date(log.timestamp).toLocaleTimeString("es-ES", {
                               hour: "2-digit",
                               minute: "2-digit",
@@ -868,7 +852,7 @@ function ButtonGroup({
 }) {
   return (
     <div>
-      <label className="block text-[10px] font-medium text-gray-400 mb-0.5">{label}</label>
+      <label className="block text-[10px] font-medium text-ink-muted mb-0.5">{label}</label>
       <div className="flex flex-wrap gap-1">
         {options.map((opt) => (
           <button
@@ -876,8 +860,8 @@ function ButtonGroup({
             onClick={() => onChange(opt.value)}
             className={`rounded-md px-2 py-1 text-xs font-medium transition-colors ${
               value === opt.value
-                ? opt.activeClass || "bg-gray-200 text-gray-700 ring-1 ring-gray-400"
-                : "bg-gray-50 text-gray-400 hover:bg-gray-100"
+                ? opt.activeClass || "bg-bg-sunken text-ink-1 ring-1 ring-gray-400"
+                : "bg-bg-subtle text-ink-muted hover:bg-bg-muted"
             }`}
           >
             {opt.label}
@@ -906,7 +890,7 @@ function TextField({
 
   return (
     <div>
-      <label className="block text-[10px] text-gray-400">{label}</label>
+      <label className="block text-[10px] text-ink-muted">{label}</label>
       <input
         type="text"
         value={local}
@@ -923,7 +907,7 @@ function TextField({
             (e.target as HTMLInputElement).blur();
           }
         }}
-        className="mt-0.5 block w-full rounded border border-gray-200 px-2 py-1 text-xs text-gray-700 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+        className="mt-0.5 block w-full rounded border border-line-subtle px-2 py-1 text-xs text-ink-1 focus:border-brand focus:outline-none focus:ring-1 focus:ring-info"
       />
     </div>
   );
@@ -932,7 +916,7 @@ function TextField({
 function Section({ title, children }: { title: React.ReactNode; children: React.ReactNode }) {
   return (
     <div>
-      <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-gray-400">
+      <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-ink-muted">
         {title}
       </h3>
       {children}
@@ -954,11 +938,11 @@ function NumberField({
 
   return (
     <div className="flex items-center gap-2">
-      <label className="w-12 text-xs text-gray-500">{label}</label>
+      <label className="w-12 text-xs text-ink-3">{label}</label>
       <div className="flex items-center gap-1">
         <button
           onClick={() => onChange(Math.max(0, value - 1))}
-          className="flex h-6 w-6 items-center justify-center rounded bg-gray-100 text-sm hover:bg-gray-200"
+          className="flex h-6 w-6 items-center justify-center rounded bg-bg-muted text-sm hover:bg-bg-sunken"
         >
           -
         </button>
@@ -976,12 +960,12 @@ function NumberField({
             onKeyDown={(e) => {
               if (e.key === "Enter") (e.target as HTMLInputElement).blur();
             }}
-            className="w-12 rounded border border-blue-400 px-1 py-0.5 text-center text-sm font-medium focus:outline-none focus:ring-1 focus:ring-blue-400 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+            className="w-12 rounded border border-brand px-1 py-0.5 text-center text-sm font-medium focus:outline-none focus:ring-1 focus:ring-info [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
           />
         ) : (
           <button
             onClick={() => { setLocal(String(value)); setEditing(true); }}
-            className="w-8 text-center text-sm font-medium cursor-text hover:bg-blue-50 rounded"
+            className="w-8 text-center text-sm font-medium cursor-text hover:bg-info-bg rounded"
             title="Click para editar"
           >
             {value}
@@ -989,7 +973,7 @@ function NumberField({
         )}
         <button
           onClick={() => onChange(value + 1)}
-          className="flex h-6 w-6 items-center justify-center rounded bg-gray-100 text-sm hover:bg-gray-200"
+          className="flex h-6 w-6 items-center justify-center rounded bg-bg-muted text-sm hover:bg-bg-sunken"
         >
           +
         </button>
@@ -1005,7 +989,7 @@ function LastModifiedBadge({ log }: { log: EventLog & { user: { name: string } |
   });
 
   return (
-    <span className="shrink-0 whitespace-nowrap text-[10px] text-gray-400">
+    <span className="shrink-0 whitespace-nowrap text-[10px] text-ink-muted">
       {log.user?.name || "Sistema"} · {log.action.length > 30 ? log.action.slice(0, 30) + "..." : log.action} · {time}
     </span>
   );
@@ -1024,7 +1008,7 @@ function NotesField({ value, onSave }: { value: string; onSave: (v: string) => v
       onBlur={() => { if (dirty && local !== value) onSave(local); setDirty(false); }}
       placeholder="Observaciones (VIP, copiloto entrenamiento, etc.)"
       rows={2}
-      className="block w-full resize-y rounded border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+      className="block w-full resize-y rounded border border-line-subtle bg-white px-2 py-1 text-xs text-ink-1 focus:border-brand focus:outline-none focus:ring-1 focus:ring-info"
     />
   );
 }
@@ -1055,7 +1039,7 @@ function ServiceTemplateDropdown({
     <div className="relative">
       <button
         onClick={() => setOpen(!open)}
-        className="rounded-md border border-dashed border-indigo-300 bg-indigo-50/50 px-2 py-1 text-xs text-indigo-600 hover:border-indigo-400 hover:bg-indigo-50"
+        className="rounded-md border border-dashed border-indigo-300 bg-brand-tint px-2 py-1 text-xs text-brand-active hover:border-indigo-400 hover:bg-brand-tint"
         title={`Plantillas${operator ? " para " + operator.name : ""}`}
       >
         + Plantilla
@@ -1068,10 +1052,10 @@ function ServiceTemplateDropdown({
               <button
                 key={tpl.id}
                 onClick={() => applyTemplate(tpl.items)}
-                className="block w-full px-3 py-2 text-left hover:bg-gray-50"
+                className="block w-full px-3 py-2 text-left hover:bg-bg-subtle"
               >
-                <div className="text-xs font-semibold text-gray-800">{tpl.label}</div>
-                <div className="text-[10px] text-gray-500">{tpl.description}</div>
+                <div className="text-xs font-semibold text-ink-1">{tpl.label}</div>
+                <div className="text-[10px] text-ink-3">{tpl.description}</div>
               </button>
             ))}
           </div>
@@ -1096,7 +1080,7 @@ function AddLostItemRow({
     return (
       <button
         onClick={() => setShowForm(true)}
-        className="rounded-md border border-dashed border-gray-300 px-2 py-1 text-xs text-gray-400 hover:border-gray-400 hover:text-gray-500"
+        className="rounded-md border border-dashed border-line px-2 py-1 text-xs text-ink-muted hover:border-line-strong hover:text-ink-3"
       >
         + Registrar objeto
       </button>
@@ -1109,7 +1093,7 @@ function AddLostItemRow({
         value={description}
         onChange={(e) => setDescription(e.target.value)}
         placeholder="Descripcion del objeto..."
-        className="min-w-[120px] flex-1 rounded border border-gray-200 px-2 py-1 text-xs"
+        className="min-w-[120px] flex-1 rounded border border-line-subtle px-2 py-1 text-xs"
         autoFocus
         onKeyDown={(e) => {
           if (e.key === "Enter" && description.trim()) {
@@ -1121,7 +1105,7 @@ function AddLostItemRow({
       <select
         value={location}
         onChange={(e) => setLocation(e.target.value)}
-        className="rounded border border-gray-200 px-2 py-1 text-xs"
+        className="rounded border border-line-subtle px-2 py-1 text-xs"
       >
         {LOST_ITEM_LOCATIONS.map((l) => (
           <option key={l} value={l}>{LOST_ITEM_LOCATION_LABELS[l]}</option>
@@ -1135,13 +1119,13 @@ function AddLostItemRow({
           }
         }}
         disabled={!description.trim()}
-        className="rounded bg-amber-500 px-2 py-1 text-xs text-white hover:bg-amber-600 disabled:opacity-50"
+        className="rounded bg-warning px-2 py-1 text-xs font-semibold text-warning-strong hover:brightness-95 disabled:opacity-50"
       >
         Registrar
       </button>
       <button
         onClick={() => { setShowForm(false); setDescription(""); setLocation("AIRCRAFT"); }}
-        className="text-xs text-gray-400 hover:text-gray-600"
+        className="text-xs text-ink-muted hover:text-ink-2"
       >
         Cancelar
       </button>
@@ -1168,7 +1152,7 @@ function AddServiceRow({
     return (
       <button
         onClick={() => setShowForm(true)}
-        className="rounded-md border border-dashed border-gray-300 px-2 py-1 text-xs text-gray-400 hover:border-gray-400 hover:text-gray-500"
+        className="rounded-md border border-dashed border-line px-2 py-1 text-xs text-ink-muted hover:border-line-strong hover:text-ink-3"
       >
         + Añadir servicio
       </button>
@@ -1180,7 +1164,7 @@ function AddServiceRow({
       <select
         value={selectedType}
         onChange={(e) => setSelectedType(e.target.value)}
-        className="rounded border border-gray-200 px-2 py-1 text-xs"
+        className="rounded border border-line-subtle px-2 py-1 text-xs"
       >
         <option value="">Seleccionar...</option>
         {SERVICE_TYPES.map((t) => (
@@ -1194,14 +1178,14 @@ function AddServiceRow({
           value={customName}
           onChange={(e) => setCustomName(e.target.value)}
           placeholder="Nombre..."
-          className="rounded border border-gray-200 px-2 py-1 text-xs"
+          className="rounded border border-line-subtle px-2 py-1 text-xs"
         />
       )}
       {selectedType === "CATERING" && (
         <select
           value={target}
           onChange={(e) => setTarget(e.target.value)}
-          className="rounded border border-gray-200 px-2 py-1 text-xs"
+          className="rounded border border-line-subtle px-2 py-1 text-xs"
         >
           <option value="">Target...</option>
           {SERVICE_TARGETS.map((t) => (
@@ -1215,7 +1199,7 @@ function AddServiceRow({
         value={reference}
         onChange={(e) => setReference(e.target.value)}
         placeholder="Ref# (opcional)"
-        className="w-24 rounded border border-gray-200 px-2 py-1 text-xs"
+        className="w-24 rounded border border-line-subtle px-2 py-1 text-xs"
       />
       <button
         onClick={() => {
@@ -1226,13 +1210,13 @@ function AddServiceRow({
           }
         }}
         disabled={!selectedType}
-        className="rounded bg-blue-500 px-2 py-1 text-xs text-white hover:bg-blue-600 disabled:opacity-50"
+        className="rounded bg-brand px-2 py-1 text-xs font-semibold text-brand-on hover:bg-brand-hover disabled:opacity-50"
       >
         Añadir
       </button>
       <button
         onClick={() => { setShowForm(false); setSelectedType(""); setCustomName(""); setReference(""); setTarget(""); }}
-        className="text-xs text-gray-400 hover:text-gray-600"
+        className="text-xs text-ink-muted hover:text-ink-2"
       >
         Cancelar
       </button>

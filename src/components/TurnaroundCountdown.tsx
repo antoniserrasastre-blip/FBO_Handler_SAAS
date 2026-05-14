@@ -7,9 +7,6 @@ interface TurnaroundCountdownProps {
   eta?: string | null;
   etd?: string | null;
   flightState: string;
-  /** DaySheet UTC date this flight belongs to. Anchors the countdown to the
-   * correct day so flights scheduled for tomorrow don't show as "+17h late". */
-  dayUtc?: Date | null;
 }
 
 /**
@@ -18,9 +15,9 @@ interface TurnaroundCountdownProps {
  *  - ON_BLOCKS / PARKED / TURNAROUND / BOARDING → cuenta hasta ETD
  *  - OFF_BLOCKS → oculto
  */
-export function TurnaroundCountdown({ eta, etd, flightState, dayUtc }: TurnaroundCountdownProps) {
+export function TurnaroundCountdown({ eta, etd, flightState }: TurnaroundCountdownProps) {
   const clock = getFlightClock({ state: flightState, eta: eta ?? null, etd: etd ?? null });
-  const minutesLeft = useLiveCountdown(clock.ref, dayUtc);
+  const minutesLeft = useLiveCountdown(clock.ref);
 
   if (minutesLeft === null || clock.kind === null) return null;
   if (minutesLeft > 180) return null;
@@ -35,12 +32,12 @@ export function TurnaroundCountdown({ eta, etd, flightState, dayUtc }: Turnaroun
   const display = hours > 0 ? `${hours}h${String(mins).padStart(2, "0")}` : `${mins}m`;
 
   const color = isPast
-    ? "bg-red-100 text-red-700 ring-red-300"
+    ? "bg-danger-bg text-danger-strong ring-danger"
     : isCritical
-      ? "bg-orange-100 text-orange-700 ring-orange-300"
+      ? "bg-warning-bg text-warning-strong ring-warning"
       : isWarning
-        ? "bg-yellow-100 text-yellow-700 ring-yellow-300"
-        : "bg-gray-100 text-gray-600 ring-gray-300";
+        ? "bg-warning-bg text-warning-strong ring-warning"
+        : "bg-bg-muted text-ink-2 ring-line";
 
   const verbPast = clock.kind === "ETA" ? "Llegada retrasada" : "Salida retrasada";
   const verbFuture = clock.kind === "ETA" ? "Tiempo hasta ETA" : "Tiempo hasta ETD";

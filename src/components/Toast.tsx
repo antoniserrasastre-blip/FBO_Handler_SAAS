@@ -40,28 +40,32 @@ function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: 
     return () => clearTimeout(timer);
   }, [toast.id, onDismiss]);
 
-  const bgColor =
+  // Helix toasts: dark base with a 3px coloured left border per type
+  // (matches the design-system "toast" pattern). High contrast, low chrome.
+  const accent =
     toast.type === "warning"
-      ? "bg-amber-50 border-amber-200 text-amber-800"
+      ? "border-l-warning"
       : toast.type === "success"
-        ? "bg-green-50 border-green-200 text-green-800"
-        : "bg-blue-50 border-blue-200 text-blue-800";
+        ? "border-l-success"
+        : "border-l-info";
 
   return (
     <div
-      className={`transform rounded-lg border px-4 py-2.5 shadow-lg transition-all duration-300 ${bgColor} ${
+      className={`transform rounded-hx-md border-l-[3px] bg-chrome-bg2 px-4 py-2.5 text-chrome-text1 shadow-hx-lg ring-1 ring-chrome-border transition-all duration-300 ${accent} ${
         visible ? "translate-x-0 opacity-100" : "translate-x-8 opacity-0"
       }`}
     >
       <div className="flex items-center gap-2 text-sm">
-        {toast.userName && (
-          <span className="font-semibold">{toast.userName}</span>
-        )}
+        {toast.userName && <span className="font-mono font-semibold">{toast.userName}</span>}
         <span className="flex-1">{toast.text}</span>
         {toast.onRetry && (
           <button
-            onClick={(e) => { e.stopPropagation(); toast.onRetry!(); onDismiss(toast.id); }}
-            className="shrink-0 rounded bg-amber-600 px-2 py-0.5 text-xs font-medium text-white hover:bg-amber-700"
+            onClick={(e) => {
+              e.stopPropagation();
+              toast.onRetry!();
+              onDismiss(toast.id);
+            }}
+            className="shrink-0 rounded-hx-sm bg-warning px-2 py-0.5 font-mono text-xs font-semibold text-warning-strong hover:brightness-95"
           >
             Reintentar
           </button>

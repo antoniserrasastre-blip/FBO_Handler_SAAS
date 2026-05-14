@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { SERVICE_LABELS, ServiceType } from "@/types";
-import { ViewTabs } from "@/components/ViewTabs";
+import { HelixButton, SegmentedControl } from "@/components/helix";
 
 interface Metrics {
   range: number;
@@ -30,11 +30,21 @@ interface Metrics {
   lostItems: { total: number; found: number; claimed: number; delivered: number };
 }
 
+type RangeOption = "7" | "14" | "30" | "90" | "365";
+
+const RANGE_OPTIONS: { value: RangeOption; label: string }[] = [
+  { value: "7", label: "7d" },
+  { value: "14", label: "14d" },
+  { value: "30", label: "30d" },
+  { value: "90", label: "90d" },
+  { value: "365", label: "1a" },
+];
+
 export default function MetricsPage() {
   const router = useRouter();
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [loading, setLoading] = useState(true);
-  const [range, setRange] = useState(30);
+  const [range, setRange] = useState<RangeOption>("30");
 
   useEffect(() => {
     setLoading(true);
@@ -47,8 +57,8 @@ export default function MetricsPage() {
 
   if (loading && !metrics) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-gray-500">Cargando metricas...</div>
+      <div className="flex min-h-[calc(100vh-96px)] items-center justify-center text-ink-3">
+        Cargando métricas…
       </div>
     );
   }
@@ -59,52 +69,72 @@ export default function MetricsPage() {
   const maxWeekday = Math.max(...metrics.weekdayCounts.map((w) => w.flights), 1);
 
   return (
-    <div className="min-h-screen bg-gray-50 px-4 py-8">
+    <div className="min-h-[calc(100vh-96px)] bg-bg px-4 py-8">
       <div className="mx-auto max-w-6xl">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-xl font-bold text-gray-900">Metricas</h1>
-            <p className="mt-1 text-sm text-gray-500">
-              {metrics.daysWithData} dias con datos en los ultimos {metrics.range} dias
+            <h1 className="text-2xl font-semibold tracking-tight text-ink-1">Métricas</h1>
+            <p className="mt-1 text-sm text-ink-3">
+              <span className="font-mono [font-variant-numeric:tabular-nums]">
+                {metrics.daysWithData}
+              </span>{" "}
+              días con datos en los últimos{" "}
+              <span className="font-mono [font-variant-numeric:tabular-nums]">{metrics.range}</span>{" "}
+              días
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <select
-              value={range}
-              onChange={(e) => setRange(parseInt(e.target.value))}
-              className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm"
-            >
-              <option value={7}>7 dias</option>
-              <option value={14}>14 dias</option>
-              <option value={30}>30 dias</option>
-              <option value={90}>90 dias</option>
-              <option value={365}>1 ano</option>
-            </select>
-            <ViewTabs tone="light" />
+          <div className="flex items-center gap-3">
+            <SegmentedControl<RangeOption> value={range} onChange={setRange} options={RANGE_OPTIONS} />
+            <HelixButton variant="secondary" size="sm" onClick={() => router.push("/")}>
+              Volver
+            </HelixButton>
           </div>
         </div>
 
         {/* KPIs principales */}
-        <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Kpi label="Total vuelos" value={String(metrics.totalFlights)} sub={`Media: ${metrics.avgFlightsPerDay}/dia`} />
-          <Kpi label="Total pasajeros" value={String(metrics.totalPax)} />
-          <Kpi label="Servicios entregados" value={`${metrics.serviceDeliveryRate}%`} sub={`${metrics.servicesDelivered}/${metrics.totalServices}`} color="text-green-700" />
-          <Kpi label="Turnaround medio" value={`${metrics.avgTurnaround}m`} sub={`${metrics.tightTurnarounds} ajustados (<90m)`} />
+        <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Kpi label="Total vuelos" value={metrics.totalFlights} sub={`Media: ${metrics.avgFlightsPerDay}/día`} />
+          <Kpi label="Total pasajeros" value={metrics.totalPax} />
+          <Kpi
+            label="Servicios entregados"
+            value={`${metrics.serviceDeliveryRate}%`}
+            sub={`${metrics.servicesDelivered}/${metrics.totalServices}`}
+            tone="success"
+          />
+          <Kpi
+            label="Turnaround medio"
+            value={`${metrics.avgTurnaround}m`}
+            sub={`${metrics.tightTurnarounds} ajustados (<90m)`}
+          />
         </div>
 
         {/* KPIs secundarios */}
         <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Kpi label="Pernoctas" value={String(metrics.overnightFlights)} color="text-purple-700" />
-          <Kpi label="Policia necesaria" value={String(metrics.policiaCount)} sub={`G.Civil: ${metrics.guardaCivilCount}`} color="text-orange-700" />
-          <Kpi label="Pax verificados" value={`${metrics.passengers.verifiedRate}%`} sub={`${metrics.passengers.verified}/${metrics.passengers.total}`} color="text-blue-700" />
-          <Kpi label="Objetos olvidados" value={String(metrics.lostItems.total)} sub={`${metrics.lostItems.delivered} entregados`} color="text-amber-700" />
+          <Kpi label="Pernoctas" value={metrics.overnightFlights} tone="overnight" />
+          <Kpi
+            label="Policía necesaria"
+            value={metrics.policiaCount}
+            sub={`G.Civil: ${metrics.guardaCivilCount}`}
+            tone="warning"
+          />
+          <Kpi
+            label="Pax verificados"
+            value={`${metrics.passengers.verifiedRate}%`}
+            sub={`${metrics.passengers.verified}/${metrics.passengers.total}`}
+            tone="info"
+          />
+          <Kpi
+            label="Objetos olvidados"
+            value={metrics.lostItems.total}
+            sub={`${metrics.lostItems.delivered} entregados`}
+            tone="warning"
+          />
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-2">
-          {/* Vuelos por dia */}
-          <Card title="Vuelos por dia">
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Card title="Vuelos por día">
             {metrics.dailyStats.length === 0 ? (
-              <p className="text-sm text-gray-400">Sin datos</p>
+              <Empty />
             ) : (
               <div className="space-y-1.5">
                 {metrics.dailyStats.slice(0, 20).map((day) => {
@@ -112,51 +142,44 @@ export default function MetricsPage() {
                   const label = d.toLocaleDateString("es-ES", { day: "2-digit", month: "2-digit" });
                   const pct = (day.flights / maxFlights) * 100;
                   return (
-                    <div key={day.date} className="flex items-center gap-3">
-                      <span className="w-12 shrink-0 text-xs text-gray-500">{label}</span>
-                      <div className="flex-1">
-                        <div className="h-5 rounded bg-gray-100">
-                          <div className="flex h-5 items-center rounded bg-blue-500 px-2 text-[10px] font-medium text-white" style={{ width: `${Math.max(pct, 8)}%` }}>
-                            {day.flights}
-                          </div>
-                        </div>
-                      </div>
-                      <span className="w-14 shrink-0 text-right text-[10px] text-gray-400">{day.paxTotal}pax</span>
-                    </div>
+                    <BarRow
+                      key={day.date}
+                      label={label}
+                      value={day.flights}
+                      pct={pct}
+                      barClass="bg-brand"
+                      right={`${day.paxTotal}pax`}
+                    />
                   );
                 })}
               </div>
             )}
           </Card>
 
-          {/* Top operadores */}
           <Card title="Top operadores">
             {metrics.topOperators.length === 0 ? (
-              <p className="text-sm text-gray-400">Sin datos</p>
+              <Empty />
             ) : (
               <div className="space-y-1.5">
                 {metrics.topOperators.map((op) => {
                   const maxOp = metrics.topOperators[0]?.flights || 1;
                   const pct = (op.flights / maxOp) * 100;
                   return (
-                    <div key={op.icao} className="flex items-center gap-3">
-                      <span className="w-28 shrink-0 truncate text-xs text-gray-700" title={op.name}>{op.name}</span>
-                      <div className="flex-1">
-                        <div className="h-5 rounded bg-gray-100">
-                          <div className="flex h-5 items-center rounded bg-indigo-500 px-2 text-[10px] font-medium text-white" style={{ width: `${Math.max(pct, 10)}%` }}>
-                            {op.flights}
-                          </div>
-                        </div>
-                      </div>
-                      <span className="w-14 shrink-0 text-right text-[10px] text-gray-400">{op.pax}pax</span>
-                    </div>
+                    <BarRow
+                      key={op.icao}
+                      label={op.name}
+                      value={op.flights}
+                      pct={pct}
+                      barClass="bg-fbo-onblocks"
+                      right={`${op.pax}pax`}
+                      titleAttr={op.name}
+                    />
                   );
                 })}
               </div>
             )}
           </Card>
 
-          {/* Peak hours */}
           <Card title="Horas pico (llegadas / salidas)">
             <div className="flex h-32 items-end gap-0.5">
               {metrics.hourBuckets.map((h) => {
@@ -165,46 +188,57 @@ export default function MetricsPage() {
                 return (
                   <div key={h.hour} className="flex flex-1 flex-col items-center">
                     <div className="flex w-full flex-1 items-end gap-0.5">
-                      <div className="flex-1 rounded-t bg-blue-400" style={{ height: `${arrPct}%` }} title={`${h.arrivals} llegadas`} />
-                      <div className="flex-1 rounded-t bg-orange-400" style={{ height: `${depPct}%` }} title={`${h.departures} salidas`} />
+                      <div
+                        className="flex-1 rounded-t bg-fbo-approach"
+                        style={{ height: `${arrPct}%` }}
+                        title={`${h.arrivals} llegadas`}
+                      />
+                      <div
+                        className="flex-1 rounded-t bg-fbo-board"
+                        style={{ height: `${depPct}%` }}
+                        title={`${h.departures} salidas`}
+                      />
                     </div>
-                    {h.hour % 3 === 0 && <span className="mt-0.5 text-[9px] text-gray-400">{h.hour}</span>}
+                    {h.hour % 3 === 0 ? (
+                      <span className="mt-0.5 font-mono text-[9px] text-ink-muted [font-variant-numeric:tabular-nums]">
+                        {h.hour}
+                      </span>
+                    ) : null}
                   </div>
                 );
               })}
             </div>
-            <div className="mt-2 flex items-center justify-center gap-4 text-[10px] text-gray-500">
-              <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded bg-blue-400" /> Llegadas</span>
-              <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded bg-orange-400" /> Salidas</span>
+            <div className="mt-2 flex items-center justify-center gap-4 font-mono text-[10px] text-ink-3">
+              <span className="flex items-center gap-1">
+                <span className="inline-block h-2 w-2 rounded bg-fbo-approach" /> Llegadas
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="inline-block h-2 w-2 rounded bg-fbo-board" /> Salidas
+              </span>
             </div>
           </Card>
 
-          {/* Por dia de la semana */}
-          <Card title="Por dia de la semana">
+          <Card title="Por día de la semana">
             <div className="space-y-1.5">
               {metrics.weekdayCounts.map((w) => {
                 const pct = (w.flights / maxWeekday) * 100;
                 return (
-                  <div key={w.day} className="flex items-center gap-3">
-                    <span className="w-10 shrink-0 text-xs font-medium text-gray-600">{w.day}</span>
-                    <div className="flex-1">
-                      <div className="h-5 rounded bg-gray-100">
-                        <div className="flex h-5 items-center rounded bg-teal-500 px-2 text-[10px] font-medium text-white" style={{ width: `${Math.max(pct, 8)}%` }}>
-                          {w.flights}
-                        </div>
-                      </div>
-                    </div>
-                    <span className="w-14 shrink-0 text-right text-[10px] text-gray-400">{w.pax}pax</span>
-                  </div>
+                  <BarRow
+                    key={w.day}
+                    label={w.day}
+                    value={w.flights}
+                    pct={pct}
+                    barClass="bg-fbo-departed"
+                    right={`${w.pax}pax`}
+                  />
                 );
               })}
             </div>
           </Card>
 
-          {/* Top servicios */}
-          <Card title="Servicios mas solicitados">
+          <Card title="Servicios más solicitados">
             {metrics.topServices.length === 0 ? (
-              <p className="text-sm text-gray-400">Sin datos</p>
+              <Empty />
             ) : (
               <div className="space-y-1.5">
                 {metrics.topServices.map((svc) => {
@@ -212,47 +246,51 @@ export default function MetricsPage() {
                   const pct = (svc.count / maxSvc) * 100;
                   const label = SERVICE_LABELS[svc.type as ServiceType] || svc.type;
                   return (
-                    <div key={svc.type} className="flex items-center gap-3">
-                      <span className="w-24 shrink-0 truncate text-xs text-gray-600">{label}</span>
-                      <div className="flex-1">
-                        <div className="h-5 rounded bg-gray-100">
-                          <div className="flex h-5 items-center rounded bg-green-500 px-2 text-[10px] font-medium text-white" style={{ width: `${Math.max(pct, 10)}%` }}>
-                            {svc.count}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+                    <BarRow
+                      key={svc.type}
+                      label={label}
+                      value={svc.count}
+                      pct={pct}
+                      barClass="bg-success"
+                    />
                   );
                 })}
               </div>
             )}
           </Card>
 
-          {/* Pasajeros */}
           <Card title="Pasajeros registrados">
             {metrics.passengers.total === 0 ? (
-              <p className="text-sm text-gray-400">Sin datos</p>
+              <Empty />
             ) : (
               <div className="space-y-2">
-                <StatRow label="Total registrados" value={metrics.passengers.total} color="bg-gray-100 text-gray-700" />
-                <StatRow label="Confirmados" value={metrics.passengers.confirmed} color="bg-green-100 text-green-700" />
-                <StatRow label="No-show" value={metrics.passengers.noShow} color="bg-red-100 text-red-700" />
-                <StatRow label="Anadidos de ultima hora" value={metrics.passengers.added} color="bg-blue-100 text-blue-700" />
-                <StatRow label="Verificados" value={`${metrics.passengers.verified} (${metrics.passengers.verifiedRate}%)`} color="bg-indigo-100 text-indigo-700" />
+                <StatRow label="Total registrados" value={metrics.passengers.total} tone="default" />
+                <StatRow label="Confirmados" value={metrics.passengers.confirmed} tone="success" />
+                <StatRow label="No-show" value={metrics.passengers.noShow} tone="danger" />
+                <StatRow label="Añadidos de última hora" value={metrics.passengers.added} tone="info" />
+                <StatRow
+                  label="Verificados"
+                  value={`${metrics.passengers.verified} (${metrics.passengers.verifiedRate}%)`}
+                  tone="brand"
+                />
               </div>
             )}
           </Card>
 
-          {/* Tipos de aeronave */}
           <Card title="Tipos de aeronave" wide>
             {metrics.topAircraft.length === 0 ? (
-              <p className="text-sm text-gray-400">Sin datos</p>
+              <Empty />
             ) : (
               <div className="flex flex-wrap gap-2">
                 {metrics.topAircraft.map((ac) => (
-                  <div key={ac.type} className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-center">
-                    <div className="text-sm font-bold text-gray-900">{ac.type}</div>
-                    <div className="text-[10px] text-gray-500">{ac.count} vuelos</div>
+                  <div
+                    key={ac.type}
+                    className="rounded-hx-md border border-line bg-bg-subtle px-3 py-2 text-center"
+                  >
+                    <div className="font-mono text-sm font-semibold text-ink-1 [font-variant-numeric:tabular-nums]">
+                      {ac.type}
+                    </div>
+                    <div className="font-mono text-[10px] text-ink-muted">{ac.count} vuelos</div>
                   </div>
                 ))}
               </div>
@@ -264,30 +302,116 @@ export default function MetricsPage() {
   );
 }
 
-function Kpi({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
+function Empty() {
+  return <p className="text-sm italic text-ink-muted">Sin datos</p>;
+}
+
+const KPI_TONE: Record<string, string> = {
+  default: "text-ink-1",
+  success: "text-success-strong",
+  warning: "text-warning-strong",
+  info: "text-info-strong",
+  brand: "text-brand-active",
+  overnight: "text-fbo-overnight",
+};
+
+function Kpi({
+  label,
+  value,
+  sub,
+  tone = "default",
+}: {
+  label: string;
+  value: string | number;
+  sub?: string;
+  tone?: keyof typeof KPI_TONE;
+}) {
   return (
-    <div className="rounded-xl bg-white p-4 shadow-sm">
-      <div className="text-[10px] font-medium uppercase tracking-wide text-gray-400">{label}</div>
-      <div className={`mt-1 text-2xl font-bold ${color || "text-gray-900"}`}>{value}</div>
-      {sub && <div className="mt-0.5 text-[10px] text-gray-400">{sub}</div>}
+    <div className="rounded-hx-md border border-line bg-bg p-4 shadow-hx-sm">
+      <div className="text-[10px] font-semibold uppercase tracking-wider text-ink-muted">{label}</div>
+      <div
+        className={`mt-1 font-mono text-2xl font-semibold [font-variant-numeric:tabular-nums] ${KPI_TONE[tone]}`}
+      >
+        {value}
+      </div>
+      {sub ? <div className="mt-0.5 font-mono text-[10px] text-ink-muted">{sub}</div> : null}
     </div>
   );
 }
 
 function Card({ title, children, wide }: { title: string; children: React.ReactNode; wide?: boolean }) {
   return (
-    <div className={`rounded-xl bg-white p-5 shadow-sm ${wide ? "lg:col-span-2" : ""}`}>
-      <h2 className="mb-4 text-sm font-semibold text-gray-700">{title}</h2>
+    <div className={`rounded-hx-md border border-line bg-bg p-5 shadow-hx-sm ${wide ? "lg:col-span-2" : ""}`}>
+      <h2 className="mb-4 text-[11px] font-semibold uppercase tracking-wider text-ink-muted">{title}</h2>
       {children}
     </div>
   );
 }
 
-function StatRow({ label, value, color }: { label: string; value: string | number; color: string }) {
+function BarRow({
+  label,
+  value,
+  pct,
+  barClass,
+  right,
+  titleAttr,
+}: {
+  label: string;
+  value: number;
+  pct: number;
+  barClass: string;
+  right?: string;
+  titleAttr?: string;
+}) {
+  return (
+    <div className="flex items-center gap-3">
+      <span className="w-20 shrink-0 truncate text-xs text-ink-2" title={titleAttr ?? label}>
+        {label}
+      </span>
+      <div className="flex-1">
+        <div className="h-5 rounded bg-bg-muted">
+          <div
+            className={`flex h-5 items-center rounded px-2 font-mono text-[10px] font-semibold text-white [font-variant-numeric:tabular-nums] ${barClass}`}
+            style={{ width: `${Math.max(pct, 8)}%` }}
+          >
+            {value}
+          </div>
+        </div>
+      </div>
+      {right ? (
+        <span className="w-14 shrink-0 text-right font-mono text-[10px] text-ink-muted [font-variant-numeric:tabular-nums]">
+          {right}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+const STATROW_TONE: Record<string, string> = {
+  default: "bg-bg-muted text-ink-2",
+  success: "bg-success-bg text-success-strong",
+  danger: "bg-danger-bg text-danger-strong",
+  info: "bg-info-bg text-info-strong",
+  brand: "bg-brand-tint text-brand-active",
+};
+
+function StatRow({
+  label,
+  value,
+  tone = "default",
+}: {
+  label: string;
+  value: string | number;
+  tone?: keyof typeof STATROW_TONE;
+}) {
   return (
     <div className="flex items-center justify-between">
-      <span className="text-xs text-gray-600">{label}</span>
-      <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${color}`}>{value}</span>
+      <span className="text-xs text-ink-2">{label}</span>
+      <span
+        className={`rounded-hx-pill px-2 py-0.5 font-mono text-xs font-semibold [font-variant-numeric:tabular-nums] ${STATROW_TONE[tone]}`}
+      >
+        {value}
+      </span>
     </div>
   );
 }
