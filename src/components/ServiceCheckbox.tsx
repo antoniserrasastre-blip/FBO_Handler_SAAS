@@ -22,9 +22,9 @@ export function ServiceCheckbox({ service, onToggle }: ServiceCheckboxProps) {
   const nextState = NEXT_STATE[service.state] || "PENDING";
 
   const stateStyles: Record<string, string> = {
-    PENDING: "bg-gray-100 text-gray-600 hover:bg-gray-200",
-    ARRIVED: "bg-blue-100 text-blue-700",
-    DELIVERED: "bg-green-100 text-green-700",
+    PENDING: "bg-bg-muted text-ink-2 hover:bg-bg-sunken",
+    ARRIVED: "bg-info-bg text-info-strong",
+    DELIVERED: "bg-success-bg text-success-strong",
   };
 
   const StateIndicator = service.state === "DELIVERED" ? DeliveredIcon

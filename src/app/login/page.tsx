@@ -27,7 +27,7 @@ export default function LoginPage() {
     if (result?.error) {
       setError("Credenciales incorrectas");
     } else {
-      router.push("/");
+      router.push("/dia");
       router.refresh();
     }
   }

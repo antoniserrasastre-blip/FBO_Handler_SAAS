@@ -41,60 +41,90 @@ export function PendingServicesPanel({ flights, onQuickFilter }: PendingServices
 
   if (flights.length === 0) return null;
 
-  const items: { label: string; count: number; query: string; color?: string }[] = [
+  type Tone = "default" | "warning" | "danger";
+  const items: { label: string; count: number; query: string; tone?: Tone }[] = [
     { label: "Fuel pedido", count: counts.fuelPending, query: "fuel" },
     { label: "Fuel no pedido (calzos)", count: counts.fuelNotRequested, query: "calzos" },
     { label: "Catering pendiente", count: counts.cateringPending, query: "catering" },
     { label: "Toilet pendiente", count: counts.toiletPending, query: "toilet" },
     { label: "Transporte pendiente", count: counts.transportPending, query: "transporte" },
     { label: "Extras pendientes", count: counts.extrasPending, query: "pendiente" },
-    { label: "Policia necesaria", count: counts.policia, query: "policia" },
+    { label: "Policía necesaria", count: counts.policia, query: "policia" },
     { label: "Guardia Civil", count: counts.guardaCivil, query: "civil" },
-    { label: "Lejos del FBO", count: counts.farFromGA, query: "lejos", color: "text-orange-600" },
-    { label: "Servicios retrasados", count: counts.overdue, query: "extras", color: "text-red-600" },
+    { label: "Lejos del FBO", count: counts.farFromGA, query: "lejos", tone: "warning" as Tone },
+    { label: "Servicios retrasados", count: counts.overdue, query: "extras", tone: "danger" as Tone },
   ].filter((item) => item.count > 0);
 
   if (items.length === 0) return null;
+
+  const toneLabel: Record<Tone, string> = {
+    default: "text-ink-2",
+    warning: "text-warning-strong",
+    danger: "text-danger-strong",
+  };
+  const toneBadge: Record<Tone, string> = {
+    default: "bg-bg-muted text-ink-2",
+    warning: "bg-warning-bg text-warning-strong",
+    danger: "bg-danger-bg text-danger-strong",
+  };
 
   return (
     <div className="mx-auto max-w-7xl px-3 sm:px-4">
       <button
         onClick={() => setCollapsed(!collapsed)}
-        className="flex w-full items-center gap-2 rounded-lg bg-white px-3 py-2 text-left shadow-sm hover:bg-gray-50"
+        className="flex w-full items-center gap-2 rounded-hx-md border border-line-subtle bg-bg-subtle px-3 py-2 text-left hover:bg-bg-muted"
       >
-        {counts.overdue > 0 && <AlertTriangle size={14} className="shrink-0 text-red-500" />}
-        <span className="text-xs font-medium text-gray-600">
-          {totalIssues > 0 ? `${totalIssues} pendiente${totalIssues !== 1 ? "s" : ""}` : "Todo al dia"}
+        {counts.overdue > 0 ? (
+          <AlertTriangle size={14} className="shrink-0 text-danger-strong" />
+        ) : null}
+        <span className="font-mono text-xs font-semibold uppercase tracking-wider text-ink-2">
+          {totalIssues > 0 ? `${totalIssues} pendiente${totalIssues !== 1 ? "s" : ""}` : "Todo al día"}
         </span>
         <div className="flex flex-1 flex-wrap gap-1">
-          {!collapsed ? null : items.slice(0, 4).map((item) => (
-            <span key={item.label} className={`rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium ${item.color || "text-gray-500"}`}>
-              {item.label}: {item.count}
-            </span>
-          ))}
-          {collapsed && items.length > 4 && (
-            <span className="text-[10px] text-gray-400">+{items.length - 4} mas</span>
-          )}
+          {!collapsed
+            ? null
+            : items.slice(0, 4).map((item) => (
+                <span
+                  key={item.label}
+                  className={`rounded-hx-pill bg-bg-muted px-2 py-0.5 font-mono text-[10px] font-semibold ${
+                    toneLabel[item.tone ?? "default"]
+                  }`}
+                >
+                  {item.label}: {item.count}
+                </span>
+              ))}
+          {collapsed && items.length > 4 ? (
+            <span className="font-mono text-[10px] text-ink-muted">+{items.length - 4} más</span>
+          ) : null}
         </div>
-        {collapsed ? <ChevronDown size={14} className="shrink-0 text-gray-400" /> : <ChevronUp size={14} className="shrink-0 text-gray-400" />}
+        {collapsed ? (
+          <ChevronDown size={14} className="shrink-0 text-ink-muted" />
+        ) : (
+          <ChevronUp size={14} className="shrink-0 text-ink-muted" />
+        )}
       </button>
 
-      {!collapsed && (
-        <div className="mt-1 grid grid-cols-2 gap-1 rounded-lg bg-white p-2 shadow-sm sm:grid-cols-3 lg:grid-cols-4">
-          {items.map((item) => (
-            <button
-              key={item.label}
-              onClick={() => onQuickFilter(item.query)}
-              className="flex items-center justify-between rounded-md px-3 py-1.5 text-left text-xs hover:bg-gray-50"
-            >
-              <span className={item.color || "text-gray-600"}>{item.label}</span>
-              <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${item.color ? "bg-red-100 text-red-700" : "bg-gray-100 text-gray-700"}`}>
-                {item.count}
-              </span>
-            </button>
-          ))}
+      {!collapsed ? (
+        <div className="mt-1 grid grid-cols-2 gap-1 rounded-hx-md border border-line-subtle bg-bg p-2 sm:grid-cols-3 lg:grid-cols-4">
+          {items.map((item) => {
+            const tone = item.tone ?? "default";
+            return (
+              <button
+                key={item.label}
+                onClick={() => onQuickFilter(item.query)}
+                className="flex items-center justify-between rounded-hx-sm px-3 py-1.5 text-left text-xs hover:bg-bg-subtle"
+              >
+                <span className={toneLabel[tone]}>{item.label}</span>
+                <span
+                  className={`rounded-hx-pill px-1.5 py-0.5 font-mono text-[10px] font-semibold ${toneBadge[tone]}`}
+                >
+                  {item.count}
+                </span>
+              </button>
+            );
+          })}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

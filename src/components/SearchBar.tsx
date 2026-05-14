@@ -105,13 +105,10 @@ function matchesSingleToken(flight: FlightWithRelations, token: string): boolean
   // --- Flight state ---
   const stateConfig = FLIGHT_STATE_CONFIG[flight.state as FlightState];
   if (stateConfig?.label.toLowerCase().includes(token)) return true;
-  if (token === "calzos" && (flight.state === "ARRIVING" || flight.state === "ON_BLOCKS" || flight.state === "ON_GROUND")) return true;
-  if (token === "llegando" && (flight.state === "ARRIVING" || flight.state === "ON_BLOCKS")) return true;
-  if (token === "parking" && flight.state === "PARKED") return true;
+  if (token === "calzos" && flight.state === "ON_GROUND") return true;
   if (token === "esperado" && flight.state === "EXPECTED") return true;
-  if (token === "salida" && (flight.state === "DEPARTING" || flight.state === "TURNAROUND" || flight.state === "BOARDING")) return true;
-  if (token === "embarque" && flight.paxDepState === "BOARDED") return true;
-  if (token === "despachado" && (flight.state === "DEPARTED" || flight.state === "OFF_BLOCKS" || flight.state === "DISPATCHED")) return true;
+  if (token === "embarque" && flight.state === "BOARDING") return true;
+  if (token === "despachado" && flight.state === "DISPATCHED") return true;
 
   // --- Origins / destinations ---
   if (flight.origin?.toLowerCase().includes(token)) return true;
@@ -193,22 +190,24 @@ export function SearchBar({ flights, onFilteredFlights, resultCount, totalCount,
   return (
     <div className="mb-3 sm:mb-4">
       <div className="relative">
-        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />
         <input
           ref={inputRef}
           type="text"
           value={query}
           onChange={(e) => handleQueryChange(e.target.value)}
-          placeholder='Buscar: fuel netjets, !dispatched, "catering aire", or prensa... ( / )'
-          className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-20 text-sm text-gray-700 placeholder-gray-400 shadow-sm focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+          placeholder='Buscar: fuel netjets, !dispatched, "catering aire", or prensa…  (/)'
+          className="w-full rounded-hx-md border border-line bg-bg py-2 pl-9 pr-20 text-sm text-ink-1 placeholder-ink-disabled shadow-hx-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand-tint"
         />
         {isFiltered && (
           <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1.5">
-            <span className="text-xs text-gray-400">{resultCount}/{totalCount}</span>
+            <span className="font-mono text-xs text-ink-muted [font-variant-numeric:tabular-nums]">
+              {resultCount}/{totalCount}
+            </span>
             <button
               onClick={() => handleQueryChange("")}
-              className="rounded-full p-0.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-              title="Limpiar busqueda"
+              className="rounded-full p-0.5 text-ink-muted hover:bg-bg-muted hover:text-ink-2"
+              title="Limpiar búsqueda"
             >
               <CloseIcon size={14} />
             </button>
@@ -217,7 +216,7 @@ export function SearchBar({ flights, onFilteredFlights, resultCount, totalCount,
       </div>
 
       {/* Quick filter chips */}
-      <div className="mt-1.5 flex flex-wrap gap-1">
+      <div className="mt-2 flex flex-wrap gap-1">
         {QUICK_FILTERS.map((chip) => {
           const active = query.toLowerCase().includes(chip.query);
           return (
@@ -230,10 +229,10 @@ export function SearchBar({ flights, onFilteredFlights, resultCount, totalCount,
                   handleQueryChange(query ? `${query} ${chip.query}` : chip.query);
                 }
               }}
-              className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-colors ${
+              className={`rounded-hx-pill px-2.5 py-0.5 font-mono text-[11px] font-semibold transition-colors ${
                 active
-                  ? "bg-blue-100 text-blue-700 ring-1 ring-blue-300"
-                  : "bg-gray-100 text-gray-500 hover:bg-gray-200 hover:text-gray-700"
+                  ? "bg-brand-tint text-brand-active ring-1 ring-brand"
+                  : "bg-bg-muted text-ink-3 hover:bg-bg-sunken hover:text-ink-1"
               }`}
             >
               {chip.label}

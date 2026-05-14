@@ -9,10 +9,18 @@ interface QuickTimeEditProps {
   className?: string;
 }
 
-/**
- * Click-to-edit time field. Used inline in collapsed cards for ETA/ETD.
- * Blur or Enter saves. Escape cancels.
- */
+function normalizeTimeInput(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (trimmed === "") return "";
+  const digits = trimmed.replace(/\D/g, "");
+  if (digits.length === 0 || digits.length > 4) return null;
+  const padded = digits.padStart(4, "0");
+  const hh = parseInt(padded.slice(0, 2), 10);
+  const mm = parseInt(padded.slice(2, 4), 10);
+  if (hh > 23 || mm > 59) return null;
+  return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
+}
+
 export function QuickTimeEdit({ value, onSave, placeholder = "--:--", className = "" }: QuickTimeEditProps) {
   const [editing, setEditing] = useState(false);
   const [local, setLocal] = useState(value || "");
@@ -26,7 +34,13 @@ export function QuickTimeEdit({ value, onSave, placeholder = "--:--", className 
   }, [editing]);
 
   function commit() {
-    if (local !== (value || "")) onSave(local);
+    const normalized = normalizeTimeInput(local);
+    if (normalized === null) {
+      setLocal(value || "");
+      setEditing(false);
+      return;
+    }
+    if (normalized !== (value || "")) onSave(normalized);
     setEditing(false);
   }
 
@@ -35,8 +49,13 @@ export function QuickTimeEdit({ value, onSave, placeholder = "--:--", className 
       <input
         ref={inputRef}
         type="text"
+        inputMode="numeric"
+        maxLength={5}
         value={local}
-        onChange={(e) => setLocal(e.target.value)}
+        onChange={(e) => {
+          const digitsOnly = e.target.value.replace(/\D/g, "").slice(0, 4);
+          setLocal(digitsOnly.length >= 3 ? `${digitsOnly.slice(0, 2)}:${digitsOnly.slice(2)}` : digitsOnly);
+        }}
         onBlur={commit}
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => {
@@ -44,8 +63,8 @@ export function QuickTimeEdit({ value, onSave, placeholder = "--:--", className 
           if (e.key === "Enter") commit();
           if (e.key === "Escape") { setLocal(value || ""); setEditing(false); }
         }}
-        placeholder="HH:MM"
-        className={`w-14 rounded border border-blue-400 bg-white px-1 py-0 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 ${className}`}
+        placeholder="HHMM"
+        className={`w-14 rounded border border-brand bg-white px-1 py-0 text-xs focus:outline-none focus:ring-1 focus:ring-brand-tint ${className}`}
       />
     );
   }
@@ -57,8 +76,8 @@ export function QuickTimeEdit({ value, onSave, placeholder = "--:--", className 
         setLocal(value || "");
         setEditing(true);
       }}
-      className={`cursor-text rounded px-1 hover:bg-blue-50 ${className}`}
-      title="Click para editar"
+      className={`cursor-text rounded px-1 hover:bg-brand-tint ${className}`}
+      title="Click para editar (escribe 4 dígitos)"
     >
       {value || placeholder}
     </span>

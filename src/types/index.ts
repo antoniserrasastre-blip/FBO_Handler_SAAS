@@ -1,29 +1,18 @@
-// Flight states (workflow real, 5 estados):
-//   pre-llegada → arrival activa → quieto en parking → preparacion+boarding → despegado
+// Flight states (workflow real: pre-llegada → en calzos → [pernocta] → preparacion salida → embarque → fuera de calzos)
 export const FLIGHT_STATES = [
   "EXPECTED",
-  "ARRIVING",
+  "ON_BLOCKS",
   "PARKED",
-  "DEPARTING",
-  "DEPARTED",
+  "TURNAROUND",
+  "BOARDING",
+  "OFF_BLOCKS",
 ] as const;
 export type FlightState = (typeof FLIGHT_STATES)[number];
 
-/**
- * Mapea estados viejos a los nuevos para datos previos a la migracion 6→5.
- *  - ON_BLOCKS  → ARRIVING  (avion en stand, descarga activa)
- *  - TURNAROUND → DEPARTING
- *  - BOARDING   → DEPARTING (boarding ahora es subfase de DEPARTING via paxDepState)
- *  - OFF_BLOCKS → DEPARTED  (fuera de calzos, despego)
- *  - ON_GROUND / DISPATCHED → estados todavia mas viejos (pre-2026)
- */
+// Legacy state aliases — mapean estados viejos a los nuevos para tarjetas existentes
 export const LEGACY_STATE_MAP: Record<string, FlightState> = {
-  ON_BLOCKS: "ARRIVING",
-  TURNAROUND: "DEPARTING",
-  BOARDING: "DEPARTING",
-  OFF_BLOCKS: "DEPARTED",
-  ON_GROUND: "ARRIVING",
-  DISPATCHED: "DEPARTED",
+  ON_GROUND: "ON_BLOCKS",
+  DISPATCHED: "OFF_BLOCKS",
 };
 
 export function normalizeFlightState(state: string): FlightState {
@@ -101,36 +90,43 @@ export const FLIGHT_STATE_CONFIG: Record<
   EXPECTED: {
     label: "Esperando llegada",
     color: "#9CA3AF",
-    bg: "bg-gray-100",
-    text: "text-gray-700",
+    bg: "bg-bg-muted",
+    text: "text-ink-2",
     progress: 0,
   },
-  ARRIVING: {
-    label: "Llegando",
+  ON_BLOCKS: {
+    label: "En calzos",
     color: "#3B82F6",
-    bg: "bg-blue-100",
-    text: "text-blue-700",
-    progress: 25,
+    bg: "bg-info-bg",
+    text: "text-info-strong",
+    progress: 20,
   },
   PARKED: {
     label: "En plataforma",
     color: "#8B5CF6",
-    bg: "bg-purple-100",
-    text: "text-purple-700",
-    progress: 50,
+    bg: "bg-bg-muted",
+    text: "text-fbo-overnight",
+    progress: 40,
   },
-  DEPARTING: {
+  TURNAROUND: {
     label: "Preparacion salida",
     color: "#06B6D4",
-    bg: "bg-cyan-100",
-    text: "text-cyan-700",
-    progress: 75,
+    bg: "bg-info-bg",
+    text: "text-info-strong",
+    progress: 60,
   },
-  DEPARTED: {
-    label: "Despegado",
+  BOARDING: {
+    label: "Embarque realizado",
+    color: "#EAB308",
+    bg: "bg-warning-bg",
+    text: "text-warning-strong",
+    progress: 80,
+  },
+  OFF_BLOCKS: {
+    label: "Fuera de calzos",
     color: "#22C55E",
-    bg: "bg-green-100",
-    text: "text-green-700",
+    bg: "bg-success-bg",
+    text: "text-success-strong",
     progress: 100,
   },
 };
@@ -236,9 +232,9 @@ export const PASSENGER_STATUSES = ["CONFIRMED", "NO_SHOW", "ADDED"] as const;
 export type PassengerStatus = (typeof PASSENGER_STATUSES)[number];
 
 export const PASSENGER_STATUS_CONFIG: Record<PassengerStatus, { label: string; bg: string; text: string }> = {
-  CONFIRMED: { label: "Confirmado", bg: "bg-green-100", text: "text-green-700" },
-  NO_SHOW: { label: "No-show", bg: "bg-red-100", text: "text-red-700" },
-  ADDED: { label: "Anadido", bg: "bg-blue-100", text: "text-blue-700" },
+  CONFIRMED: { label: "Confirmado", bg: "bg-success-bg", text: "text-success-strong" },
+  NO_SHOW: { label: "No-show", bg: "bg-danger-bg", text: "text-danger-strong" },
+  ADDED: { label: "Anadido", bg: "bg-info-bg", text: "text-info-strong" },
 };
 
 // --- v0.3: Crew roles ---
@@ -259,9 +255,9 @@ export const LOST_ITEM_STATES = ["FOUND", "CLAIMED", "DELIVERED"] as const;
 export type LostItemState = (typeof LOST_ITEM_STATES)[number];
 
 export const LOST_ITEM_STATE_CONFIG: Record<LostItemState, { label: string; bg: string; text: string }> = {
-  FOUND: { label: "Encontrado", bg: "bg-amber-100", text: "text-amber-700" },
-  CLAIMED: { label: "Reclamado", bg: "bg-blue-100", text: "text-blue-700" },
-  DELIVERED: { label: "Entregado", bg: "bg-green-100", text: "text-green-700" },
+  FOUND: { label: "Encontrado", bg: "bg-warning-bg", text: "text-warning-strong" },
+  CLAIMED: { label: "Reclamado", bg: "bg-info-bg", text: "text-info-strong" },
+  DELIVERED: { label: "Entregado", bg: "bg-success-bg", text: "text-success-strong" },
 };
 
 export const LOST_ITEM_LOCATIONS = ["AIRCRAFT", "LOUNGE", "RAMP"] as const;

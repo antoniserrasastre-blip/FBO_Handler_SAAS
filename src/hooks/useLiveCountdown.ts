@@ -2,15 +2,6 @@
 
 import { useEffect, useState } from "react";
 
-/**
- * Live countdown to a target HH:MM time anchored to a specific UTC day.
- * Updates every 30s. Returns minutes until target (negative if past).
- * Returns null if time is invalid.
- *
- * `dayUtc` should be the DaySheet date (midnight UTC of the Palma local day
- * the flight belongs to). Without it the calculation falls back to a
- * heuristic that wraps around midnight — see calcMinutes.
- */
 export function useLiveCountdown(
   targetTime: string | null | undefined,
   dayUtc?: Date | null,
@@ -31,15 +22,6 @@ export function useLiveCountdown(
   return minutesLeft;
 }
 
-/**
- * Pure helper — exported for unit tests. `now` defaults to current time.
- *
- * If `dayUtc` is provided we compute target as that UTC day at HH:MM Zulu.
- * If not, we fall back to the legacy "wrap to nearest occurrence" heuristic:
- * compute the diff in minutes-of-day, then if it's > 12h pick the previous
- * occurrence, if < -12h pick the next one. This keeps backward compatibility
- * for callers that don't have the daysheet date handy.
- */
 export function calcMinutes(
   targetTime: string | null | undefined,
   dayUtc: Date | null,
@@ -62,7 +44,6 @@ export function calcMinutes(
     return Math.round((target - now.getTime()) / 60000);
   }
 
-  // Legacy fallback: minutes-of-day diff, snapped to nearest occurrence.
   const targetMin = hh * 60 + mm;
   const nowMin = now.getUTCHours() * 60 + now.getUTCMinutes();
   let diff = targetMin - nowMin;
