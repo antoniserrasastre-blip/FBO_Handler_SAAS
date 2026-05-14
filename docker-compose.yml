@@ -20,3 +20,4 @@ services:
 
 volumes:
   fbo-data:
+    name: fbo_handler_saas_fbo-data
