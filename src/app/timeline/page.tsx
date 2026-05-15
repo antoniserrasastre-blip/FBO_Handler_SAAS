@@ -10,6 +10,10 @@ import { getOperatorName } from "@/lib/operators";
 import { ViewTabs } from "@/components/ViewTabs";
 import { FlightDetailPanel } from "@/app/dia/FlightDetailPanel";
 import { PassengerCrewModal } from "@/components/PassengerCrewModal";
+import { CategoryPill } from "@/components/helix/CategoryPill";
+import { RqstChip } from "@/components/helix/RqstChip";
+import { PetCount } from "@/components/helix/PetCount";
+import type { FlightCategory } from "@/types/v2";
 import { computeHeaderStats, type FlightLite, shortDate } from "@/app/dia/diaHelpers";
 import {
   computeBarBounds,
@@ -29,7 +33,7 @@ type FlightWithRelations = Flight & {
   eventLogs: (EventLog & { user: { name: string } | null })[];
 };
 
-type FilterKind = "all" | "private" | "commercial" | "overnight";
+type FilterKind = "all" | "private" | "commercial" | "overnight" | "ferry" | "cancelled";
 type SortKind = "time" | "stand";
 
 const SHIFTS = [
@@ -105,6 +109,8 @@ export default function TimelinePage() {
     private: flights.filter((f) => !isCommercialCallsign(f.callsign)).length,
     commercial: flights.filter((f) => isCommercialCallsign(f.callsign)).length,
     overnight: flights.filter((f) => f.isOvernight).length,
+    ferry: flights.filter((f) => f.flightCategory === "FERRY").length,
+    cancelled: flights.filter((f) => f.flightCategory === "CANCELLED").length,
   }), [flights]);
 
   const filtered = useMemo(() => {
@@ -112,6 +118,8 @@ export default function TimelinePage() {
     if (filter === "private") xs = xs.filter((f) => !isCommercialCallsign(f.callsign));
     if (filter === "commercial") xs = xs.filter((f) => isCommercialCallsign(f.callsign));
     if (filter === "overnight") xs = xs.filter((f) => f.isOvernight);
+    if (filter === "ferry") xs = xs.filter((f) => f.flightCategory === "FERRY");
+    if (filter === "cancelled") xs = xs.filter((f) => f.flightCategory === "CANCELLED");
     return [...xs].sort((a, b) => {
       if (sortBy === "stand") {
         // Asignados primero (alfa-num natural), luego TBD por hora
@@ -273,6 +281,12 @@ export default function TimelinePage() {
           <FilterPill label="Privados" count={filterCounts.private} active={filter === "private"} onClick={() => setFilter("private")} />
           <FilterPill label="Comerciales" count={filterCounts.commercial} active={filter === "commercial"} onClick={() => setFilter("commercial")} />
           <FilterPill label="Pernoctas" count={filterCounts.overnight} active={filter === "overnight"} onClick={() => setFilter("overnight")} />
+          {filterCounts.ferry > 0 ? (
+            <FilterPill label="Ferry" count={filterCounts.ferry} active={filter === "ferry"} onClick={() => setFilter("ferry")} />
+          ) : null}
+          {filterCounts.cancelled > 0 ? (
+            <FilterPill label="Cancelados" count={filterCounts.cancelled} active={filter === "cancelled"} onClick={() => setFilter("cancelled")} />
+          ) : null}
 
           <div className="w-px h-5 bg-gray-200 mx-1" />
 
@@ -646,9 +660,14 @@ function FlightRow({
       >
         <div className="w-1.5 h-9 rounded-sm shrink-0" style={{ background: URGENCY_PILL_COLOR[flight.state] ?? "#d1d5db" }} />
         <div className="min-w-0 flex-1">
-          <div className="flex items-baseline gap-2">
+          <div className="flex items-baseline gap-2 flex-wrap">
             <div className="text-[14.5px] font-semibold leading-tight -tracking-[0.01em] text-gray-900" style={{ fontFamily: "JetBrains Mono, monospace" }}>{flight.registration}</div>
             <div className="text-[11.5px] font-semibold leading-tight" style={{ color: "oklch(0.5 0.14 245)", fontFamily: "JetBrains Mono, monospace" }}>{flight.callsign}</div>
+            <RqstChip rqstNumber={flight.rqstNumber} />
+            <CategoryPill
+              category={(flight.flightCategory || "COMMERCIAL") as FlightCategory}
+              modified={flight.modifiedFlag}
+            />
           </div>
           <div className="flex items-center gap-2 mt-1 text-[11px] text-gray-500" style={{ fontFamily: "JetBrains Mono, monospace" }}>
             <span className="text-gray-600">{flight.aircraftType}</span>
@@ -669,6 +688,7 @@ function FlightRow({
         <div className="flex flex-col items-end gap-0.5" style={{ fontFamily: "JetBrains Mono, monospace" }}>
           <span className="text-[11px] text-gray-700 font-medium">P {flight.paxArrivalReal ?? flight.paxArrival}/{flight.paxDepartureReal ?? flight.paxDeparture}</span>
           <span className="text-[10px] text-gray-400">C {flight.crewArrivalReal ?? flight.crewArrival}/{flight.crewDepartureReal ?? flight.crewDeparture}</span>
+          <PetCount count={flight.petCount || 0} />
         </div>
       </div>
 

@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { Flight, Service, EventLog, LostItem } from "@/types/compat";
-import { X, Plane, ChevronDown, ChevronRight, Plus, Trash2, Users, AlertOctagon } from "lucide-react";
+import { X, ChevronDown, ChevronRight, Plus, Trash2, Users, AlertOctagon } from "lucide-react";
 import {
   FLIGHT_STATES, FLIGHT_STATE_CONFIG, normalizeFlightState,
   SERVICE_TYPES, SERVICE_LABELS,
@@ -20,6 +20,27 @@ import { InlineTextEdit } from "@/components/InlineTextEdit";
 import { InlineNumber } from "@/components/InlineNumber";
 import { InlineSelect } from "@/components/InlineSelect";
 import { QuickTimeEdit } from "@/components/QuickTimeEdit";
+import { OperatorBadge } from "@/components/helix/OperatorBadge";
+import { AircraftBadge } from "@/components/helix/AircraftBadge";
+import { CategoryPill } from "@/components/helix/CategoryPill";
+import { RqstChip } from "@/components/helix/RqstChip";
+import { PetCount } from "@/components/helix/PetCount";
+import { MovementRow } from "@/components/helix/MovementRow";
+import { HelixPill } from "@/components/helix/Pill";
+import type { FlightCategory } from "@/types/v2";
+import type { FboState } from "@/components/helix/Pill";
+
+const PANEL_STATE_MAP: Record<string, FboState> = {
+  EXPECTED: "expected",
+  ON_BLOCKS: "onblocks",
+  PARKED: "parked",
+  TURNAROUND: "turn",
+  BOARDING: "board",
+  OFF_BLOCKS: "departed",
+};
+function panelVisualState(s: string): FboState {
+  return PANEL_STATE_MAP[normalizeFlightState(s)] ?? "expected";
+}
 
 type FlightWithRelations = Flight & {
   services: Service[];
@@ -75,46 +96,59 @@ export function FlightDetailPanel({ flight, onClose, onMutated, onOpenPaxCrew, o
     onMutated();
   }, [onMutated]);
 
+  const fboState = panelVisualState(flight.state);
   return (
     <aside className="flex h-full w-[440px] flex-col border-l border-gray-300 bg-white shadow-inner">
-      {/* HEADER (always visible) */}
-      <div className="flex items-start justify-between gap-2 border-b border-gray-200 bg-gray-50 px-3 py-2">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <Plane size={14} className="text-blue-600 shrink-0" />
-            <span className="font-bold text-base">{flight.callsign}</span>
-            <span className="font-mono text-xs text-gray-600">{flight.registration}</span>
+      {/* HEADER (always visible) — v2 visual parity with VisitCard */}
+      <div className="flex items-start justify-between gap-2 border-b border-line bg-bg-subtle px-3 py-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5 flex-wrap">
             <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${stateCfg.bg} ${stateCfg.text}`}>
               {stateCfg.label}
             </span>
-          </div>
-          <div className="mt-0.5 text-[11px] text-gray-500">
-            {flight.aircraftType}
-            {flight.parking ? ` · stand ${flight.parking}` : " · sin stand"}
-            {flight.isOvernight ? " · pernocta" : ""}
+            <span className="font-bold text-base" style={{ fontFamily: "var(--font-mono)" }}>{flight.callsign}</span>
+            <RqstChip rqstNumber={flight.rqstNumber} />
+            <AircraftBadge registration={flight.registration} aircraftType={flight.aircraftType} />
+            <OperatorBadge callsign={flight.callsign} />
+            <CategoryPill
+              category={(flight.flightCategory || "COMMERCIAL") as FlightCategory}
+              modified={flight.modifiedFlag}
+            />
+            {flight.isOvernight ? (
+              <HelixPill className="hx-pill-overnight">Pernocta</HelixPill>
+            ) : null}
+            <PetCount count={flight.petCount || 0} />
           </div>
         </div>
         <button
           onClick={onClose}
-          className="shrink-0 rounded p-1 text-gray-400 hover:bg-gray-200 hover:text-gray-700"
+          className="shrink-0 rounded p-1 text-ink-muted hover:bg-bg-muted hover:text-ink-1"
           title="Cerrar (Esc)"
         >
           <X size={16} />
         </button>
       </div>
 
-      {/* RESUMEN (always visible) */}
-      <div className="grid grid-cols-2 gap-2 border-b border-gray-200 bg-white px-3 py-2">
-        <SummaryBox label="Llegada" lines={[
-          `${flight.origin || "—"} → LEPA`,
-          `ETA ${flight.eta || "--:--"}Z${flight.arrivalDate ? ` · ${flight.arrivalDate}` : ""}`,
-          `Crew ${flight.crewArrivalReal ?? flight.crewArrival} · Pax ${flight.paxArrivalReal ?? flight.paxArrival}`,
-        ]} />
-        <SummaryBox label="Salida" lines={[
-          `LEPA → ${flight.destination || "—"}`,
-          `ETD ${flight.etd || "--:--"}Z${flight.departureDate ? ` · ${flight.departureDate}` : ""}`,
-          `Crew ${flight.crewDepartureReal ?? flight.crewDeparture} · Pax ${flight.paxDepartureReal ?? flight.paxDeparture}`,
-        ]} />
+      {/* RESUMEN — dos MovementRow apiladas (consistente con VisitCard) */}
+      <div className="border-b border-line bg-white hx-visit-timeline">
+        <MovementRow
+          direction="ARRIVAL"
+          time={flight.eta}
+          airport={flight.origin}
+          state={fboState}
+          paxCount={flight.paxArrivalReal ?? flight.paxArrival}
+          crewCount={flight.crewArrivalReal ?? flight.crewArrival}
+          parking={flight.parking}
+        />
+        <MovementRow
+          direction="DEPARTURE"
+          time={flight.etd}
+          airport={flight.destination}
+          state={fboState}
+          paxCount={flight.paxDepartureReal ?? flight.paxDeparture}
+          crewCount={flight.crewDepartureReal ?? flight.crewDeparture}
+          parking={flight.parking}
+        />
       </div>
 
       {/* SECCIONES COLAPSABLES */}
@@ -198,17 +232,6 @@ export function FlightDetailPanel({ flight, onClose, onMutated, onOpenPaxCrew, o
 }
 
 // ─── Layout helpers ─────────────────────────────────────────────────────────
-
-function SummaryBox({ label, lines }: { label: string; lines: string[] }) {
-  return (
-    <div className="rounded border border-gray-200 bg-gray-50/50 p-2">
-      <div className="mb-1 text-[10px] font-bold uppercase text-gray-500">{label}</div>
-      {lines.map((l, i) => (
-        <div key={i} className="text-[11px] text-gray-700 leading-relaxed">{l}</div>
-      ))}
-    </div>
-  );
-}
 
 function CollapsibleSection({
   title,

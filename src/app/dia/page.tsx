@@ -6,7 +6,11 @@ import { Flight, Service, EventLog, LostItem } from "@/types/compat";
 import { dateToSqlString } from "@/lib/time";
 import { useEventStream } from "@/hooks/useEventStream";
 import { ServicePip, Stat, StatBand, useDate } from "@/components/helix";
+import { CategoryPill } from "@/components/helix/CategoryPill";
+import { RqstChip } from "@/components/helix/RqstChip";
+import { PetCount } from "@/components/helix/PetCount";
 import { nextServiceState } from "@/lib/serviceCycle";
+import type { FlightCategory } from "@/types/v2";
 import { QuickTimeEdit } from "@/components/QuickTimeEdit";
 import { InlineTextEdit } from "@/components/InlineTextEdit";
 import { PassengerCrewModal } from "@/components/PassengerCrewModal";
@@ -235,6 +239,7 @@ function DiaPageInner() {
                 const atd = deriveATD(fLite);
                 const dotCls = STATE_DOT_CLASS[f.state] ?? "bg-gray-300";
 
+                const isCancelled = f.flightCategory === "CANCELLED";
                 return (
                   <tr
                     key={f.id}
@@ -244,6 +249,7 @@ function DiaPageInner() {
                       isSelected
                         ? "bg-brand-tint shadow-[inset_3px_0_0_var(--c-brand)]"
                         : "hover:bg-bg-subtle",
+                      isCancelled ? "opacity-60 line-through" : "",
                     ].join(" ")}
                   >
                     {/* Status dot */}
@@ -253,7 +259,14 @@ function DiaPageInner() {
 
                     {/* LLEGADA */}
                     <td className={`border-b border-l border-line-subtle px-2 py-1.5 font-semibold ${arrCellCls || "text-ink-1"}`}>
-                      {f.callsign}
+                      <span className="inline-flex items-center gap-1.5">
+                        {f.callsign}
+                        <RqstChip rqstNumber={f.rqstNumber} />
+                        <CategoryPill
+                          category={(f.flightCategory || "COMMERCIAL") as FlightCategory}
+                          modified={f.modifiedFlag}
+                        />
+                      </span>
                     </td>
                     <td className={`border-b border-line-subtle px-2 py-1.5 text-center ${arrCellCls || "text-ink-2"}`}>
                       {f.origin}
@@ -273,8 +286,19 @@ function DiaPageInner() {
 
                     {/* AVIÓN */}
                     <td className="border-b border-l border-line-subtle px-2 py-1.5 text-center">
-                      <span className="inline-block rounded border border-line bg-bg px-1.5 py-px font-semibold tracking-tight text-ink-1">
-                        {f.registration}
+                      <span className="inline-flex items-center gap-1">
+                        <span className="inline-block rounded border border-line bg-bg px-1.5 py-px font-semibold tracking-tight text-ink-1">
+                          {f.registration}
+                        </span>
+                        {f.isOvernight ? (
+                          <span
+                            className="hx-pill hx-pill-overnight"
+                            title="Pernocta"
+                            style={{ padding: "0 5px", fontSize: 10 }}
+                          >
+                            🌙
+                          </span>
+                        ) : null}
                       </span>
                     </td>
                     <td className="border-b border-line-subtle px-2 py-1.5 text-center text-ink-3">
@@ -330,9 +354,14 @@ function DiaPageInner() {
 
                     {/* PAX / CREW */}
                     <td className="whitespace-nowrap border-b border-l border-line-subtle px-2 py-1.5 text-center">
-                      <span className="text-ink-1">{f.paxArrival}·{f.paxDeparture}</span>
-                      <span className="mx-1.5 text-ink-disabled">/</span>
-                      <span className="text-ink-3">{f.crewArrival}·{f.crewDeparture}</span>
+                      <span className="inline-flex items-center gap-1.5">
+                        <span>
+                          <span className="text-ink-1">{f.paxArrival}·{f.paxDeparture}</span>
+                          <span className="mx-1.5 text-ink-disabled">/</span>
+                          <span className="text-ink-3">{f.crewArrival}·{f.crewDeparture}</span>
+                        </span>
+                        <PetCount count={f.petCount || 0} />
+                      </span>
                     </td>
                   </tr>
                 );
