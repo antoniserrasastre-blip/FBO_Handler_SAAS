@@ -10,9 +10,10 @@ const adapter = new PrismaLibSql({
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
-  // Create users
+  // Users
   const adminPassword = await bcrypt.hash("admin123", 10);
   const handlerPassword = await bcrypt.hash("handler123", 10);
+  const viewerPassword = await bcrypt.hash("viewer123", 10);
 
   const admin = await prisma.user.upsert({
     where: { email: "admin@mallorcair.com" },
@@ -36,7 +37,6 @@ async function main() {
     },
   });
 
-  const viewerPassword = await bcrypt.hash("viewer123", 10);
   await prisma.user.upsert({
     where: { email: "viewer@mallorcair.com" },
     update: {},
@@ -48,170 +48,201 @@ async function main() {
     },
   });
 
-  // Create today's day sheet
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const daySheet = await prisma.daySheet.upsert({
-    where: { date: today },
+  // Operators
+  const njeOp = await prisma.operator.upsert({
+    where: { icaoCode: "NJE" },
     update: {},
-    create: { date: today },
+    create: { icaoCode: "NJE", name: "NetJets Europe" },
+  });
+  const vjtOp = await prisma.operator.upsert({
+    where: { icaoCode: "VJT" },
+    update: {},
+    create: { icaoCode: "VJT", name: "VistaJet" },
+  });
+  const ejuOp = await prisma.operator.upsert({
+    where: { icaoCode: "EJU" },
+    update: {},
+    create: { icaoCode: "EJU", name: "easyJet Europe" },
   });
 
-  // Create sample flights
-  const flights = [
-    {
+  // Aircraft
+  const ac1 = await prisma.aircraft.upsert({
+    where: { registration: "9H-ILY" },
+    update: {},
+    create: { registration: "9H-ILY", aircraftType: "CRJ2", currentOperatorId: vjtOp.id },
+  });
+  const ac2 = await prisma.aircraft.upsert({
+    where: { registration: "G-UZHA" },
+    update: {},
+    create: { registration: "G-UZHA", aircraftType: "A320", currentOperatorId: ejuOp.id },
+  });
+  const ac3 = await prisma.aircraft.upsert({
+    where: { registration: "CS-CHC" },
+    update: {},
+    create: { registration: "CS-CHC", aircraftType: "CL35", currentOperatorId: njeOp.id },
+  });
+
+  // Today's Visits (UTC midnight of Palma local date)
+  const now = new Date();
+  const today = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0));
+
+  // Sample: a turnaround
+  const v1 = await prisma.visit.create({
+    data: {
+      aircraftId: ac1.id,
+      operatorId: vjtOp.id,
+      palmaDay: today,
+      type: "TURNAROUND",
+      arrivalDate: today,
+      departureDate: today,
+    },
+  });
+  await prisma.movement.create({
+    data: {
+      visitId: v1.id,
+      direction: "ARRIVAL",
       callsign: "VJT630",
-      registration: "9H-ILY",
-      aircraftType: "CRJ2",
+      scheduledDate: today,
       origin: "LOWI",
       eta: "12:30",
+      parking: "P232",
+      crewCount: 3,
+      paxCount: 0,
+      state: "PARKED",
+    },
+  });
+  await prisma.movement.create({
+    data: {
+      visitId: v1.id,
+      direction: "DEPARTURE",
+      callsign: "VJT630",
+      scheduledDate: today,
       destination: "GMME",
       etd: "14:00",
       parking: "P232",
-      state: "ON_GROUND",
-      crewArrival: 3,
-      paxArrival: 0,
-      crewDeparture: 3,
-      paxDeparture: 5,
-      paxDepBagsChecked: 7,
-      paxDepBagsCabin: 2,
-      paxDepState: "IN_LOUNGE",
-      paxDepTransportType: "PREPARED_CAR",
-      paxDepTransportState: "CONFIRMED",
-      fuelState: "NOT_REQUESTED",
+      crewCount: 3,
+      paxCount: 5,
+      state: "TURNAROUND",
+      paxState: "IN_LOUNGE",
+      bagsChecked: 7,
+      bagsCabin: 2,
+      transportType: "PREPARED_CAR",
+      transportState: "CONFIRMED",
     },
-    {
+  });
+  await prisma.service.createMany({
+    data: [
+      { visitId: v1.id, type: "CATERING", direction: "DEPARTURE", state: "DELIVERED", deliveredAt: "12:45", origin: "CATERING_AIRE" },
+      { visitId: v1.id, type: "COOLER_BAG", direction: "BOTH", state: "DELIVERED", deliveredAt: "12:50" },
+      { visitId: v1.id, type: "THERMOS", direction: "DEPARTURE", state: "PENDING" },
+      { visitId: v1.id, type: "NEWSPAPERS", direction: "DEPARTURE", state: "DELIVERED", deliveredAt: "13:00", origin: "MCR" },
+    ],
+  });
+  await prisma.eventLog.create({
+    data: { visitId: v1.id, userId: admin.id, action: "Visit creada (seed)", details: "VJT630 — 9H-ILY" },
+  });
+
+  // Sample: a commercial larger flight
+  const v2 = await prisma.visit.create({
+    data: {
+      aircraftId: ac2.id,
+      operatorId: ejuOp.id,
+      palmaDay: today,
+      type: "TURNAROUND",
+      arrivalDate: today,
+      departureDate: today,
+    },
+  });
+  await prisma.movement.create({
+    data: {
+      visitId: v2.id,
+      direction: "ARRIVAL",
       callsign: "EJU123",
-      registration: "G-UZHA",
-      aircraftType: "A320",
+      scheduledDate: today,
       origin: "EGKK",
       eta: "09:45",
+      parking: "B12",
+      crewCount: 6,
+      paxCount: 180,
+      state: "PARKED",
+    },
+  });
+  await prisma.movement.create({
+    data: {
+      visitId: v2.id,
+      direction: "DEPARTURE",
+      callsign: "EJU123",
+      scheduledDate: today,
       destination: "EGKK",
       etd: "11:30",
       parking: "B12",
+      crewCount: 6,
+      paxCount: 175,
       state: "BOARDING",
-      crewArrival: 6,
-      paxArrival: 180,
-      crewDeparture: 6,
-      paxDeparture: 175,
-      paxDepBagsChecked: 120,
-      paxDepBagsCabin: 85,
-      paxDepState: "IN_LOUNGE",
-      paxDepTransportType: "UNDEFINED",
-      paxDepTransportState: "PENDING",
+      paxState: "IN_LOUNGE",
+      bagsChecked: 120,
+      bagsCabin: 85,
       fuelState: "SERVED",
       fuelServedAt: "10:15",
     },
-    {
-      callsign: "LXJ456",
-      registration: "CS-DKF",
-      aircraftType: "FA7X",
-      origin: "LFPB",
-      eta: "15:00",
-      destination: "LEMD",
-      etd: "17:30",
-      parking: "P205",
-      state: "EXPECTED",
-      crewArrival: 2,
-      paxArrival: 4,
-      crewDeparture: 2,
-      paxDeparture: 3,
-      fuelState: "NOT_REQUESTED",
+  });
+
+  // Sample: NetJets
+  const v3 = await prisma.visit.create({
+    data: {
+      aircraftId: ac3.id,
+      operatorId: njeOp.id,
+      palmaDay: today,
+      type: "TURNAROUND",
+      arrivalDate: today,
+      departureDate: today,
     },
-    {
+  });
+  await prisma.movement.create({
+    data: {
+      visitId: v3.id,
+      direction: "ARRIVAL",
       callsign: "NJE789",
-      registration: "CS-CHC",
-      aircraftType: "CL35",
+      scheduledDate: today,
       origin: "LIRF",
       eta: "08:00",
+      parking: "P210",
+      crewCount: 2,
+      paxCount: 3,
+      state: "PARKED",
+    },
+  });
+  await prisma.movement.create({
+    data: {
+      visitId: v3.id,
+      direction: "DEPARTURE",
+      callsign: "NJE789",
+      scheduledDate: today,
       destination: "LIRF",
       etd: "09:30",
       parking: "P210",
-      state: "DISPATCHED",
-      crewArrival: 2,
-      paxArrival: 3,
-      crewDeparture: 2,
-      paxDeparture: 3,
-      paxDepBagsChecked: 4,
-      paxDepBagsCabin: 2,
-      paxDepBagsState: "SENT_TO_AIRCRAFT",
-      paxDepState: "BOARDED",
-      paxDepTransportType: "TAXI",
-      paxDepTransportState: "CONFIRMED",
+      crewCount: 2,
+      paxCount: 3,
+      state: "OFF_BLOCKS",
+      paxState: "BOARDED",
+      bagsChecked: 4,
+      bagsCabin: 2,
+      bagsState: "SENT_TO_AIRCRAFT",
+      transportType: "TAXI",
+      transportState: "CONFIRMED",
       fuelState: "SERVED",
       fuelServedAt: "08:30",
       toiletState: "COMPLETED",
     },
-    {
-      callsign: "TVS321",
-      registration: "OK-TST",
-      aircraftType: "B738",
-      origin: "LKPR",
-      eta: "13:15",
-      destination: "LKPR",
-      etd: "15:45",
-      parking: "A04",
-      state: "EXPECTED",
-      crewArrival: 5,
-      paxArrival: 160,
-      crewDeparture: 5,
-      paxDeparture: 155,
-      fuelState: "NOT_REQUESTED",
-    },
-  ];
+  });
+  await prisma.service.createMany({
+    data: [
+      { visitId: v3.id, type: "CATERING", direction: "DEPARTURE", state: "DELIVERED", deliveredAt: "08:20", origin: "NETJETS", reference: "12297037", target: "PAX" },
+      { visitId: v3.id, type: "THERMOS", direction: "DEPARTURE", state: "DELIVERED", deliveredAt: "08:25" },
+    ],
+  });
 
-  for (const flightData of flights) {
-    const flight = await prisma.flight.create({
-      data: {
-        daySheetId: daySheet.id,
-        ...flightData,
-      },
-    });
-
-    // Add services for some flights
-    if (flightData.callsign === "VJT630") {
-      await prisma.service.createMany({
-        data: [
-          { flightId: flight.id, type: "CATERING", state: "DELIVERED", deliveredAt: "12:45", origin: "Catering Aire" },
-          { flightId: flight.id, type: "COOLER_BAG", state: "DELIVERED", deliveredAt: "12:50", origin: "Crossroads" },
-          { flightId: flight.id, type: "THERMOS", state: "PENDING", origin: "Crossroads" },
-          { flightId: flight.id, type: "NEWSPAPERS", state: "DELIVERED", deliveredAt: "13:00" },
-        ],
-      });
-    }
-
-    if (flightData.callsign === "LXJ456") {
-      await prisma.service.createMany({
-        data: [
-          { flightId: flight.id, type: "CATERING", state: "PENDING", origin: "Catering Aire" },
-          { flightId: flight.id, type: "LAUNDRY", state: "PENDING" },
-          { flightId: flight.id, type: "NEWSPAPERS", state: "PENDING" },
-        ],
-      });
-    }
-
-    if (flightData.callsign === "NJE789") {
-      await prisma.service.createMany({
-        data: [
-          { flightId: flight.id, type: "CATERING", state: "DELIVERED", deliveredAt: "08:20", origin: "Catering Aire" },
-          { flightId: flight.id, type: "THERMOS", state: "DELIVERED", deliveredAt: "08:25" },
-        ],
-      });
-    }
-
-    // Add event logs
-    await prisma.eventLog.create({
-      data: {
-        flightId: flight.id,
-        userId: admin.id,
-        action: "Vuelo creado",
-        details: `${flightData.callsign} - ${flightData.registration}`,
-      },
-    });
-  }
-
-  console.log("Seed completed successfully!");
+  console.log("Seed v2 completed successfully!");
 }
 
 main()

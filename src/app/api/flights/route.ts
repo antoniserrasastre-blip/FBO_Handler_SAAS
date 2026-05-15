@@ -1,10 +1,19 @@
+// /api/flights — v2 implementation
+//
+// Reads Visits + Movements for the given Palma operating day and projects them
+// through `toFlightView()` so the UI keeps consuming the same shape as before.
+// POST creates a Visit + an empty DEPARTURE Movement (the typical case for
+// manual "quick add" entries).
+
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { eventBus } from "@/lib/events";
-
-import { getSpainToday } from "@/lib/time";
+import { palmaDayUtc, getSpainToday } from "@/lib/time";
+import { upsertAircraft, upsertVisit, upsertMovement, upsertOperator } from "@/lib/v2/upsert";
+import { toFlightView } from "@/lib/flightView";
+import { findOperator } from "@/lib/operators";
 
 // GET /api/flights?date=YYYY-MM-DD
 export async function GET(req: NextRequest) {
@@ -12,37 +21,23 @@ export async function GET(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const dateParam = req.nextUrl.searchParams.get("date");
-  let date: Date;
-  
-  if (dateParam) {
-    // Expecting YYYY-MM-DD
-    const [y, m, d] = dateParam.split("-").map(Number);
-    date = new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0));
-  } else {
-    date = getSpainToday();
-  }
+  const palmaDay = dateParam ? palmaDayUtc(dateParam) : getSpainToday();
 
-  // Find or create day sheet
-  let daySheet = await prisma.daySheet.findUnique({ where: { date } });
-  if (!daySheet) {
-    daySheet = await prisma.daySheet.create({ data: { date } });
-  }
-
-  const rawFlights = await prisma.flight.findMany({
-    where: { daySheetId: daySheet.id },
+  const visits = await prisma.visit.findMany({
+    where: { palmaDay },
     include: {
+      aircraft: true,
+      movements: true,
       services: { orderBy: { createdAt: "asc" } },
       lostItems: { orderBy: { createdAt: "asc" } },
     },
   });
 
-  // Sheet date as "DD/MM/YY" to compare against flight arrivalDate strings
-  const iso = daySheet.date.toISOString().slice(2, 10).split("-").reverse().join("/");
+  const flights = visits.map(toFlightView);
 
-  // Sort chronologically by "first event today":
-  // - Arrived BEFORE today (arrivalDate < sheetDate): sort by ETD — their only event today
-  // - Arrives today or no arrivalDate: sort by ETA then ETD
-  const flights = rawFlights.sort((a, b) => {
+  // Sort chronologically: pernoctas (arrived earlier) by ETD; same-day by ETA→ETD
+  const iso = palmaDay.toISOString().slice(2, 10).split("-").reverse().join("/");
+  flights.sort((a, b) => {
     const arrivedBeforeA = !!a.arrivalDate && a.arrivalDate !== iso;
     const arrivedBeforeB = !!b.arrivalDate && b.arrivalDate !== iso;
     const ta = arrivedBeforeA ? (a.etd || "99:99") : (a.eta || a.etd || "99:99");
@@ -50,10 +45,14 @@ export async function GET(req: NextRequest) {
     return ta.localeCompare(tb);
   });
 
-  return NextResponse.json({ daySheet, flights });
+  // Shape mirrors the legacy endpoint: { daySheet, flights }
+  return NextResponse.json({
+    daySheet: { id: palmaDay.toISOString(), date: palmaDay },
+    flights,
+  });
 }
 
-// POST /api/flights — create a new flight
+// POST /api/flights — create a new visit + departure movement
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -61,59 +60,91 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const { date: dateParam, ...flightData } = body;
 
-  let targetDate: Date;
-  if (dateParam) {
-    // If it's ISO string or YYYY-MM-DD
-    const d = new Date(dateParam);
-    targetDate = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0));
-  } else {
-    targetDate = getSpainToday();
+  const palmaDay = dateParam ? palmaDayUtc(dateParam) : getSpainToday();
+
+  // Operator from callsign (best-effort)
+  let operatorId: string | null = null;
+  if (flightData.callsign) {
+    const op = findOperator(flightData.callsign);
+    if (op) {
+      const dbOp = await upsertOperator(op.icao, op.name);
+      operatorId = dbOp.id;
+    }
   }
 
-  // Find or create day sheet
-  let daySheet = await prisma.daySheet.findUnique({ where: { date: targetDate } });
-  if (!daySheet) {
-    daySheet = await prisma.daySheet.create({ data: { date: targetDate } });
-  }
+  const aircraft = await upsertAircraft({
+    registration: flightData.registration,
+    aircraftType: flightData.aircraftType,
+    callsignForOperator: flightData.callsign,
+  });
 
-  const flight = await prisma.flight.create({
+  const visit = await upsertVisit({
+    aircraftId: aircraft.id,
+    palmaDay,
+    operatorId,
+  });
+
+  // Create DEPARTURE movement (manual quick-adds typically capture the departure leg)
+  const depMovement = await upsertMovement({
+    visitId: visit.id,
+    direction: "DEPARTURE",
+    callsign: flightData.callsign,
+    scheduledDate: palmaDay,
     data: {
-      daySheetId: daySheet.id,
-      callsign: flightData.callsign,
-      registration: flightData.registration,
-      aircraftType: flightData.aircraftType,
-      origin: flightData.origin || null,
-      eta: flightData.eta || null,
       destination: flightData.destination || null,
       etd: flightData.etd || null,
       parking: flightData.parking || null,
       tobt: flightData.tobt || null,
-      crewArrival: flightData.crewArrival || 0,
-      paxArrival: flightData.paxArrival || 0,
-      crewDeparture: flightData.crewDeparture || 0,
-      paxDeparture: flightData.paxDeparture || 0,
+      paxCount: flightData.paxDeparture || 0,
+      crewCount: flightData.crewDeparture || 0,
     },
-    include: { services: true, eventLogs: true },
   });
 
-  // Log the creation
+  // Create ARRIVAL movement only if origin/eta were provided
+  if (flightData.origin || flightData.eta) {
+    await upsertMovement({
+      visitId: visit.id,
+      direction: "ARRIVAL",
+      callsign: flightData.callsign,
+      scheduledDate: palmaDay,
+      data: {
+        origin: flightData.origin || null,
+        eta: flightData.eta || null,
+        parking: flightData.parking || null,
+        paxCount: flightData.paxArrival || 0,
+        crewCount: flightData.crewArrival || 0,
+      },
+    });
+  }
+
   await prisma.eventLog.create({
     data: {
-      flightId: flight.id,
+      visitId: visit.id,
+      movementId: depMovement.id,
       userId: session.user.id,
       action: "Vuelo creado",
-      details: `${flight.callsign} - ${flight.registration}`,
+      details: `${flightData.callsign} - ${flightData.registration}`,
     },
   });
 
   eventBus.emit({
     type: "flight_created",
-    flightId: flight.id,
+    flightId: visit.id,
     userId: session.user.id,
     userName: session.user.name || undefined,
-    detail: `${flight.callsign} (${flight.registration})`,
+    detail: `${flightData.callsign} (${flightData.registration})`,
     timestamp: new Date().toISOString(),
   });
 
-  return NextResponse.json(flight, { status: 201 });
+  // Re-read visit with relations and project to FlightView
+  const refreshed = await prisma.visit.findUnique({
+    where: { id: visit.id },
+    include: {
+      aircraft: true,
+      movements: true,
+      services: true,
+      lostItems: true,
+    },
+  });
+  return NextResponse.json(refreshed ? toFlightView(refreshed) : null, { status: 201 });
 }

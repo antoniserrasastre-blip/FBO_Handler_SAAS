@@ -1,6 +1,6 @@
 "use client";
 
-import { Flight } from "@prisma/client";
+import { Flight } from "@/types/compat";
 
 interface DaySummaryProps {
   flights: Flight[];

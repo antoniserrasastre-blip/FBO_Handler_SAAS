@@ -1,3 +1,5 @@
+// /api/lost-items/[id] — v2
+
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -5,7 +7,6 @@ import { prisma } from "@/lib/db";
 import { requireWriter } from "@/lib/roles";
 import { eventBus } from "@/lib/events";
 
-// PATCH /api/lost-items/[id] — update state or claimedBy
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { error } = await requireWriter();
   if (error) return error;
@@ -41,7 +42,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   await prisma.eventLog.create({
     data: {
-      flightId: existing.flightId,
+      visitId: existing.visitId,
       userId: session!.user.id,
       action: `Objeto "${existing.description}": ${changes.join(", ")}`,
     },
@@ -49,7 +50,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   eventBus.emit({
     type: "lost_item_updated",
-    flightId: existing.flightId,
+    flightId: existing.visitId,
     userId: session!.user.id,
     userName: session!.user.name || undefined,
     detail: `Objeto: ${changes.join(", ")}`,
@@ -59,7 +60,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   return NextResponse.json(updated);
 }
 
-// DELETE /api/lost-items/[id]
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { error } = await requireWriter();
   if (error) return error;
@@ -74,7 +74,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 
   await prisma.eventLog.create({
     data: {
-      flightId: existing.flightId,
+      visitId: existing.visitId,
       userId: session!.user.id,
       action: `Objeto eliminado: ${existing.description}`,
     },
@@ -82,7 +82,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 
   eventBus.emit({
     type: "lost_item_updated",
-    flightId: existing.flightId,
+    flightId: existing.visitId,
     userId: session!.user.id,
     userName: session!.user.name || undefined,
     detail: `Objeto eliminado: ${existing.description}`,

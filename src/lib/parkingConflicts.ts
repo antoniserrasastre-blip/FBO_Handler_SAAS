@@ -1,7 +1,7 @@
 // Detect parking conflicts: two or more flights assigned to the same parking
 // spot with overlapping presence times (ETA...ETD window).
 
-import { Flight } from "@prisma/client";
+import { Flight } from "@/types/compat";
 
 function timeToMinutes(hhmm: string | null | undefined): number | null {
   if (!hhmm) return null;

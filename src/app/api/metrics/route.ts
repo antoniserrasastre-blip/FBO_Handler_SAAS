@@ -1,49 +1,74 @@
+// /api/metrics — v2. Reads Visit + Movement aggregates.
+
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { findOperator } from "@/lib/operators";
 import { getRequiredAuthorities } from "@/lib/countries";
+import { toFlightView } from "@/lib/flightView";
 
-// GET /api/metrics?range=30  (days, default 30)
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const range = Math.min(parseInt(req.nextUrl.searchParams.get("range") || "30"), 365);
 
-  const daySheets = await prisma.daySheet.findMany({
-    orderBy: { date: "desc" },
-    take: range,
+  const since = new Date();
+  since.setUTCDate(since.getUTCDate() - range);
+  since.setUTCHours(0, 0, 0, 0);
+
+  const visits = await prisma.visit.findMany({
+    where: { palmaDay: { gte: since } },
+    orderBy: { palmaDay: "desc" },
     include: {
-      flights: {
-        include: {
-          services: true,
-          passengers: true,
-          lostItems: true,
-        },
-      },
+      aircraft: true,
+      movements: { include: { passengers: true } },
+      services: true,
+      lostItems: true,
     },
   });
 
-  const allFlights = daySheets.flatMap((ds) => ds.flights);
-  const allServices = allFlights.flatMap((f) => f.services);
-  const allPassengers = allFlights.flatMap((f) => f.passengers);
-  const allLostItems = allFlights.flatMap((f) => f.lostItems);
+  // Project to FlightView so we can reuse the legacy aggregation idioms
+  const flights = visits.map(toFlightView);
+  const allServices = visits.flatMap((v) => v.services);
+  const allPassengers = visits.flatMap((v) => v.movements.flatMap((m) => m.passengers));
+  const allLostItems = visits.flatMap((v) => v.lostItems);
 
-  // ── KPIs ──────────────────────────────────────────────────────
-  const totalFlights = allFlights.length;
-  const totalPax = allFlights.reduce((s, f) => s + f.paxArrival + f.paxDeparture, 0);
+  // KPIs
+  const totalFlights = flights.length;
+  const totalPax = flights.reduce((s, f) => s + f.paxArrival + f.paxDeparture, 0);
   const totalServices = allServices.length;
   const servicesDelivered = allServices.filter((s) => s.state === "DELIVERED").length;
   const servicesPending = allServices.filter((s) => s.state === "PENDING").length;
-  const overnightFlights = allFlights.filter((f) => f.arrivalDate && f.departureDate && f.arrivalDate !== f.departureDate).length;
-  const avgFlightsPerDay = daySheets.length > 0 ? (totalFlights / daySheets.length).toFixed(1) : "0";
+  const overnightFlights = flights.filter((f) => f.isOvernight).length;
+
+  // Group visits by palmaDay
+  const byDay = new Map<string, typeof flights>();
+  for (const f of flights) {
+    const key = f.daySheetId.slice(0, 10);
+    if (!byDay.has(key)) byDay.set(key, []);
+    byDay.get(key)!.push(f);
+  }
+  const dailyStats = Array.from(byDay.entries()).map(([key, list]) => ({
+    date: new Date(key),
+    flights: list.length,
+    paxTotal: list.reduce((s, f) => s + f.paxArrival + f.paxDeparture, 0),
+    servicesTotal: list.reduce((s, f) => s + (f.services?.length || 0), 0),
+    servicesDelivered: list.reduce(
+      (s, f) =>
+        s +
+        (((f.services as unknown[]) || []).filter((sv) => (sv as { state?: string }).state === "DELIVERED").length),
+      0
+    ),
+  }));
+
+  const avgFlightsPerDay = byDay.size > 0 ? (totalFlights / byDay.size).toFixed(1) : "0";
   const serviceDeliveryRate = totalServices > 0 ? ((servicesDelivered / totalServices) * 100).toFixed(1) : "0";
 
-  // Turnaround stats: flights with both ETA and ETD that weren't overnight
-  const turnarounds = allFlights
-    .filter((f) => f.eta && f.etd && (!f.arrivalDate || !f.departureDate || f.arrivalDate === f.departureDate))
+  // Turnaround
+  const turnarounds = flights
+    .filter((f) => f.eta && f.etd && !f.isOvernight)
     .map((f) => {
       const etaMin = timeToMinutes(f.eta!);
       const etdMin = timeToMinutes(f.etd!);
@@ -55,18 +80,9 @@ export async function GET(req: NextRequest) {
     : 0;
   const tightTurnarounds = turnarounds.filter((m) => m < 90).length;
 
-  // ── Daily stats ────────────────────────────────────────────────
-  const dailyStats = daySheets.map((ds) => ({
-    date: ds.date,
-    flights: ds.flights.length,
-    paxTotal: ds.flights.reduce((s, f) => s + f.paxArrival + f.paxDeparture, 0),
-    servicesTotal: ds.flights.reduce((s, f) => s + f.services.length, 0),
-    servicesDelivered: ds.flights.reduce((s, f) => s + f.services.filter((sv) => sv.state === "DELIVERED").length, 0),
-  }));
-
-  // ── By operator ────────────────────────────────────────────────
+  // Operators
   const operatorCounts: Record<string, { name: string; flights: number; pax: number; icao: string }> = {};
-  for (const f of allFlights) {
+  for (const f of flights) {
     const op = findOperator(f.callsign);
     const key = op?.icao || "OTHER";
     const name = op?.name || "Otros";
@@ -74,13 +90,11 @@ export async function GET(req: NextRequest) {
     operatorCounts[key].flights++;
     operatorCounts[key].pax += f.paxArrival + f.paxDeparture;
   }
-  const topOperators = Object.values(operatorCounts)
-    .sort((a, b) => b.flights - a.flights)
-    .slice(0, 10);
+  const topOperators = Object.values(operatorCounts).sort((a, b) => b.flights - a.flights).slice(0, 10);
 
-  // ── Peak hours (arrivals + departures) ─────────────────────────
-  const hourBuckets: { hour: number; arrivals: number; departures: number }[] = Array.from({ length: 24 }, (_, h) => ({ hour: h, arrivals: 0, departures: 0 }));
-  for (const f of allFlights) {
+  // Peak hours
+  const hourBuckets = Array.from({ length: 24 }, (_, h) => ({ hour: h, arrivals: 0, departures: 0 }));
+  for (const f of flights) {
     if (f.eta) {
       const h = parseInt(f.eta.split(":")[0]);
       if (!isNaN(h) && h >= 0 && h < 24) hourBuckets[h].arrivals++;
@@ -91,37 +105,37 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // ── By day of week ─────────────────────────────────────────────
+  // Weekday
   const WEEKDAYS = ["Dom", "Lun", "Mar", "Mie", "Jue", "Vie", "Sab"];
-  const weekdayCounts: { day: string; flights: number; pax: number }[] = WEEKDAYS.map((day) => ({ day, flights: 0, pax: 0 }));
-  for (const ds of daySheets) {
-    const dow = new Date(ds.date).getDay();
-    weekdayCounts[dow].flights += ds.flights.length;
-    weekdayCounts[dow].pax += ds.flights.reduce((s, f) => s + f.paxArrival + f.paxDeparture, 0);
+  const weekdayCounts = WEEKDAYS.map((day) => ({ day, flights: 0, pax: 0 }));
+  for (const f of flights) {
+    const dow = new Date(f.daySheetId).getDay();
+    weekdayCounts[dow].flights++;
+    weekdayCounts[dow].pax += f.paxArrival + f.paxDeparture;
   }
 
-  // ── Authorities (Schengen/EU) ──────────────────────────────────
+  // Authorities
   let policiaCount = 0;
   let guardaCivilCount = 0;
-  for (const f of allFlights) {
+  for (const f of flights) {
     const auth = getRequiredAuthorities(f.origin);
     if (auth.policia) policiaCount++;
     if (auth.guardaCivil) guardaCivilCount++;
   }
 
-  // ── Passengers stats ───────────────────────────────────────────
+  // Passengers
   const paxConfirmed = allPassengers.filter((p) => p.status === "CONFIRMED").length;
   const paxNoShow = allPassengers.filter((p) => p.status === "NO_SHOW").length;
   const paxAdded = allPassengers.filter((p) => p.status === "ADDED").length;
   const paxVerified = allPassengers.filter((p) => p.verified).length;
   const paxVerifiedRate = allPassengers.length > 0 ? ((paxVerified / allPassengers.length) * 100).toFixed(1) : "0";
 
-  // ── Lost & Found stats ─────────────────────────────────────────
+  // Lost & Found
   const lostItemsFound = allLostItems.filter((li) => li.state === "FOUND").length;
   const lostItemsClaimed = allLostItems.filter((li) => li.state === "CLAIMED").length;
   const lostItemsDelivered = allLostItems.filter((li) => li.state === "DELIVERED").length;
 
-  // ── Service types ──────────────────────────────────────────────
+  // Service types
   const serviceTypeCounts: Record<string, number> = {};
   for (const s of allServices) serviceTypeCounts[s.type] = (serviceTypeCounts[s.type] || 0) + 1;
   const topServices = Object.entries(serviceTypeCounts)
@@ -129,9 +143,9 @@ export async function GET(req: NextRequest) {
     .slice(0, 8)
     .map(([type, count]) => ({ type, count }));
 
-  // ── Aircraft types ─────────────────────────────────────────────
+  // Aircraft
   const aircraftCounts: Record<string, number> = {};
-  for (const f of allFlights) aircraftCounts[f.aircraftType] = (aircraftCounts[f.aircraftType] || 0) + 1;
+  for (const f of flights) aircraftCounts[f.aircraftType] = (aircraftCounts[f.aircraftType] || 0) + 1;
   const topAircraft = Object.entries(aircraftCounts)
     .sort(([, a], [, b]) => b - a)
     .slice(0, 12)
@@ -139,9 +153,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     range,
-    daysWithData: daySheets.length,
-
-    // Core KPIs
+    daysWithData: byDay.size,
     totalFlights,
     totalPax,
     totalServices,
@@ -152,20 +164,14 @@ export async function GET(req: NextRequest) {
     overnightFlights,
     avgTurnaround,
     tightTurnarounds,
-
-    // Charts data
     dailyStats,
     topOperators,
     hourBuckets,
     weekdayCounts,
     topServices,
     topAircraft,
-
-    // Authorities
     policiaCount,
     guardaCivilCount,
-
-    // Passengers
     passengers: {
       total: allPassengers.length,
       confirmed: paxConfirmed,
@@ -174,8 +180,6 @@ export async function GET(req: NextRequest) {
       verified: paxVerified,
       verifiedRate: paxVerifiedRate,
     },
-
-    // Lost & found
     lostItems: {
       total: allLostItems.length,
       found: lostItemsFound,

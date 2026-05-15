@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import { Flight, Service, EventLog, LostItem } from "@prisma/client";
+import { Flight, Service, EventLog, LostItem } from "@/types/compat";
 import { X, Plane, ChevronDown, ChevronRight, Plus, Trash2, Users, AlertOctagon } from "lucide-react";
 import {
   FLIGHT_STATES, FLIGHT_STATE_CONFIG, normalizeFlightState,

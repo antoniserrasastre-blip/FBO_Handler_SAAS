@@ -1,6 +1,6 @@
 "use client";
 
-import { Service } from "@prisma/client";
+import { Service } from "@/types/compat";
 import { SERVICE_LABELS, ServiceType, SERVICE_TARGET_LABELS, ServiceTarget } from "@/types";
 import { ServiceIcon, PendingIcon, ArrivedIcon, DeliveredIcon } from "./Icons";
 

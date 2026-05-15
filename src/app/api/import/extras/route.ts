@@ -1,3 +1,10 @@
+// /api/import/extras — Excel "extras" import. v2 implementation.
+//
+// Cross-references by aircraft registration against the Visits of the target
+// Palma operating day. If no Visit exists yet (Excel arrived before the
+// Cybermax PDF), an orphan Visit is created — it will be enriched when the
+// PDF later imports.
+
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -7,8 +14,14 @@ import { palmaDayUtc } from "@/lib/time";
 import { validateUpload, validateContentLength } from "@/lib/uploadValidation";
 import { eventBus } from "@/lib/events";
 import { SERVICE_TYPE_DEFAULT_PHASE, type ServiceType } from "@/types";
+import { upsertAircraft, upsertVisit } from "@/lib/v2/upsert";
 
-// POST /api/import/extras — parse one or more Excel extras files
+const ORIGIN_MAP: Record<string, string> = {
+  NetJets: "NETJETS",
+  "Catering Aire": "CATERING_AIRE",
+  MCR: "MCR",
+};
+
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -18,9 +31,7 @@ export async function POST(req: NextRequest) {
 
   const formData = await req.formData();
   const files = formData.getAll("xlsx") as File[];
-  if (!files.length) {
-    return NextResponse.json({ error: "No se envio archivo Excel" }, { status: 400 });
-  }
+  if (!files.length) return NextResponse.json({ error: "No se envio archivo Excel" }, { status: 400 });
 
   for (const file of files) {
     const v = validateUpload(file, "xlsx");
@@ -35,9 +46,7 @@ export async function POST(req: NextRequest) {
     try {
       const result = parseExtrasExcel(Buffer.from(await file.arrayBuffer()));
       if (!date && result.date) date = result.date;
-      for (const extra of result.extras) {
-        allExtras.push({ ...extra, date: result.date || undefined });
-      }
+      for (const extra of result.extras) allExtras.push({ ...extra, date: result.date || undefined });
       if (result.errors?.length) allErrors.push(...result.errors.map((e: string) => `[${file.name}] ${e}`));
     } catch (error) {
       const msg = error instanceof Error ? error.message : "Error procesando Excel";
@@ -52,21 +61,14 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ date, extras: allExtras, errors: allErrors });
 }
 
-// PUT /api/import/extras — confirm and save extras to flights
-// Supports per-extra dates (multi-file) with fallback to a global date
 export async function PUT(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
   const { extras, date: globalDate } = body;
-
   if (!extras || !Array.isArray(extras)) {
     return NextResponse.json({ error: "Datos invalidos" }, { status: 400 });
-  }
-
-  function toDateObj(dateStr: string): Date {
-    return palmaDayUtc(dateStr);
   }
 
   // Group extras by date
@@ -77,87 +79,59 @@ export async function PUT(req: NextRequest) {
     byDate.get(d)!.push(extra);
   }
 
-  // Cache DaySheets and flight lookups per date
-  const daySheetCache = new Map<string, { id: string }>();
-  const flightCache = new Map<string, Map<string, { id: string; services: unknown[] }>>();
-
-  async function getFlightLookup(dateStr: string) {
-    if (flightCache.has(dateStr)) return flightCache.get(dateStr)!;
-
-    const targetDate = toDateObj(dateStr);
-    let daySheet = await prisma.daySheet.findUnique({ where: { date: targetDate } });
-    if (!daySheet) daySheet = await prisma.daySheet.create({ data: { date: targetDate } });
-    daySheetCache.set(dateStr, daySheet);
-
-    const flights = await prisma.flight.findMany({
-      where: { daySheetId: daySheet.id },
-      include: { services: true },
-    });
-
-    const lookup = new Map<string, typeof flights[0]>();
-    for (const f of flights) {
-      lookup.set(f.registration.toUpperCase(), f);
-      lookup.set(f.registration.replace(/-/g, "").toUpperCase(), f);
-    }
-
-    // Pernoctas: flights from other days departing on this date
-    const nearbyFlights = await prisma.flight.findMany({
-      where: { daySheetId: { not: daySheet.id }, departureDate: { not: null } },
-      include: { services: true },
-    });
-    const dd = String(targetDate.getDate()).padStart(2, "0");
-    const mm = String(targetDate.getMonth() + 1).padStart(2, "0");
-    const targetDDMM = `${dd}/${mm}`;
-    for (const f of nearbyFlights) {
-      if (f.departureDate !== targetDDMM) continue;
-      const regUp = f.registration.toUpperCase();
-      const regNoDash = regUp.replace(/-/g, "");
-      if (!lookup.has(regUp)) lookup.set(regUp, f);
-      if (!lookup.has(regNoDash)) lookup.set(regNoDash, f);
-    }
-
-    flightCache.set(dateStr, lookup as Map<string, { id: string; services: unknown[] }>);
-    return lookup;
-  }
-
   let matched = 0;
   let servicesCreated = 0;
-  const notFound: string[] = [];
   const pendingCreated: string[] = [];
   const datesProcessed = new Set<string>();
 
   for (const [dateStr, dateExtras] of byDate) {
     datesProcessed.add(dateStr);
-    const flightByReg = await getFlightLookup(dateStr);
-    const daySheet = daySheetCache.get(dateStr)!;
+    const palmaDay = palmaDayUtc(dateStr);
+
+    // Build a lookup of Visits for this Palma day, keyed by registration.
+    const visitsToday = await prisma.visit.findMany({
+      where: { palmaDay },
+      include: { aircraft: true },
+    });
+    const visitByReg = new Map<string, { id: string; aircraftId: string }>();
+    for (const v of visitsToday) {
+      const reg = v.aircraft.registration.toUpperCase();
+      visitByReg.set(reg, v);
+      visitByReg.set(reg.replace(/-/g, ""), v);
+    }
+
+    // Pernoctas: Visits from earlier days whose departureDate falls on this day
+    const pernoctaVisits = await prisma.visit.findMany({
+      where: {
+        palmaDay: { not: palmaDay },
+        departureDate: palmaDay,
+      },
+      include: { aircraft: true },
+    });
+    for (const v of pernoctaVisits) {
+      const reg = v.aircraft.registration.toUpperCase();
+      if (!visitByReg.has(reg)) visitByReg.set(reg, v);
+      if (!visitByReg.has(reg.replace(/-/g, ""))) visitByReg.set(reg.replace(/-/g, ""), v);
+    }
 
     for (const extra of dateExtras) {
       const reg = extra.registration.toUpperCase();
       const regNoDash = reg.replace(/-/g, "");
-      let resolvedFlight = flightByReg.get(reg) || flightByReg.get(regNoDash);
-      let wasCreated = false;
+      let visit = visitByReg.get(reg) || visitByReg.get(regNoDash);
 
-      if (!resolvedFlight) {
-        resolvedFlight = await prisma.flight.create({
-          data: {
-            daySheetId: daySheet.id,
-            callsign: "---",
-            registration: extra.registration,
-            aircraftType: "---",
-            state: "EXPECTED",
-          },
-          include: { services: true },
-        });
+      if (!visit) {
+        // Orphan: create Aircraft + Visit, no Movements yet.
+        const aircraft = await upsertAircraft({ registration: extra.registration });
+        visit = await upsertVisit({ aircraftId: aircraft.id, palmaDay });
+        pendingCreated.push(extra.registration);
+        visitByReg.set(reg, visit);
         await prisma.eventLog.create({
           data: {
-            flightId: resolvedFlight.id,
+            visitId: visit.id,
             userId: session.user.id,
-            action: `Vuelo creado desde extras (matricula no encontrada en orden del dia)`,
+            action: "Visit creada desde extras (matricula no encontrada en orden del dia)",
           },
         });
-        wasCreated = true;
-        pendingCreated.push(extra.registration);
-        flightByReg.set(reg, resolvedFlight as typeof resolvedFlight);
       }
 
       matched++;
@@ -167,29 +141,29 @@ export async function PUT(req: NextRequest) {
         for (let i = 0; i < (svc.quantity || 1); i++) {
           await prisma.service.create({
             data: {
-              flightId: resolvedFlight.id,
+              visitId: visit.id,
               type: svc.type,
-              phase: SERVICE_TYPE_DEFAULT_PHASE[svc.type as ServiceType] ?? "DEPARTURE",
+              direction: SERVICE_TYPE_DEFAULT_PHASE[svc.type as ServiceType] ?? "DEPARTURE",
               customName: svc.type === "CUSTOM" ? svc.name : (svc.name !== svc.type ? svc.name : null),
               state: "PENDING",
               reference: svc.reference || null,
               target: svc.target || null,
-              origin: svc.origin || null,
+              origin: svc.origin ? (ORIGIN_MAP[svc.origin] || "OTHER") : null,
+              rawDescription: svc.name,
+              quantity: 1,
             },
           });
           servicesCreated++;
         }
       }
 
-      if (!wasCreated) {
-        await prisma.eventLog.create({
-          data: {
-            flightId: resolvedFlight.id,
-            userId: session.user.id,
-            action: `Extras importados desde Excel (${extra.services.length})`,
-          },
-        });
-      }
+      await prisma.eventLog.create({
+        data: {
+          visitId: visit.id,
+          userId: session.user.id,
+          action: `Extras importados desde Excel (${extra.services.length})`,
+        },
+      });
     }
   }
 
@@ -199,14 +173,14 @@ export async function PUT(req: NextRequest) {
     flightId: "import-extras",
     userId: session.user.id,
     userName: session.user.name || undefined,
-    detail: `Extras: ${servicesCreated} servicios para ${matched} vuelos (${dateList})`,
+    detail: `Extras: ${servicesCreated} servicios para ${matched} visitas (${dateList})`,
     timestamp: new Date().toISOString(),
   });
 
   return NextResponse.json({
     matched,
     servicesCreated,
-    notFound,
+    notFound: [],
     pendingCreated,
     datesProcessed: Array.from(datesProcessed).sort(),
     total: extras.length,

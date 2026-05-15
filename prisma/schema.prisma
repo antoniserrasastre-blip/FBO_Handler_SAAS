@@ -8,162 +8,256 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ============================================================================
+// Identity
+// ============================================================================
+
 model User {
   id        String     @id @default(cuid())
   email     String     @unique
   name      String
   password  String
-  role      String     @default("HANDLER") // ADMIN | HANDLER
+  role      String     @default("HANDLER") // ADMIN | SUPERVISOR | HANDLER | VIEWER
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
   eventLogs EventLog[]
 }
 
-model DaySheet {
-  id        String   @id @default(cuid())
-  date      DateTime @unique
-  flights   Flight[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+// ============================================================================
+// Core domain: Operator → Aircraft → Visit → Movement
+// ============================================================================
+
+model Operator {
+  id          String       @id @default(cuid())
+  icaoCode    String       @unique           // "NJE", "VJT", "EJU", …
+  name        String
+  aircraft    Aircraft[]
+  visits      Visit[]
+  crewMembers CrewMember[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
 }
 
-model Flight {
-  id             String         @id @default(cuid())
-  daySheetId     String
-  daySheet       DaySheet       @relation(fields: [daySheetId], references: [id], onDelete: Cascade)
-  callsign       String
-  registration   String
-  aircraftType   String
-  origin         String?
-  eta            String?        // HH:MM
-  arrivalDate    String?        // DD/MM
-  destination    String?
-  etd            String?        // HH:MM
-  departureDate  String?        // DD/MM
-  parking        String?
-  tobt           String?
-  state          String         @default("EXPECTED") // EXPECTED | ON_BLOCKS | PARKED | TURNAROUND | BOARDING | OFF_BLOCKS
-  isOvernight    Boolean        @default(false)
+model Aircraft {
+  id                 String    @id @default(cuid())
+  registration       String    @unique         // "EC-MIL", "CS-PHF"
+  aircraftType       String?
+  currentOperatorId  String?
+  currentOperator    Operator? @relation(fields: [currentOperatorId], references: [id])
+  baseAirport        String?
+  visits             Visit[]
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
-  // Arrival counts (estimated from import, real from handler)
-  crewArrival    Int            @default(0)
-  crewArrivalReal Int?
-  paxArrival     Int            @default(0)
-  paxArrivalReal Int?
-
-  // Departure counts (estimated from import, real from handler)
-  crewDeparture  Int            @default(0)
-  crewDepartureReal Int?
-  paxDeparture   Int            @default(0)
-  paxDepartureReal Int?
-
-  // Arrival passenger details
-  paxArrBagsChecked    Int      @default(0)
-  paxArrBagsCabin      Int      @default(0)
-  paxArrBagsState      String   @default("IN_AIRCRAFT") // IN_AIRCRAFT | UNLOADED | DELIVERED
-  paxArrTransportType  String   @default("UNDEFINED") // RENTAL_CAR | PREPARED_CAR | TAXI | UNDEFINED
-  paxArrTransportState String   @default("PENDING") // PENDING | CONFIRMED
-  paxArrState          String   @default("IN_AIRCRAFT") // IN_AIRCRAFT | IN_LOUNGE | COMPLETED
-
-  // Departure passenger details
-  paxDepBagsChecked    Int      @default(0)
-  paxDepBagsCabin      Int      @default(0)
-  paxDepBagsState      String   @default("NOT_ARRIVED") // NOT_ARRIVED | TAGGED | SENT_TO_AIRCRAFT
-  paxDepTransportType  String   @default("UNDEFINED")
-  paxDepTransportState String   @default("PENDING")
-  paxDepState          String   @default("NOT_ARRIVED") // NOT_ARRIVED | IN_LOUNGE | BOARDED
-
-  // Crew details
-  crewArrLocation      String   @default("IN_AIRCRAFT") // IN_AIRCRAFT | IN_LOUNGE
-  crewDepLocation      String   @default("IN_AIRCRAFT")
-
-  // Fuel
-  fuelState      String         @default("NOT_REQUESTED") // NOT_REQUESTED | REQUESTED | SERVED
-  fuelRequestedAt String?
-  fuelServedAt   String?
-
-  // Toilet
-  toiletState    String         @default("NOT_REQUESTED") // NOT_REQUESTED | REQUESTED | COMPLETED
-  toiletRequestedAt String?
-  toiletCompletedAt String?
-
-  // Overnight link: if this flight is a departure copy of an arrival on another day
-  linkedFlightId String?
-
-  // Free-text notes / observations
-  notes          String?
-
-  services       Service[]
-  eventLogs      EventLog[]
-  passengers     Passenger[]
-  crewMembers    CrewMember[]
-  lostItems      LostItem[]
-
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
-
-  @@index([daySheetId])
+  @@index([currentOperatorId])
 }
 
-model Service {
-  id          String   @id @default(cuid())
-  flightId    String
-  flight      Flight   @relation(fields: [flightId], references: [id], onDelete: Cascade)
-  type        String   // CATERING | DISHES | COOLER_BAG | STORAGE_BAG | LAUNDRY | THERMOS | NEWSPAPERS | WATER | GPU | ICE | CUSTOM
-  phase       String   @default("DEPARTURE") // ARRIVAL | DEPARTURE | BOTH
-  customName  String?
-  reference   String?  // Order/reference number (e.g., NJE catering ref)
-  target      String?  // CREW | PAX (for catering distinction)
-  state       String   @default("PENDING") // PENDING | ARRIVED | DELIVERED
-  origin      String?  // Crossroads / Catering Aire / Otro
-  arrivedAt   String?  // When the item arrived at FBO
-  deliveredAt String?  // When delivered to the aircraft
+model Visit {
+  id            String   @id @default(cuid())
+  aircraftId    String
+  aircraft      Aircraft @relation(fields: [aircraftId], references: [id], onDelete: Cascade)
+  operatorId    String?
+  operator      Operator? @relation(fields: [operatorId], references: [id])
+
+  // The Palma operating day this visit belongs to (UTC midnight of Palma-local date).
+  // For OVERNIGHT visits this is the arrival day; the departure can fall on a later day.
+  palmaDay      DateTime
+
+  type          String?  // TURNAROUND | OVERNIGHT | null when not yet known
+  arrivalDate   DateTime? // UTC date of actual arrival (nullable: orphan visits from extras-first import)
+  departureDate DateTime? // UTC date of actual departure
+  notes         String?
+
+  movements   Movement[]
+  services    Service[]
+  lostItems   LostItem[]
+  eventLogs   EventLog[]
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  @@index([flightId])
+  @@index([aircraftId])
+  @@index([palmaDay])
+  @@index([operatorId])
 }
 
-model Passenger {
-  id             String   @id @default(cuid())
-  flightId       String
-  flight         Flight   @relation(fields: [flightId], references: [id], onDelete: Cascade)
-  direction      String   // ARRIVAL | DEPARTURE
-  fullName       String
-  gender         String?  // M | F
-  nationality    String?
-  passportNumber String?
-  dateOfBirth    String?
-  status         String   @default("CONFIRMED") // CONFIRMED | NO_SHOW | ADDED
-  corrections    String?
-  verified       Boolean  @default(false)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+model Movement {
+  id          String   @id @default(cuid())
+  visitId     String
+  visit       Visit    @relation(fields: [visitId], references: [id], onDelete: Cascade)
 
-  @@index([flightId])
+  direction   String   // ARRIVAL | DEPARTURE
+  callsign    String
+  origin      String?  // ARRIVAL: from-airport ; DEPARTURE: null
+  destination String?  // DEPARTURE: to-airport ; ARRIVAL: null
+
+  // Scheduled date (UTC midnight of Palma-local date) for this leg.
+  // ARRIVAL.scheduledDate may differ from DEPARTURE.scheduledDate (overnight).
+  scheduledDate DateTime
+
+  // Zulu (UTC) times as HH:MM (kept as string for parity with current PDF format)
+  eta         String?  // only on ARRIVAL
+  etd         String?  // only on DEPARTURE
+
+  parking     String?
+  tobt        String?
+  state       String   @default("EXPECTED") // EXPECTED | ON_BLOCKS | PARKED | TURNAROUND | BOARDING | OFF_BLOCKS
+
+  // Counts (estimated from import, real from handler)
+  paxCount         Int  @default(0)
+  paxCountReal     Int?
+  crewCount        Int  @default(0)
+  crewCountReal    Int?
+
+  // Pax flow
+  paxState         String   @default("IN_AIRCRAFT")    // ARRIVAL: IN_AIRCRAFT|IN_LOUNGE|COMPLETED ; DEPARTURE: NOT_ARRIVED|IN_LOUNGE|BOARDED
+  bagsState        String   @default("IN_AIRCRAFT")    // ARRIVAL: IN_AIRCRAFT|UNLOADED|DELIVERED ; DEPARTURE: NOT_ARRIVED|TAGGED|SENT_TO_AIRCRAFT
+  bagsChecked      Int      @default(0)
+  bagsCabin        Int      @default(0)
+  transportType    String   @default("UNDEFINED")
+  transportState   String   @default("PENDING")
+  crewLocation     String   @default("IN_AIRCRAFT")
+
+  // NetJets ALS metadata (also general external ref)
+  rqstNumber       String?                              // "12297037" — for idempotent re-import
+  flightCategory   String   @default("COMMERCIAL")      // COMMERCIAL | FERRY | CANCELLED
+  modifiedFlag     Boolean  @default(false)
+  petCount         Int      @default(0)
+
+  // Fuel / Toilet on the DEPARTURE leg
+  fuelState        String   @default("NOT_REQUESTED")   // NOT_REQUESTED | REQUESTED | SERVED
+  fuelRequestedAt  String?
+  fuelServedAt     String?
+  toiletState      String   @default("NOT_REQUESTED")   // NOT_REQUESTED | REQUESTED | COMPLETED
+  toiletRequestedAt String?
+  toiletCompletedAt String?
+
+  passengers       Passenger[]
+  crewAssignments  CrewAssignment[]
+  eventLogs        EventLog[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([visitId, direction])  // 1 ARRIVAL + 1 DEPARTURE max per visit
+  @@index([rqstNumber])
+  @@index([scheduledDate])
+}
+
+// ============================================================================
+// Services (extras: catering, prensa, GPU, fuel, toilet, …)
+// ============================================================================
+
+model Service {
+  id              String   @id @default(cuid())
+  visitId         String
+  visit           Visit    @relation(fields: [visitId], references: [id], onDelete: Cascade)
+
+  type            String   // CATERING | DISHES | COOLER_BAG | STORAGE_BAG | LAUNDRY | THERMOS | NEWSPAPERS | WATER | GPU | ICE | CUSTOM
+  direction       String   @default("DEPARTURE") // ARRIVAL | DEPARTURE | BOTH
+  customName      String?
+  reference       String?              // NJE order #
+  target          String?              // CREW | PAX
+  origin          String?              // NETJETS | CATERING_AIRE | MCR | OTHER
+  quantity        Int      @default(1)
+  rawDescription  String?              // raw text from Excel — auditing
+  state           String   @default("PENDING") // PENDING | ARRIVED | DELIVERED
+  arrivedAt       String?
+  deliveredAt     String?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([visitId])
+}
+
+// ============================================================================
+// People (passengers ephemeral, crew persistent — both encrypted)
+// ============================================================================
+
+model Passenger {
+  id               String   @id @default(cuid())
+  movementId       String
+  movement         Movement @relation(fields: [movementId], references: [id], onDelete: Cascade)
+
+  givenNames       String?
+  surname          String?
+  fullNameHash     String?              // SHA-256 for idempotent upsert (movementId + hash)
+
+  passportEncrypted String?             // AES-256-GCM
+  passportHash     String?              // SHA-256 — lookup / dedupe
+  passportType     String?              // NID | PP
+  passportCountry  String?
+  passportExpiry   String?              // yyyy-mm-dd
+
+  dobEncrypted     String?
+  gender           String?              // M | F
+  nationality      String?
+
+  status           String   @default("CONFIRMED") // CONFIRMED | NO_SHOW | ADDED
+  unmatched        Boolean  @default(false)       // NetJets parser flag
+  verified         Boolean  @default(false)
+  source           String   @default("MANUAL")    // NETJETS | VISTAJET | EJU | GENDEC_PASTE | MANUAL
+  corrections      String?
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([movementId])
+  @@index([movementId, passportHash])
 }
 
 model CrewMember {
-  id             String   @id @default(cuid())
-  flightId       String
-  flight         Flight   @relation(fields: [flightId], references: [id], onDelete: Cascade)
-  direction      String   // ARRIVAL | DEPARTURE
-  fullName       String
-  nationality    String?
-  passportNumber String?
-  dateOfBirth    String?
-  role           String   @default("OTHER") // CAPTAIN | FIRST_OFFICER | CABIN_CREW | OTHER
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id                String   @id @default(cuid())
+  operatorId        String
+  operator          Operator @relation(fields: [operatorId], references: [id], onDelete: Cascade)
 
-  @@index([flightId])
+  givenNames        String?
+  surname           String?
+  fullName          String
+
+  passportEncrypted String?              // AES-256-GCM
+  passportHash      String?              // SHA-256
+
+  passportType      String?              // NID | PP
+  passportCountry   String?
+  passportExpiry    String?
+
+  dobEncrypted      String?
+  gender            String?
+  nationality       String?
+  role              String   @default("OTHER") // CAPTAIN | FIRST_OFFICER | CABIN_CREW | OTHER
+  active            Boolean  @default(true)
+
+  assignments       CrewAssignment[]
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([operatorId, passportHash])
+  @@index([operatorId])
 }
+
+model CrewAssignment {
+  movementId    String
+  movement      Movement   @relation(fields: [movementId], references: [id], onDelete: Cascade)
+  crewMemberId  String
+  crewMember    CrewMember @relation(fields: [crewMemberId], references: [id], onDelete: Cascade)
+  roleOnFlight  String     @default("OTHER") // CAPTAIN | FIRST_OFFICER | CABIN_CREW | OTHER
+  createdAt     DateTime   @default(now())
+
+  @@id([movementId, crewMemberId])
+  @@index([crewMemberId])
+}
+
+// ============================================================================
+// Misc
+// ============================================================================
 
 model LostItem {
   id          String   @id @default(cuid())
-  flightId    String
-  flight      Flight   @relation(fields: [flightId], references: [id], onDelete: Cascade)
+  visitId     String
+  visit       Visit    @relation(fields: [visitId], references: [id], onDelete: Cascade)
   description String
   location    String   // AIRCRAFT | LOUNGE | RAMP
   state       String   @default("FOUND") // FOUND | CLAIMED | DELIVERED
@@ -173,19 +267,22 @@ model LostItem {
   claimedBy   String?
   createdAt   DateTime @default(now())
 
-  @@index([flightId])
+  @@index([visitId])
 }
 
 model EventLog {
-  id        String   @id @default(cuid())
-  flightId  String
-  flight    Flight   @relation(fields: [flightId], references: [id], onDelete: Cascade)
-  userId    String?
-  user      User?    @relation(fields: [userId], references: [id])
-  action    String
-  details   String?
-  timestamp DateTime @default(now())
+  id          String    @id @default(cuid())
+  visitId     String?
+  visit       Visit?    @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  movementId  String?
+  movement    Movement? @relation(fields: [movementId], references: [id], onDelete: Cascade)
+  userId      String?
+  user        User?     @relation(fields: [userId], references: [id])
+  action      String
+  details     String?
+  timestamp   DateTime  @default(now())
 
-  @@index([flightId])
+  @@index([visitId])
+  @@index([movementId])
   @@index([userId])
 }

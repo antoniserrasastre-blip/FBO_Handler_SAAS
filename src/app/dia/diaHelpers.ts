@@ -1,7 +1,7 @@
 // Helpers para la vista /dia (Tablón).
 // Lógica pura, fácil de testear.
 
-import type { Flight, EventLog } from "@prisma/client";
+import type { Flight, EventLog } from "@/types/compat";
 import { calcMinutes } from "@/hooks/useLiveCountdown";
 
 export type FlightLite = Pick<

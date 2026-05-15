@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Flight, Service, EventLog, LostItem } from "@prisma/client";
+import { Flight, Service, EventLog, LostItem } from "@/types/compat";
 import { DaySummary } from "@/components/DaySummary";
 import { FlightCard } from "@/components/FlightCard";
 import { TurnaroundAlerts } from "@/components/TurnaroundAlert";

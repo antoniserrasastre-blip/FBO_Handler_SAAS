@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, memo } from "react";
-import { Flight, Service, EventLog, LostItem } from "@prisma/client";
+import { Flight, Service, EventLog, LostItem } from "@/types/compat";
 import {
   FLIGHT_STATE_CONFIG,
   FlightState,

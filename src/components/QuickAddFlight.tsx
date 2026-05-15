@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Flight } from "@prisma/client";
+import { Flight } from "@/types/compat";
 import { CloseIcon } from "./Icons";
 import { HelixButton } from "./helix";
 

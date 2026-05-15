@@ -1,6 +1,6 @@
 "use client";
 
-import { Flight, Service } from "@prisma/client";
+import { Flight, Service } from "@/types/compat";
 import { AlertIcon } from "./Icons";
 import { normalizeFlightState } from "@/types";
 

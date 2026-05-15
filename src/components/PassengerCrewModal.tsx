@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Passenger, CrewMember } from "@prisma/client";
+import { Passenger, CrewMember } from "@/types/compat";
 import { Modal } from "./Modal";
 import { CloseIcon } from "./Icons";
 import {

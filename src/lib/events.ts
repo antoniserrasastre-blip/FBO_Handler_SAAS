@@ -6,10 +6,29 @@
 // container (see docker-compose.yml and ADR 0001) so this is fine. Do NOT
 // move to a multi-instance deploy without replacing this with a pub/sub bus
 // (Redis, Pusher, etc.). See docs/adr/0001-eventbus-single-container.md.
+//
+// v2 note: the `flightId` field in events now carries the Visit id (the same
+// id the UI sees via FlightView.id), so consumers don't need to change.
+
+export type FlightEventType =
+  | "flight_created"
+  | "flight_updated"
+  | "flight_deleted"
+  | "service_created"
+  | "service_updated"
+  | "service_deleted"
+  | "passenger_updated"
+  | "crew_updated"
+  | "lost_item_updated"
+  // v2-native event names — emitted alongside legacy names for new consumers
+  | "visit_created"
+  | "visit_updated"
+  | "visit_deleted"
+  | "movement_updated";
 
 export type FlightEvent = {
-  type: "flight_updated" | "flight_created" | "flight_deleted" | "service_updated" | "service_created" | "service_deleted" | "passenger_updated" | "crew_updated" | "lost_item_updated";
-  flightId: string;
+  type: FlightEventType;
+  flightId: string;        // = visitId for v2 events
   userId?: string;
   userName?: string;
   detail?: string;

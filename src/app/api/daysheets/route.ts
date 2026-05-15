@@ -1,66 +1,80 @@
+// /api/daysheets — v2. DaySheet is no longer a row in the DB; it's derived
+// from `Visit.palmaDay`. We aggregate Visits by palmaDay and expose the same
+// shape the UI expects.
+
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { requireAdmin, requireSupervisor } from "@/lib/roles";
+import { palmaDayUtc } from "@/lib/time";
 
-// GET /api/daysheets — list all day sheets with flight counts
 export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const daySheets = await prisma.daySheet.findMany({
-    orderBy: { date: "desc" },
+  const visits = await prisma.visit.findMany({
     include: {
-      _count: { select: { flights: true } },
-      flights: {
-        select: {
-          state: true,
-          paxDeparture: true,
-          services: { select: { state: true } },
-        },
-      },
+      movements: { select: { paxCount: true, state: true } },
+      services: { select: { state: true } },
     },
   });
 
-  const result = daySheets.map((ds) => {
-    const totalFlights = ds._count.flights;
-    const dispatched = ds.flights.filter((f) => f.state === "DISPATCHED").length;
-    const totalPax = ds.flights.reduce((sum, f) => sum + f.paxDeparture, 0);
-    const totalServices = ds.flights.reduce((sum, f) => sum + f.services.length, 0);
-    const deliveredServices = ds.flights.reduce(
-      (sum, f) => sum + f.services.filter((s) => s.state === "DELIVERED").length,
-      0
-    );
+  // Group by palmaDay ISO key
+  const byDay = new Map<string, typeof visits>();
+  for (const v of visits) {
+    const key = v.palmaDay.toISOString();
+    if (!byDay.has(key)) byDay.set(key, []);
+    byDay.get(key)!.push(v);
+  }
 
-    return {
-      id: ds.id,
-      date: ds.date,
-      totalFlights,
-      dispatched,
-      totalPax,
-      totalServices,
-      deliveredServices,
-    };
-  });
+  const result = Array.from(byDay.entries())
+    .map(([iso, list]) => {
+      const date = new Date(iso);
+      const totalFlights = list.length;
+      const dispatched = list.filter((v) =>
+        v.movements.some((m) => m.state === "OFF_BLOCKS")
+      ).length;
+      const totalPax = list.reduce(
+        (sum, v) =>
+          sum +
+          v.movements.reduce((s2, m) => s2 + (m.paxCount || 0), 0),
+        0
+      );
+      const totalServices = list.reduce((sum, v) => sum + v.services.length, 0);
+      const deliveredServices = list.reduce(
+        (sum, v) => sum + v.services.filter((s) => s.state === "DELIVERED").length,
+        0
+      );
+      return {
+        id: iso,
+        date,
+        totalFlights,
+        dispatched,
+        totalPax,
+        totalServices,
+        deliveredServices,
+      };
+    })
+    .sort((a, b) => b.date.getTime() - a.date.getTime());
 
   return NextResponse.json(result);
 }
 
-// DELETE /api/daysheets?id=xxx — delete a specific day sheet (and all its flights/services/logs)
-// DELETE /api/daysheets?all=true — delete ALL data (all daysheets, flights, services, logs)
 export async function DELETE(req: NextRequest) {
   const id = req.nextUrl.searchParams.get("id");
   const all = req.nextUrl.searchParams.get("all");
 
   if (all === "true") {
-    // Wipes audit trail + all operational data — admin only.
     const { error } = await requireAdmin();
     if (error) return error;
     await prisma.eventLog.deleteMany();
+    await prisma.crewAssignment.deleteMany();
+    await prisma.passenger.deleteMany();
     await prisma.service.deleteMany();
-    await prisma.flight.deleteMany();
-    await prisma.daySheet.deleteMany();
+    await prisma.lostItem.deleteMany();
+    await prisma.movement.deleteMany();
+    await prisma.visit.deleteMany();
     return NextResponse.json({ ok: true, message: "Todos los datos eliminados" });
   }
 
@@ -68,10 +82,13 @@ export async function DELETE(req: NextRequest) {
   if (error) return error;
 
   if (id) {
-    const ds = await prisma.daySheet.findUnique({ where: { id } });
-    if (!ds) return NextResponse.json({ error: "No encontrado" }, { status: 404 });
-    await prisma.daySheet.delete({ where: { id } });
-    return NextResponse.json({ ok: true, message: `DaySheet ${ds.date.toISOString().slice(0, 10)} eliminado` });
+    // `id` is a palmaDay ISO; delete every Visit on that day
+    const palmaDay = palmaDayUtc(new Date(id));
+    const count = await prisma.visit.deleteMany({ where: { palmaDay } });
+    return NextResponse.json({
+      ok: true,
+      message: `${count.count} visits eliminadas para ${palmaDay.toISOString().slice(0, 10)}`,
+    });
   }
 
   return NextResponse.json({ error: "Falta parametro id o all=true" }, { status: 400 });

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { Flight, Service, LostItem, EventLog } from "@prisma/client";
+import { Flight, Service, LostItem, EventLog } from "@/types/compat";
 import { Modal } from "./Modal";
 import { isServiceOverdue } from "@/lib/overdue";
 import { getRequiredAuthorities } from "@/lib/countries";

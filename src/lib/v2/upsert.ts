@@ -1,0 +1,120 @@
+// Idempotent upsert helpers for the v2 domain. Keep them small and side-effect
+// free except for the Prisma writes — callers compose them.
+
+import { prisma } from "@/lib/db";
+import { findOperator } from "@/lib/operators";
+import { palmaDayUtc } from "@/lib/time";
+
+/**
+ * Find or create an Aircraft by registration. When the registration is new,
+ * the operator is resolved from a callsign (best-effort: NetJets PDF / Cybermax
+ * PDF give us the callsign at import time).
+ */
+export async function upsertAircraft(args: {
+  registration: string;
+  aircraftType?: string | null;
+  callsignForOperator?: string | null;
+}) {
+  const reg = args.registration.toUpperCase().trim();
+  const existing = await prisma.aircraft.findUnique({ where: { registration: reg } });
+  if (existing) {
+    // Backfill aircraftType if it was missing
+    if (!existing.aircraftType && args.aircraftType) {
+      return prisma.aircraft.update({
+        where: { id: existing.id },
+        data: { aircraftType: args.aircraftType },
+      });
+    }
+    return existing;
+  }
+
+  let operatorId: string | null = null;
+  if (args.callsignForOperator) {
+    const op = findOperator(args.callsignForOperator);
+    if (op) {
+      const dbOp = await upsertOperator(op.icao, op.name);
+      operatorId = dbOp.id;
+    }
+  }
+
+  return prisma.aircraft.create({
+    data: {
+      registration: reg,
+      aircraftType: args.aircraftType || null,
+      currentOperatorId: operatorId,
+    },
+  });
+}
+
+/** Find or create an Operator by ICAO code. */
+export async function upsertOperator(icaoCode: string, name: string) {
+  const code = icaoCode.toUpperCase().trim();
+  return prisma.operator.upsert({
+    where: { icaoCode: code },
+    create: { icaoCode: code, name },
+    update: { name },
+  });
+}
+
+/**
+ * Find or create a Visit for a given aircraft on a given Palma operating day.
+ * Multiple legs in the same day end up as separate Visits — callers should
+ * key by callsign+date if disambiguation is needed (current import flows
+ * treat one aircraft/day as one visit, mirroring the old Flight semantics).
+ */
+export async function upsertVisit(args: {
+  aircraftId: string;
+  palmaDay: Date | string;
+  operatorId?: string | null;
+}) {
+  const palmaDay = args.palmaDay instanceof Date ? args.palmaDay : palmaDayUtc(args.palmaDay);
+  const existing = await prisma.visit.findFirst({
+    where: { aircraftId: args.aircraftId, palmaDay },
+  });
+  if (existing) {
+    if (!existing.operatorId && args.operatorId) {
+      return prisma.visit.update({
+        where: { id: existing.id },
+        data: { operatorId: args.operatorId },
+      });
+    }
+    return existing;
+  }
+  return prisma.visit.create({
+    data: {
+      aircraftId: args.aircraftId,
+      operatorId: args.operatorId || null,
+      palmaDay,
+    },
+  });
+}
+
+/**
+ * Find or create a Movement (ARRIVAL or DEPARTURE) attached to a Visit.
+ * Idempotent on (visitId, direction) — the unique constraint enforces 1+1 max.
+ */
+export async function upsertMovement(args: {
+  visitId: string;
+  direction: "ARRIVAL" | "DEPARTURE";
+  callsign: string;
+  scheduledDate: Date | string;
+  data?: Record<string, unknown>;
+}) {
+  const scheduledDate =
+    args.scheduledDate instanceof Date ? args.scheduledDate : palmaDayUtc(args.scheduledDate);
+  return prisma.movement.upsert({
+    where: { visitId_direction: { visitId: args.visitId, direction: args.direction } },
+    create: {
+      visitId: args.visitId,
+      direction: args.direction,
+      callsign: args.callsign,
+      scheduledDate,
+      ...(args.data || {}),
+    },
+    update: {
+      callsign: args.callsign,
+      scheduledDate,
+      ...(args.data || {}),
+    },
+  });
+}

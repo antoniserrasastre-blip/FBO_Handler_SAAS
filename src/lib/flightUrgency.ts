@@ -2,8 +2,10 @@
 //
 // Decide qué reloj (ETA / ETD) se usa para alertas según el estado del vuelo,
 // y si la fase de llegada está cerrada (fuel + toilet + servicios ARRIVAL).
+//
+// v2: signatures use structural types instead of Prisma's `Flight` / `Service`
+// so callers can pass FlightView or v2 Movements interchangeably.
 
-import type { Flight, Service } from "@prisma/client";
 import { normalizeFlightState, type FlightState } from "@/types";
 
 export type ClockKind = "ETA" | "ETD" | null;
@@ -13,15 +15,31 @@ export interface FlightClock {
   ref: string | null; // HH:MM
 }
 
+export interface FlightLike {
+  state: string;
+  eta?: string | null;
+  etd?: string | null;
+  isOvernight?: boolean | null;
+  fuelState?: string | null;
+  toiletState?: string | null;
+  paxArrState?: string | null;
+  paxDepState?: string | null;
+}
+
+export interface ServiceLike {
+  phase?: string | null;       // legacy field name
+  direction?: string | null;   // v2 field name — accepted as alias
+  state: string;
+}
+
+function servicePhase(s: ServiceLike): string {
+  return s.phase || s.direction || "DEPARTURE";
+}
+
 /**
  * Devuelve el reloj de referencia para alertas según la fase del vuelo.
- * - EXPECTED → ETA
- * - ON_BLOCKS → ETD si está cerca (<3h), si no nada
- * - PARKED → ETD si está cerca (<3h), si no nada
- * - TURNAROUND / BOARDING → ETD
- * - OFF_BLOCKS → ninguno
  */
-export function getFlightClock(flight: Pick<Flight, "state" | "eta" | "etd">): FlightClock {
+export function getFlightClock(flight: Pick<FlightLike, "state" | "eta" | "etd">): FlightClock {
   const state = normalizeFlightState(flight.state);
   switch (state) {
     case "EXPECTED":
@@ -40,51 +58,38 @@ export function getFlightClock(flight: Pick<Flight, "state" | "eta" | "etd">): F
 
 /**
  * Comprueba si la fase de llegada está cerrada.
- * Fuel SERVED, Toilet COMPLETED y todos los servicios ARRIVAL/BOTH en DELIVERED.
  */
 export function isArrivalComplete(
-  flight: Pick<Flight, "fuelState" | "toiletState">,
-  services: Pick<Service, "phase" | "state">[],
+  flight: Pick<FlightLike, "fuelState" | "toiletState">,
+  services: ServiceLike[],
 ): boolean {
   if (flight.fuelState !== "SERVED") return false;
   if (flight.toiletState !== "COMPLETED") return false;
-  const arrivalServices = services.filter(s => s.phase === "ARRIVAL" || s.phase === "BOTH");
-  return arrivalServices.every(s => s.state === "DELIVERED");
+  const arrivalServices = services.filter((s) => {
+    const p = servicePhase(s);
+    return p === "ARRIVAL" || p === "BOTH";
+  });
+  return arrivalServices.every((s) => s.state === "DELIVERED");
 }
 
 /**
- * Comprueba si la fase de salida está lista (todos los servicios DEPARTURE/BOTH entregados).
+ * Comprueba si la fase de salida está lista.
  */
-export function isDepartureReady(services: Pick<Service, "phase" | "state">[]): boolean {
-  const dep = services.filter(s => s.phase === "DEPARTURE" || s.phase === "BOTH");
+export function isDepartureReady(services: ServiceLike[]): boolean {
+  const dep = services.filter((s) => {
+    const p = servicePhase(s);
+    return p === "DEPARTURE" || p === "BOTH";
+  });
   if (dep.length === 0) return true;
-  return dep.every(s => s.state === "DELIVERED");
+  return dep.every((s) => s.state === "DELIVERED");
 }
 
 /**
- * Sugerir transición automática a partir del estado actual y los datos del vuelo.
- * Devuelve null si no se debe cambiar.
- *
- * Reglas:
- *   EXPECTED  + fuel/toilet/pax tocados → ON_BLOCKS
- *   ON_BLOCKS + arrival completo + isOvernight → PARKED
- *   ON_BLOCKS + arrival completo + !isOvernight → TURNAROUND
- *   PARKED    + ETD <90min                     → TURNAROUND
- *   TURNAROUND + paxDepState BOARDED            → BOARDING
- *   BOARDING  + (sin condición auto, manual)
+ * Sugerir transición automática.
  */
 export function suggestNextState(
-  flight: Pick<
-    Flight,
-    | "state"
-    | "etd"
-    | "isOvernight"
-    | "fuelState"
-    | "toiletState"
-    | "paxArrState"
-    | "paxDepState"
-  >,
-  services: Pick<Service, "phase" | "state">[],
+  flight: FlightLike,
+  services: ServiceLike[],
   nowMinutes?: number,
 ): FlightState | null {
   const state = normalizeFlightState(flight.state);
@@ -93,9 +98,9 @@ export function suggestNextState(
   switch (state) {
     case "EXPECTED": {
       const arrivalTouched =
-        flight.fuelState !== "NOT_REQUESTED" ||
-        flight.toiletState !== "NOT_REQUESTED" ||
-        flight.paxArrState !== "IN_AIRCRAFT";
+        (flight.fuelState && flight.fuelState !== "NOT_REQUESTED") ||
+        (flight.toiletState && flight.toiletState !== "NOT_REQUESTED") ||
+        (flight.paxArrState && flight.paxArrState !== "IN_AIRCRAFT");
       if (arrivalTouched) return "ON_BLOCKS";
       return null;
     }

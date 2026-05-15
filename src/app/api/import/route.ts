@@ -1,3 +1,8 @@
+// /api/import — Cybermax PDF import. v2 implementation.
+//
+// POST  → parse + preview (no DB write)
+// PUT   → persist parsed flights as Aircraft + Visit + Movement(ARR/DEP)
+
 import "@/lib/pdfPolyfills";
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
@@ -6,9 +11,10 @@ import { prisma } from "@/lib/db";
 import { parseCybermaxPdf, parseDate } from "@/lib/pdfParser";
 import { eventBus } from "@/lib/events";
 import { validateUpload, validateContentLength } from "@/lib/uploadValidation";
+import { upsertAircraft, upsertVisit, upsertMovement, upsertOperator } from "@/lib/v2/upsert";
+import { findOperator } from "@/lib/operators";
 
-// POST /api/import — parse one or more Cybermax PDFs
-// Returns combined parsed flights for preview (doesn't save yet)
+// POST — preview
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -18,9 +24,7 @@ export async function POST(req: NextRequest) {
 
   const formData = await req.formData();
   const files = formData.getAll("pdf") as File[];
-  if (!files.length) {
-    return NextResponse.json({ error: "No se envio ningun archivo PDF" }, { status: 400 });
-  }
+  if (!files.length) return NextResponse.json({ error: "No se envio ningun archivo PDF" }, { status: 400 });
 
   for (const file of files) {
     const v = validateUpload(file, "pdf");
@@ -47,154 +51,118 @@ export async function POST(req: NextRequest) {
   if (!allFlights.length && allErrors.length) {
     return NextResponse.json({ error: allErrors.join("; "), flights: [], errors: allErrors }, { status: 500 });
   }
-
   return NextResponse.json({ date, flights: allFlights, errors: allErrors });
 }
 
-// PUT /api/import — confirm and save parsed flights
+// PUT — persist
 export async function PUT(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
   const { date, flights } = body;
-
   if (!date || !flights || !Array.isArray(flights)) {
     return NextResponse.json({ error: "Datos invalidos" }, { status: 400 });
   }
 
   const targetDate = parseDate(date);
 
-  // Helper: find or create a DaySheet for a given date
-  async function getOrCreateDaySheet(d: Date) {
-    let ds = await prisma.daySheet.findUnique({ where: { date: d } });
-    if (!ds) ds = await prisma.daySheet.create({ data: { date: d } });
-    return ds;
-  }
-
-  // Primary day sheet (from the PDF header date)
-  const primaryDaySheet = await getOrCreateDaySheet(targetDate);
-
-  // Cache of existing flights per daySheet for dedup
-  // Key format: "CALLSIGN|ARRIVAL_DATE" — callsign identifies the movement, date scopes it to the day
-  const existingCache = new Map<string, Map<string, { id: string }>>();
-  async function getExistingKeyed(daySheetId: string) {
-    if (!existingCache.has(daySheetId)) {
-      const flights = await prisma.flight.findMany({
-        where: { daySheetId },
-        select: { id: true, callsign: true, arrivalDate: true },
-      });
-      const flightMap = new Map(flights.map((f) => {
-        const key = `${f.callsign}|${f.arrivalDate || ""}`;
-        return [key, f];
-      }));
-      existingCache.set(daySheetId, flightMap);
-    }
-    return existingCache.get(daySheetId)!;
-  }
-
   let created = 0;
   let updated = 0;
-  let linked = 0;
 
   for (const f of flights) {
-    // Determine which DaySheet this flight belongs to based on arrival date
-    const arrDate = f.arrivalDate || date;
-    const flightDate = parseDate(arrDate);
-    const daySheet = flightDate.getTime() === targetDate.getTime()
-      ? primaryDaySheet
-      : await getOrCreateDaySheet(flightDate);
-
-    const existingByKey = await getExistingKeyed(daySheet.id);
-    const flightKey = `${f.callsign}|${f.arrivalDate || date}`;
-    const existing = existingByKey.get(flightKey);
-
+    const callsign: string = f.callsign;
+    const registration: string = f.registration;
+    const arrDate = f.arrivalDate ? parseDate(f.arrivalDate) : targetDate;
+    const depDate = f.departureDate ? parseDate(f.departureDate) : targetDate;
     const isOvernight = Boolean(
       f.arrivalDate && f.departureDate && f.arrivalDate !== f.departureDate,
     );
 
-    const flightData = {
-      callsign: f.callsign,
+    // Operator
+    let operatorId: string | null = null;
+    const op = findOperator(callsign);
+    if (op) {
+      const dbOp = await upsertOperator(op.icao, op.name);
+      operatorId = dbOp.id;
+    }
+
+    // Aircraft
+    const aircraft = await upsertAircraft({
+      registration,
       aircraftType: f.aircraftType,
-      origin: f.origin,
-      eta: f.eta,
-      arrivalDate: f.arrivalDate || null,
-      destination: f.destination,
-      etd: f.etd,
-      departureDate: f.departureDate || null,
-      parking: f.parking,
-      crewArrival: f.crewArrival || 0,
-      crewDeparture: f.crewDeparture || 0,
-      paxArrival: f.paxArrival || 0,
-      paxDeparture: f.paxDeparture || 0,
-      isOvernight,
-    };
+      callsignForOperator: callsign,
+    });
 
-    let flightId: string;
+    // Visit keyed by aircraft + arrival palmaDay. If arrived earlier (pernocta),
+    // the visit lives in the arrival's day; the departure leg refers to the same
+    // Visit even though it's "on" the target sheet.
+    const visit = await upsertVisit({
+      aircraftId: aircraft.id,
+      palmaDay: arrDate,
+      operatorId,
+    });
 
-    if (existing) {
-      await prisma.flight.update({ where: { id: existing.id }, data: flightData });
-      await prisma.eventLog.create({
-        data: { flightId: existing.id, userId: session.user.id, action: "Actualizado desde PDF", details: `${f.callsign} (${f.registration})` },
-      });
-      flightId = existing.id;
-      updated++;
-    } else {
-      // Pernoctas whose arrival predates the sheet are already on the ground
-      const initialState = isOvernight && flightDate.getTime() < targetDate.getTime() ? "PARKED" : "EXPECTED";
-      const flight = await prisma.flight.create({ data: { daySheetId: daySheet.id, registration: f.registration, state: initialState, ...flightData } });
-      await prisma.eventLog.create({
-        data: { flightId: flight.id, userId: session.user.id, action: "Importado desde PDF", details: `${f.callsign} (${f.registration})` },
-      });
-      flightId = flight.id;
-      existingByKey.set(flightKey, { id: flightId });
-      created++;
-    }
+    const isUpdate = visit.createdAt.getTime() !== visit.updatedAt.getTime();
 
-    // Overnight: if departure date differs from arrival date, create a linked copy on the departure DaySheet
-    const depDate = f.departureDate || date;
-    if (depDate !== arrDate) {
-      const depDateObj = parseDate(depDate);
-      const depDaySheet = await getOrCreateDaySheet(depDateObj);
-      const depExisting = await getExistingKeyed(depDaySheet.id);
-      const depKey = `${f.callsign}|${f.arrivalDate || date}`;
+    await prisma.visit.update({
+      where: { id: visit.id },
+      data: {
+        type: isOvernight ? "OVERNIGHT" : "TURNAROUND",
+        arrivalDate: arrDate,
+        departureDate: depDate,
+      },
+    });
 
-      if (!depExisting.has(depKey)) {
-        const depFlight = await prisma.flight.create({
-          data: {
-            daySheetId: depDaySheet.id,
-            callsign: f.callsign,
-            registration: f.registration,
-            aircraftType: f.aircraftType,
-            origin: f.origin,
-            eta: f.eta,
-            arrivalDate: f.arrivalDate || null,
-            destination: f.destination,
-            etd: f.etd,
-            departureDate: f.departureDate || null,
-            parking: f.parking,
-            crewArrival: f.crewArrival || 0,
-            crewDeparture: f.crewDeparture || 0,
-            paxArrival: f.paxArrival || 0,
-            paxDeparture: f.paxDeparture || 0,
-            isOvernight: true,
-            state: "PARKED",
-            linkedFlightId: flightId,
-          },
-        });
-        await prisma.eventLog.create({
-          data: { flightId: depFlight.id, userId: session.user.id, action: "Pernocta creada desde PDF", details: `${f.callsign} (${f.registration})` },
-        });
-        depExisting.set(depKey, { id: depFlight.id });
-        linked++;
-      }
-    }
+    // ARRIVAL movement
+    await upsertMovement({
+      visitId: visit.id,
+      direction: "ARRIVAL",
+      callsign,
+      scheduledDate: arrDate,
+      data: {
+        origin: f.origin || null,
+        eta: f.eta || null,
+        parking: f.parking || null,
+        paxCount: f.paxArrival || 0,
+        crewCount: f.crewArrival || 0,
+        // pernocta arrived in the past → already on the ground
+        state: isOvernight && arrDate.getTime() < targetDate.getTime() ? "PARKED" : "EXPECTED",
+      },
+    });
+
+    // DEPARTURE movement
+    await upsertMovement({
+      visitId: visit.id,
+      direction: "DEPARTURE",
+      callsign,
+      scheduledDate: depDate,
+      data: {
+        destination: f.destination || null,
+        etd: f.etd || null,
+        parking: f.parking || null,
+        paxCount: f.paxDeparture || 0,
+        crewCount: f.crewDeparture || 0,
+        state: isOvernight && arrDate.getTime() < targetDate.getTime() ? "PARKED" : "EXPECTED",
+      },
+    });
+
+    await prisma.eventLog.create({
+      data: {
+        visitId: visit.id,
+        userId: session.user.id,
+        action: isUpdate ? "Actualizado desde PDF" : "Importado desde PDF",
+        details: `${callsign} (${registration})`,
+      },
+    });
+
+    if (isUpdate) updated++;
+    else created++;
   }
 
   const parts = [];
   if (created > 0) parts.push(`${created} nuevos`);
   if (updated > 0) parts.push(`${updated} actualizados`);
-  if (linked > 0) parts.push(`${linked} pernoctas`);
 
   eventBus.emit({
     type: "flight_created",
@@ -208,7 +176,7 @@ export async function PUT(req: NextRequest) {
   return NextResponse.json({
     created,
     updated,
-    linked,
+    linked: 0,
     total: flights.length,
   });
 }

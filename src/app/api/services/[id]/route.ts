@@ -1,3 +1,7 @@
+// /api/services/[id] — v2 implementation.
+// Service belongs to a Visit (visitId). Auto-transition logic walks
+// Visit → DEPARTURE Movement.
+
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
@@ -5,12 +9,14 @@ import { eventBus } from "@/lib/events";
 import { requireWriter } from "@/lib/roles";
 import { suggestNextState } from "@/lib/flightUrgency";
 import { FLIGHT_STATE_CONFIG, type FlightState } from "@/types";
+import { toFlightView } from "@/lib/flightView";
 
 const ALLOWED_SERVICE_PATCH_FIELDS = new Set([
   "type", "customName", "reference",
-  "phase", "scheduledAt",
+  "phase", "direction",
   "origin", "target",
   "state", "arrivedAt", "deliveredAt",
+  "quantity",
 ]);
 
 function pickAllowed(body: Record<string, unknown>, allowed: Set<string>): Record<string, unknown> {
@@ -21,7 +27,6 @@ function pickAllowed(body: Record<string, unknown>, allowed: Set<string>): Recor
   return out;
 }
 
-// PATCH /api/services/[id] — update a service (toggle delivered, etc.)
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -33,22 +38,22 @@ export async function PATCH(
   const rawBody = await req.json();
   const body = pickAllowed(rawBody, ALLOWED_SERVICE_PATCH_FIELDS);
 
+  // Legacy `phase` → `direction`
+  if (body.phase !== undefined && body.direction === undefined) {
+    body.direction = body.phase;
+    delete body.phase;
+  }
+
   const existing = await prisma.service.findUnique({ where: { id } });
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const now = new Date().toLocaleTimeString("es-ES", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const now = new Date().toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
 
   const data: Record<string, unknown> = { ...body };
-  // Auto-set timestamps based on state transitions
-  if (body.state === "ARRIVED" && !existing.arrivedAt) {
-    data.arrivedAt = now;
-  }
+  if (body.state === "ARRIVED" && !existing.arrivedAt) data.arrivedAt = now;
   if (body.state === "DELIVERED" && !existing.deliveredAt) {
     data.deliveredAt = now;
-    if (!existing.arrivedAt) data.arrivedAt = now; // Skip arrived if going straight to delivered
+    if (!existing.arrivedAt) data.arrivedAt = now;
   }
   if (body.state === "PENDING") {
     data.arrivedAt = null;
@@ -65,54 +70,55 @@ export async function PATCH(
     const stateLabel: Record<string, string> = { PENDING: "pendiente", ARRIVED: "llegado", DELIVERED: "entregado" };
     const actionDesc = `Servicio ${existing.type}: ${stateLabel[newState] || newState}`;
     await prisma.eventLog.create({
-      data: {
-        flightId: existing.flightId,
-        userId: session.user.id,
-        action: actionDesc,
-      },
+      data: { visitId: existing.visitId, userId: session.user.id, action: actionDesc },
     });
 
     eventBus.emit({
       type: "service_updated",
-      flightId: existing.flightId,
+      flightId: existing.visitId,
       userId: session.user.id,
       userName: session.user.name || undefined,
       detail: actionDesc,
       timestamp: new Date().toISOString(),
     });
 
-    // Auto-transición del vuelo: al cambiar un servicio podemos cerrar la fase de llegada
-    const flight = await prisma.flight.findUnique({
-      where: { id: existing.flightId },
-      include: { services: true },
+    // Auto-transition: service change can close arrival phase
+    const visit = await prisma.visit.findUnique({
+      where: { id: existing.visitId },
+      include: { aircraft: true, movements: true, services: true },
     });
-    if (flight) {
-      const next: FlightState | null = suggestNextState(flight, flight.services);
-      if (next && next !== flight.state) {
-        await prisma.flight.update({ where: { id: flight.id }, data: { state: next } });
-        await prisma.eventLog.create({
-          data: {
-            flightId: flight.id,
+    if (visit) {
+      const view = toFlightView(visit);
+      const next: FlightState | null = suggestNextState(view, visit.services);
+      if (next && next !== view.state) {
+        const dep = visit.movements.find((m) => m.direction === "DEPARTURE")
+                 || visit.movements.find((m) => m.direction === "ARRIVAL");
+        if (dep) {
+          await prisma.movement.update({ where: { id: dep.id }, data: { state: next } });
+          await prisma.eventLog.create({
+            data: {
+              visitId: visit.id,
+              movementId: dep.id,
+              userId: session.user.id,
+              action: `Auto-transición → ${FLIGHT_STATE_CONFIG[next].label}`,
+            },
+          });
+          eventBus.emit({
+            type: "flight_updated",
+            flightId: visit.id,
             userId: session.user.id,
-            action: `Auto-transición → ${FLIGHT_STATE_CONFIG[next].label}`,
-          },
-        });
-        eventBus.emit({
-          type: "flight_updated",
-          flightId: flight.id,
-          userId: session.user.id,
-          userName: session.user.name || undefined,
-          detail: `Estado → ${FLIGHT_STATE_CONFIG[next].label}`,
-          timestamp: new Date().toISOString(),
-        });
+            userName: session.user.name || undefined,
+            detail: `Estado → ${FLIGHT_STATE_CONFIG[next].label}`,
+            timestamp: new Date().toISOString(),
+          });
+        }
       }
     }
   }
 
-  return NextResponse.json(service);
+  return NextResponse.json({ ...service, phase: service.direction });
 }
 
-// DELETE /api/services/[id]
 export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -128,7 +134,7 @@ export async function DELETE(
 
   await prisma.eventLog.create({
     data: {
-      flightId: service.flightId,
+      visitId: service.visitId,
       userId: session.user.id,
       action: `Servicio eliminado: ${service.type}`,
     },
@@ -136,7 +142,7 @@ export async function DELETE(
 
   eventBus.emit({
     type: "service_deleted",
-    flightId: service.flightId,
+    flightId: service.visitId,
     userId: session.user.id,
     userName: session.user.name || undefined,
     detail: `Servicio eliminado: ${service.type}`,

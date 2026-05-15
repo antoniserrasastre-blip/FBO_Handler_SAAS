@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState, useCallback, useMemo, type MouseEvent as ReactMouseEvent } from "react";
 import { useSession } from "next-auth/react";
-import { Flight, Service, EventLog, LostItem } from "@prisma/client";
+import { Flight, Service, EventLog, LostItem } from "@/types/compat";
 import { dateToSqlString } from "@/lib/time";
 import { useEventStream } from "@/hooks/useEventStream";
 import { ServicePip, Stat, StatBand, useDate } from "@/components/helix";

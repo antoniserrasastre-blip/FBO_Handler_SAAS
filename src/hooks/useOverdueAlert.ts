@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Service } from "@prisma/client";
+import { Service } from "@/types/compat";
 import { isServiceOverdue } from "@/lib/overdue";
 
 // Beep sound (short ping) — generated via Web Audio API, no file needed

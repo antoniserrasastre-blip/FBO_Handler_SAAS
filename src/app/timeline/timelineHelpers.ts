@@ -2,7 +2,7 @@
 // Por defecto operamos en la ventana 06:00 - 24:00 (jornada operativa LEPA).
 // Lógica pura, fácil de testear.
 
-import type { Flight, Service } from "@prisma/client";
+import type { Flight, Service } from "@/types/compat";
 
 export type TimelineRange = { startMin: number; endMin: number };
 

@@ -1,10 +1,17 @@
+// /api/flights/[id] — v2 implementation
+//
+// `id` is the Visit id. PATCH routes each legacy `Flight` field to either the
+// ARRIVAL Movement, the DEPARTURE Movement, or the Visit itself via
+// `routeFieldToMovement()`.
+
 import { NextRequest, NextResponse } from "next/server";
-import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { eventBus } from "@/lib/events";
-import { requireWriter, requireAdmin } from "@/lib/roles";
+import { requireWriter } from "@/lib/roles";
 import { suggestNextState } from "@/lib/flightUrgency";
 import { FLIGHT_STATE_CONFIG, type FlightState } from "@/types";
+import { toFlightView, routeFieldToMovement } from "@/lib/flightView";
+import { palmaDayUtc } from "@/lib/time";
 
 const ALLOWED_FLIGHT_PATCH_FIELDS = new Set([
   "callsign", "registration", "aircraftType",
@@ -24,15 +31,18 @@ const ALLOWED_FLIGHT_PATCH_FIELDS = new Set([
   "linkedFlightId", "notes",
 ]);
 
-function pickAllowed(body: Record<string, unknown>, allowed: Set<string>): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const key of Object.keys(body)) {
-    if (allowed.has(key)) out[key] = body[key];
-  }
-  return out;
+async function loadVisit(id: string) {
+  return prisma.visit.findUnique({
+    where: { id },
+    include: {
+      aircraft: true,
+      movements: true,
+      services: true,
+      lostItems: true,
+    },
+  });
 }
 
-// PATCH /api/flights/[id] — update a flight
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -41,63 +51,114 @@ export async function PATCH(
   if (error) return error;
 
   const { id } = await params;
-  const rawBody = await req.json();
-  const body = pickAllowed(rawBody, ALLOWED_FLIGHT_PATCH_FIELDS);
+  const rawBody = (await req.json()) as Record<string, unknown>;
 
-  const existing = await prisma.flight.findUnique({ where: { id } });
-  if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  const visit = await loadVisit(id);
+  if (!visit) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  let flight = await prisma.flight.update({
-    where: { id },
-    data: body as Prisma.FlightUpdateInput,
-    include: {
-      services: { orderBy: { createdAt: "asc" } },
-    },
-  });
+  const previousView = toFlightView(visit);
 
-  // Auto-transición de estado: solo si el cliente NO está cambiando explícitamente el estado
+  // Group patches by target row
+  const arrivalUpdates: Record<string, unknown> = {};
+  const departureUpdates: Record<string, unknown> = {};
+  const visitUpdates: Record<string, unknown> = {};
+
+  for (const key of Object.keys(rawBody)) {
+    if (!ALLOWED_FLIGHT_PATCH_FIELDS.has(key)) continue;
+    const value = rawBody[key];
+    const route = routeFieldToMovement(key);
+    if (!route) continue;
+    if ("onVisit" in route) {
+      if (route.onVisit === "notes") visitUpdates.notes = value;
+      else if (route.onVisit === "__isOvernight") {
+        visitUpdates.type = value ? "OVERNIGHT" : "TURNAROUND";
+      } else if (route.onVisit === "__registration" || route.onVisit === "__aircraftType") {
+        // Aircraft-level: handled via separate Aircraft update
+        if (route.onVisit === "__aircraftType" && typeof value === "string") {
+          await prisma.aircraft.update({
+            where: { id: visit.aircraftId },
+            data: { aircraftType: value },
+          });
+        }
+      }
+      continue;
+    }
+
+    const targetBucket = route.direction === "ARRIVAL" ? arrivalUpdates : departureUpdates;
+    if (route.field === "__scheduledDate" && typeof value === "string") {
+      // Legacy arrivalDate/departureDate strings like "DD/MM"; expand to UTC
+      const palmaIso = visit.palmaDay.toISOString().slice(0, 4); // YYYY
+      const match = value.match(/^(\d{2})\/(\d{2})$/);
+      if (match) {
+        const dd = parseInt(match[1], 10);
+        const mm = parseInt(match[2], 10);
+        targetBucket.scheduledDate = palmaDayUtc(
+          `${palmaIso}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`
+        );
+        if (route.direction === "ARRIVAL") visitUpdates.arrivalDate = targetBucket.scheduledDate;
+        else visitUpdates.departureDate = targetBucket.scheduledDate;
+      }
+    } else {
+      targetBucket[route.field] = value;
+    }
+  }
+
+  // Apply Visit-level updates
+  if (Object.keys(visitUpdates).length) {
+    await prisma.visit.update({ where: { id }, data: visitUpdates });
+  }
+
+  // Apply Movement updates (only if the Movement exists)
+  if (Object.keys(arrivalUpdates).length) {
+    const arr = visit.movements.find((m) => m.direction === "ARRIVAL");
+    if (arr) await prisma.movement.update({ where: { id: arr.id }, data: arrivalUpdates });
+  }
+  if (Object.keys(departureUpdates).length) {
+    const dep = visit.movements.find((m) => m.direction === "DEPARTURE");
+    if (dep) await prisma.movement.update({ where: { id: dep.id }, data: departureUpdates });
+  }
+
+  // Re-read for auto-transition
+  const refreshed = await loadVisit(id);
+  if (!refreshed) return NextResponse.json({ error: "Lost during update" }, { status: 500 });
+  let flightView = toFlightView(refreshed);
+
+  // Auto-transition only if client didn't change state explicitly
   let autoTransition: FlightState | null = null;
-  if (body.state === undefined) {
-    autoTransition = suggestNextState(flight, flight.services);
-    if (autoTransition && autoTransition !== flight.state) {
-      flight = await prisma.flight.update({
-        where: { id },
-        data: { state: autoTransition },
-        include: { services: { orderBy: { createdAt: "asc" } } },
-      });
+  if (rawBody.state === undefined) {
+    autoTransition = suggestNextState(flightView, (refreshed.services || []) as Array<{ phase?: string | null; direction?: string | null; state: string }>);
+    if (autoTransition && autoTransition !== flightView.state) {
+      const dep = refreshed.movements.find((m) => m.direction === "DEPARTURE");
+      if (dep) {
+        await prisma.movement.update({ where: { id: dep.id }, data: { state: autoTransition } });
+      } else {
+        const arr = refreshed.movements.find((m) => m.direction === "ARRIVAL");
+        if (arr) await prisma.movement.update({ where: { id: arr.id }, data: { state: autoTransition } });
+      }
+      const finalRefresh = await loadVisit(id);
+      flightView = toFlightView(finalRefresh!);
     } else {
       autoTransition = null;
     }
   }
 
+  // Build event log
   const changes: string[] = [];
-  if (body.state && body.state !== existing.state) changes.push(`Estado → ${body.state}`);
-  if (body.fuelState && body.fuelState !== existing.fuelState) changes.push(`Fuel → ${body.fuelState}`);
-  if (body.toiletState && body.toiletState !== existing.toiletState) changes.push(`Toilet → ${body.toiletState}`);
-  if (body.paxDeparture !== undefined && body.paxDeparture !== existing.paxDeparture) changes.push(`Pax salida: ${body.paxDeparture}`);
-  if (body.paxArrival !== undefined && body.paxArrival !== existing.paxArrival) changes.push(`Pax llegada: ${body.paxArrival}`);
-  if (body.crewArrival !== undefined && body.crewArrival !== existing.crewArrival) changes.push(`Crew llegada: ${body.crewArrival}`);
-  if (body.crewDeparture !== undefined && body.crewDeparture !== existing.crewDeparture) changes.push(`Crew salida: ${body.crewDeparture}`);
-  if (body.paxDepBagsState && body.paxDepBagsState !== existing.paxDepBagsState) changes.push(`Maletas → ${body.paxDepBagsState}`);
-  if (body.paxDepTransportState && body.paxDepTransportState !== existing.paxDepTransportState) changes.push(`Transporte → ${body.paxDepTransportState}`);
-  if (body.crewArrLocation && body.crewArrLocation !== existing.crewArrLocation) changes.push(`Crew lleg. → ${body.crewArrLocation}`);
-  if (body.crewDepLocation && body.crewDepLocation !== existing.crewDepLocation) changes.push(`Crew sal. → ${body.crewDepLocation}`);
-  if (body.eta !== undefined && body.eta !== existing.eta) changes.push(`ETA: ${existing.eta || "--"} → ${body.eta || "--"}`);
-  if (body.etd !== undefined && body.etd !== existing.etd) changes.push(`ETD: ${existing.etd || "--"} → ${body.etd || "--"}`);
-  if (body.tobt !== undefined && body.tobt !== existing.tobt) changes.push(`TOBT: ${existing.tobt || "--"} → ${body.tobt || "--"}`);
-  if (body.parking !== undefined && body.parking !== existing.parking) changes.push(`Parking: ${existing.parking || "--"} → ${body.parking || "--"}`);
-  if (body.origin !== undefined && body.origin !== existing.origin) changes.push(`Origen: ${existing.origin || "--"} → ${body.origin || "--"}`);
-  if (body.destination !== undefined && body.destination !== existing.destination) changes.push(`Destino: ${existing.destination || "--"} → ${body.destination || "--"}`);
-  if (body.notes !== undefined && body.notes !== existing.notes) changes.push(body.notes ? `Nota actualizada` : `Nota eliminada`);
+  if (rawBody.state && rawBody.state !== previousView.state) changes.push(`Estado → ${rawBody.state}`);
+  if (rawBody.fuelState && rawBody.fuelState !== previousView.fuelState) changes.push(`Fuel → ${rawBody.fuelState}`);
+  if (rawBody.toiletState && rawBody.toiletState !== previousView.toiletState) changes.push(`Toilet → ${rawBody.toiletState}`);
+  if (rawBody.paxDeparture !== undefined && rawBody.paxDeparture !== previousView.paxDeparture) changes.push(`Pax salida: ${rawBody.paxDeparture}`);
+  if (rawBody.paxArrival !== undefined && rawBody.paxArrival !== previousView.paxArrival) changes.push(`Pax llegada: ${rawBody.paxArrival}`);
+  if (rawBody.eta !== undefined && rawBody.eta !== previousView.eta) changes.push(`ETA: ${previousView.eta || "--"} → ${rawBody.eta || "--"}`);
+  if (rawBody.etd !== undefined && rawBody.etd !== previousView.etd) changes.push(`ETD: ${previousView.etd || "--"} → ${rawBody.etd || "--"}`);
+  if (rawBody.tobt !== undefined && rawBody.tobt !== previousView.tobt) changes.push(`TOBT: ${previousView.tobt || "--"} → ${rawBody.tobt || "--"}`);
+  if (rawBody.parking !== undefined && rawBody.parking !== previousView.parking) changes.push(`Parking: ${previousView.parking || "--"} → ${rawBody.parking || "--"}`);
+  if (rawBody.notes !== undefined && rawBody.notes !== previousView.notes) changes.push(rawBody.notes ? `Nota actualizada` : `Nota eliminada`);
   if (autoTransition) changes.push(`Auto-transición → ${FLIGHT_STATE_CONFIG[autoTransition].label}`);
 
   if (changes.length > 0) {
     await prisma.eventLog.create({
-      data: {
-        flightId: id,
-        userId: session.user.id,
-        action: changes.join(", "),
-      },
+      data: { visitId: id, userId: session.user.id, action: changes.join(", ") },
     });
   }
 
@@ -110,10 +171,9 @@ export async function PATCH(
     timestamp: new Date().toISOString(),
   });
 
-  return NextResponse.json(flight);
+  return NextResponse.json(flightView);
 }
 
-// DELETE /api/flights/[id]
 export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -122,15 +182,18 @@ export async function DELETE(
   if (error) return error;
 
   const { id } = await params;
-  const flight = await prisma.flight.findUnique({ where: { id } });
-  await prisma.flight.delete({ where: { id } });
+  const visit = await loadVisit(id);
+  if (!visit) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  const view = toFlightView(visit);
+  await prisma.visit.delete({ where: { id } });
 
   eventBus.emit({
     type: "flight_deleted",
     flightId: id,
     userId: session.user.id,
     userName: session.user.name || undefined,
-    detail: flight ? `${flight.callsign} eliminado` : "Vuelo eliminado",
+    detail: `${view.callsign} eliminado`,
     timestamp: new Date().toISOString(),
   });
 
