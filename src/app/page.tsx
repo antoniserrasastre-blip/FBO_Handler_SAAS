@@ -5,7 +5,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Flight, Service, EventLog, LostItem } from "@/types/compat";
 import { DaySummary } from "@/components/DaySummary";
-import { FlightCard } from "@/components/FlightCard";
+import { VisitCard } from "@/components/VisitCard";
 import { TurnaroundAlerts } from "@/components/TurnaroundAlert";
 import { ToastContainer, ToastMessage } from "@/components/Toast";
 import { useEventStream } from "@/hooks/useEventStream";
@@ -31,6 +31,16 @@ type FlightWithRelations = Flight & {
   eventLogs: (EventLog & { user: { name: string } | null })[];
 };
 
+// Side-channel of decrypted people for VisitCard, keyed by visitId.
+type PeopleByVisit = Record<
+  string,
+  {
+    passengers: Array<{ id: string; fullName: string; direction: string; nationality?: string | null; passportNumber: string | null; status: string; verified: boolean }>;
+    crew: Array<{ id: string; fullName: string; direction: string; role: string; passportNumber: string | null; nationality?: string | null }>;
+    paxSource: string | null;
+  }
+>;
+
 export default function HomePage() {
   return (
     <Suspense fallback={null}>
@@ -44,6 +54,7 @@ function HomePageInner() {
   const router = useRouter();
   const [flights, setFlights] = useState<FlightWithRelations[]>([]);
   const [filteredFlights, setFilteredFlights] = useState<FlightWithRelations[]>([]);
+  const [people, setPeople] = useState<PeopleByVisit>({});
   const [selectedFlightId, setSelectedFlightId] = useState<string | null>(null);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showQuickAdd, setShowQuickAdd] = useState(false);
@@ -77,10 +88,11 @@ function HomePageInner() {
     try {
       // Use helper to send clean YYYY-MM-DD
       const dateStr = dateToSqlString(date);
-      const res = await fetch(`/api/flights?date=${dateStr}`);
+      const res = await fetch(`/api/flights?date=${dateStr}&include=people`);
       if (res.ok) {
         const data = await res.json();
         setFlights(data.flights);
+        setPeople(data.people || {});
       }
     } catch (err) {
       console.error("Error fetching flights:", err);
@@ -544,33 +556,25 @@ function HomePageInner() {
           </div>
         ) : (
           <div className="space-y-3">
-            {filteredFlights.map((flight) => (
-              <div key={flight.id} id={`flight-${flight.id}`}>
-                <FlightCard
-                  flight={flight}
-                  onUpdate={handleFlightUpdate}
-                  onServiceToggle={handleServiceToggle}
-                  onAddService={handleAddService}
-                  onDeleteService={handleDeleteService}
-                  onDelete={handleDeleteFlight}
-                  onAddLostItem={handleAddLostItem}
-                  onLostItemToggle={handleLostItemToggle}
-                  onDeleteLostItem={handleDeleteLostItem}
-                  isSelected={selectedFlightId === flight.id}
-                  onSelect={setSelectedFlightId}
-                  onBadgeClick={setSearchQuery}
-                  parkingConflict={(() => {
-                    const conflictIds = parkingConflicts.get(flight.id);
-                    if (!conflictIds?.length) return null;
-                    return conflictIds
-                      .map((id) => flights.find((f) => f.id === id)?.registration)
-                      .filter(Boolean)
-                      .join(", ");
-                  })()}
-                  readOnly={false}
-                />
-              </div>
-            ))}
+            {filteredFlights.map((flight) => {
+              const ppl = people[flight.id];
+              return (
+                <div key={flight.id} id={`flight-${flight.id}`}>
+                  <VisitCard
+                    flight={flight}
+                    passengers={ppl?.passengers || []}
+                    crew={ppl?.crew || []}
+                    paxSource={ppl?.paxSource || null}
+                    isSelected={selectedFlightId === flight.id}
+                    onSelect={setSelectedFlightId}
+                    onServiceToggle={handleServiceToggle}
+                    onBadgeClick={setSearchQuery}
+                    onOpenDetail={(id) => router.push(`/dia?flight=${id}`)}
+                    readOnly={false}
+                  />
+                </div>
+              );
+            })}
           </div>
         )}
       </main>

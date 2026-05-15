@@ -285,7 +285,166 @@
 .hx-pill-info    { background: var(--c-info-bg);    color: var(--c-info-strong); }
 .hx-pill-brand   { background: var(--c-brand-tint); color: var(--c-brand-active); }
 
-/* State pills (FBO sagrados) */
+/* ─── v2 paleta extendida ────────────────────────────────────────────── */
+/* Variants for flight category, source provenance, PII state and the
+   secondary aircraft / operator / rqst chrome. Designed to coexist with
+   the seven core FBO states without competing for visual hierarchy. */
+.hx-pill-ferry      { background: oklch(0.95 0.04 195);  color: oklch(0.45 0.13 195); }
+.hx-pill-cancelled  { background: oklch(0.95 0.06 25);   color: oklch(0.45 0.2 25); text-decoration: line-through; text-decoration-thickness: 1.5px; }
+.hx-pill-modified   { background: oklch(0.96 0.06 85);   color: oklch(0.5 0.16 75); }
+.hx-pill-pet        { background: oklch(0.95 0.05 60);   color: oklch(0.45 0.13 60); }
+.hx-pill-overnight  { background: oklch(0.96 0.04 320);  color: var(--c-state-overnight); }
+.hx-pill-source-netjets  { background: var(--c-brand-tint); color: var(--c-brand-active); }
+.hx-pill-source-vistajet { background: oklch(0.93 0.06 290); color: oklch(0.4 0.16 290); }
+.hx-pill-source-manual   { background: var(--c-bg-muted); color: var(--c-text-3); }
+.hx-pill-source-paste    { background: oklch(0.94 0.04 195); color: oklch(0.4 0.13 195); }
+.hx-pill-aircraft        { background: var(--c-bg-muted); color: var(--c-text-2); font-family: var(--font-mono); letter-spacing: 0.02em; }
+.hx-pill-operator        { background: oklch(0.96 0.02 250); color: var(--c-text-2); border: 1px solid var(--c-border-subtle); }
+.hx-pill-rqst            { background: var(--c-bg-sunken); color: var(--c-text-3); font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.04em; padding: 1px 6px; border-radius: 4px; }
+.hx-pill-lock            { background: var(--c-dark-bg-3); color: var(--c-dark-text-2); font-family: var(--font-mono); }
+.hx-pill-unmatched       { background: oklch(0.94 0.06 25); color: oklch(0.4 0.2 25); border: 1px dashed currentColor; }
+
+/* Direction chip (ARR / DEP) used on MovementRow */
+.hx-dir-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.hx-dir-arr { background: oklch(0.94 0.06 195); color: oklch(0.38 0.14 195); }
+.hx-dir-dep { background: oklch(0.94 0.07 50);  color: oklch(0.42 0.16 50); }
+
+/* MovementRow: a single leg laid out as a card-internal row */
+.hx-movement-row {
+  display: grid;
+  grid-template-columns: 56px 1fr auto;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-3) var(--s-4);
+  border-top: 1px solid var(--c-border-subtle);
+}
+.hx-movement-row:first-child { border-top: 0; }
+.hx-movement-row.cancelled { opacity: 0.55; }
+.hx-movement-row .leg-time {
+  font-family: var(--font-mono);
+  font-size: var(--t-2xl);
+  font-weight: 600;
+  color: var(--c-text-1);
+  letter-spacing: -0.01em;
+  text-align: right;
+}
+.hx-movement-row .leg-time.placeholder { color: var(--c-text-disabled); font-weight: 400; }
+.hx-movement-row .leg-route {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.hx-movement-row .leg-route .airport { font-family: var(--font-mono); font-weight: 600; color: var(--c-text-1); }
+.hx-movement-row .leg-route .label { font-size: var(--t-xs); color: var(--c-text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.hx-movement-row .leg-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* Visit timeline: vertical hairline between ARR and DEP */
+.hx-visit-timeline {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+.hx-visit-timeline::before {
+  content: "";
+  position: absolute;
+  left: 27px;
+  top: 38px;
+  bottom: 38px;
+  width: 2px;
+  background: var(--c-border-subtle);
+  z-index: 0;
+}
+
+/* Passport / PII reveal */
+.hx-pii {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: var(--t-sm);
+}
+.hx-pii .lock { color: var(--c-text-muted); }
+.hx-pii button {
+  background: transparent;
+  border: 0;
+  font: inherit;
+  color: inherit;
+  padding: 0;
+  cursor: pointer;
+}
+.hx-pii.locked .value { color: var(--c-text-muted); letter-spacing: 0.1em; }
+.hx-pii.revealed .value { color: var(--c-text-1); }
+.hx-pii .source-tag { color: var(--c-text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; }
+
+/* VisitCard scaffolding */
+.hx-visit-card {
+  background: var(--c-bg);
+  border: 1px solid var(--c-border);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.hx-visit-card:hover { border-color: var(--c-border-strong); }
+.hx-visit-card.selected { border-color: var(--c-brand); box-shadow: 0 0 0 3px var(--c-brand-tint); }
+.hx-visit-card.cancelled { opacity: 0.7; }
+.hx-visit-card .hero {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-3) var(--s-4);
+  background: var(--c-bg-subtle);
+  border-bottom: 1px solid var(--c-border-subtle);
+  flex-wrap: wrap;
+}
+.hx-visit-card .hero .badges { display: inline-flex; gap: var(--s-1); flex-wrap: wrap; align-items: center; }
+.hx-visit-card .hero .spacer { flex: 1; }
+.hx-visit-card .services-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-3) var(--s-4);
+  background: var(--c-bg-subtle);
+  border-top: 1px solid var(--c-border-subtle);
+}
+.hx-visit-card .people-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+  padding: var(--s-3) var(--s-4);
+  border-top: 1px solid var(--c-border-subtle);
+  font-size: var(--t-sm);
+}
+.hx-visit-card .people-strip .pcol { flex: 1 1 220px; min-width: 0; }
+.hx-visit-card .people-strip .pcol .h {
+  font-size: var(--t-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--c-text-muted);
+  margin-bottom: 4px;
+}
+.hx-visit-card .people-strip ul { display: flex; flex-direction: column; gap: 2px; }
+
+/* State pills */
 .hx-state-pill {
   display: inline-flex;
   align-items: center;

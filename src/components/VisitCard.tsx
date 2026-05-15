@@ -1,0 +1,309 @@
+// VisitCard — v2 redesign of FlightCard.
+//
+// A Visit is an aircraft's stay in Palma. It bundles up to two Movements
+// (ARRIVAL + DEPARTURE) and the services / passengers / crew attached to
+// the visit. This card surfaces that mental model directly:
+//
+//   ┌─ Hero  : Aircraft + Operator + status pills + rqstNumber + pet count
+//   ├─ Body  : two MovementRow stacked, hairline timeline between them
+//   ├─ Strip : services as ServicePips (click toggles state)
+//   └─ People: pax (Movement.DEPARTURE) + crew (CrewAssignment), PII locked
+//
+// Interactions are deliberately kept lean. Heavy editing (add pax, change
+// transport, etc.) routes back to the existing FlightDetailPanel via the
+// `onOpenDetail` callback so we don't duplicate the 1200-line FlightCard.
+//
+// The shape consumed is `FlightView` from the v2 adapter — the same the API
+// already returns. That keeps the call sites stable while the UI moves to
+// v2 vocabulary.
+
+"use client";
+
+import { useMemo, useState, memo } from "react";
+import type { Flight, Service, LostItem } from "@/types/compat";
+import type { FlightCategory } from "@/types/v2";
+import { normalizeFlightState } from "@/types";
+import { StatePill, type FboState } from "@/components/helix/Pill";
+import { HelixPill } from "@/components/helix/Pill";
+import { ServicePip, type ServicePipState } from "@/components/helix/ServicePip";
+import { MovementRow } from "@/components/helix/MovementRow";
+import { OperatorBadge } from "@/components/helix/OperatorBadge";
+import { AircraftBadge } from "@/components/helix/AircraftBadge";
+import { CategoryPill } from "@/components/helix/CategoryPill";
+import { RqstChip } from "@/components/helix/RqstChip";
+import { PetCount } from "@/components/helix/PetCount";
+import { PassportField } from "@/components/helix/PassportField";
+import { iconForServiceType } from "@/lib/serviceIconMap";
+import { nextServiceState, pipStateFor } from "@/lib/serviceCycle";
+import { ChevronDown, ChevronUp } from "lucide-react";
+
+// ---- State → FboState (visual) ---------------------------------------------
+const STATE_MAP: Record<string, FboState> = {
+  EXPECTED: "expected",
+  ON_BLOCKS: "onblocks",
+  PARKED: "parked",
+  TURNAROUND: "turn",
+  BOARDING: "board",
+  OFF_BLOCKS: "departed",
+};
+function visualState(s: string): FboState {
+  return STATE_MAP[normalizeFlightState(s)] ?? "expected";
+}
+
+type FlightWithRelations = Flight & {
+  services?: Service[];
+  lostItems?: LostItem[];
+};
+
+// Pax / crew records as the legacy endpoints return them
+interface PaxLite {
+  id: string;
+  fullName: string;
+  direction: string;
+  nationality?: string | null;
+  passportNumber: string | null;
+  status: string;
+  verified: boolean;
+}
+interface CrewLite {
+  id: string;
+  fullName: string;
+  direction: string;
+  role: string;
+  passportNumber: string | null;
+  nationality?: string | null;
+}
+
+export interface VisitCardProps {
+  flight: FlightWithRelations;        // FlightView projection
+  passengers?: PaxLite[];
+  crew?: CrewLite[];
+  paxSource?: string | null;          // first passenger.source, surfaced on the hero
+  isSelected?: boolean;
+  onSelect?: (id: string) => void;
+  onServiceToggle?: (serviceId: string, newState: string) => void;
+  onOpenDetail?: (visitId: string) => void;
+  onBadgeClick?: (term: string) => void;
+  readOnly?: boolean;
+}
+
+export const VisitCard = memo(function VisitCard({
+  flight,
+  passengers = [],
+  crew = [],
+  paxSource,
+  isSelected = false,
+  onSelect,
+  onServiceToggle,
+  onOpenDetail,
+  onBadgeClick,
+  readOnly = false,
+}: VisitCardProps) {
+  const [expanded, setExpanded] = useState(false);
+
+  const isCancelled = flight.flightCategory === "CANCELLED";
+  const services = flight.services || [];
+
+  const arrState = visualState(flight.state);     // FlightView surfaces a single state
+  const depState = visualState(flight.state);
+
+  // Pick a meaningful "primary" state for the hero. If departed already,
+  // celebrate departure; otherwise use the most-active leg.
+  const primaryFboState: FboState =
+    normalizeFlightState(flight.state) === "OFF_BLOCKS" ? "departed" :
+    normalizeFlightState(flight.state) === "BOARDING"   ? "board" :
+    arrState;
+
+  const fuelPip = useMemo<ServicePipState>(() => {
+    if (flight.fuelState === "SERVED") return "ok";
+    if (flight.fuelState === "REQUESTED") return "req";
+    return "no";
+  }, [flight.fuelState]);
+
+  const toiletPip = useMemo<ServicePipState>(() => {
+    if (flight.toiletState === "COMPLETED") return "ok";
+    if (flight.toiletState === "REQUESTED") return "req";
+    return "no";
+  }, [flight.toiletState]);
+
+  const arrivalPaxDep = useMemo(
+    () => passengers.filter((p) => p.direction === "ARRIVAL"),
+    [passengers]
+  );
+  const departurePax = useMemo(
+    () => passengers.filter((p) => p.direction !== "ARRIVAL"),
+    [passengers]
+  );
+  const arrivalCrew = useMemo(
+    () => crew.filter((c) => c.direction === "ARRIVAL"),
+    [crew]
+  );
+  const departureCrew = useMemo(
+    () => crew.filter((c) => c.direction !== "ARRIVAL"),
+    [crew]
+  );
+
+  return (
+    <article
+      className={`hx-visit-card ${isSelected ? "selected" : ""} ${isCancelled ? "cancelled" : ""}`}
+      onClick={() => onSelect?.(flight.id)}
+    >
+      {/* ─── Hero ──────────────────────────────────────────────────── */}
+      <div className="hero">
+        <StatePill state={primaryFboState} />
+        <span style={{ fontFamily: "var(--font-mono)", fontWeight: 600, fontSize: "1.05em" }}>
+          {flight.callsign || "—"}
+        </span>
+        <RqstChip rqstNumber={flight.rqstNumber} />
+        <AircraftBadge
+          registration={flight.registration}
+          aircraftType={flight.aircraftType}
+          onSelectRegistration={onBadgeClick}
+        />
+        <OperatorBadge callsign={flight.callsign} onSelect={onBadgeClick} />
+
+        <div className="badges">
+          <CategoryPill
+            category={(flight.flightCategory || "COMMERCIAL") as FlightCategory}
+            modified={flight.modifiedFlag}
+          />
+          {flight.isOvernight ? (
+            <HelixPill className="hx-pill-overnight">Pernocta</HelixPill>
+          ) : null}
+          <PetCount count={flight.petCount || 0} />
+          {paxSource && paxSource !== "MANUAL" ? (
+            <span className={`hx-pill hx-pill-source-${paxSource.toLowerCase()}`} title={`Datos de ${paxSource}`}>
+              {paxSource}
+            </span>
+          ) : null}
+        </div>
+
+        <div className="spacer" />
+
+        <button
+          type="button"
+          className="hx-btn hx-btn-ghost hx-btn-sm"
+          onClick={(e) => { e.stopPropagation(); setExpanded((x) => !x); }}
+          title={expanded ? "Contraer" : "Ver personas"}
+        >
+          {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          {departurePax.length + arrivalPaxDep.length} pax · {departureCrew.length + arrivalCrew.length} crew
+        </button>
+        {!readOnly && onOpenDetail ? (
+          <button
+            type="button"
+            className="hx-btn hx-btn-secondary hx-btn-sm"
+            onClick={(e) => { e.stopPropagation(); onOpenDetail(flight.id); }}
+          >
+            Editar
+          </button>
+        ) : null}
+      </div>
+
+      {/* ─── Body: two MovementRow ────────────────────────────────── */}
+      <div className="hx-visit-timeline">
+        <MovementRow
+          direction="ARRIVAL"
+          time={flight.eta}
+          airport={flight.origin}
+          state={arrState}
+          paxCount={flight.paxArrival}
+          crewCount={flight.crewArrival}
+          parking={flight.parking}
+          cancelled={isCancelled}
+        />
+        <MovementRow
+          direction="DEPARTURE"
+          time={flight.etd}
+          airport={flight.destination}
+          state={depState}
+          paxCount={flight.paxDeparture}
+          crewCount={flight.crewDeparture}
+          parking={flight.parking}
+          cancelled={isCancelled}
+          fuelState={fuelPip}
+          toiletState={toiletPip}
+        />
+      </div>
+
+      {/* ─── Services strip ────────────────────────────────────────── */}
+      {services.length > 0 && (
+        <div className="services-strip">
+          {services.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              disabled={readOnly}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!onServiceToggle) return;
+                onServiceToggle(s.id, nextServiceState(s.state));
+              }}
+              style={{ background: "transparent", border: 0, padding: 0, cursor: readOnly ? "default" : "pointer" }}
+              title={`${s.customName || s.type}${s.reference ? ` · #${s.reference}` : ""}${s.target ? ` · ${s.target}` : ""}`}
+            >
+              <ServicePip
+                service={iconForServiceType(s.type)}
+                state={pipStateFor(s.state)}
+                size="sm"
+              />
+            </button>
+          ))}
+          {services.length > 0 ? (
+            <span className="text-xs text-ink-muted ml-2">
+              {services.filter((s) => s.state === "DELIVERED").length}/{services.length} servidos
+            </span>
+          ) : null}
+        </div>
+      )}
+
+      {/* ─── People strip (expanded) ──────────────────────────────── */}
+      {expanded && (
+        <div className="people-strip" onClick={(e) => e.stopPropagation()}>
+          <div className="pcol">
+            <div className="h">Pasajeros · {departurePax.length}</div>
+            <ul>
+              {departurePax.length === 0 && (
+                <li className="text-xs italic text-ink-muted">Sin datos importados.</li>
+              )}
+              {departurePax.map((p) => (
+                <li key={p.id} className="flex items-center gap-2">
+                  <span className="text-ink-1">{p.fullName}</span>
+                  {p.status === "NO_SHOW" ? (
+                    <HelixPill tone="danger">no-show</HelixPill>
+                  ) : null}
+                  {p.status === "ADDED" ? (
+                    <HelixPill tone="info">añadido</HelixPill>
+                  ) : null}
+                  <PassportField value={p.passportNumber} source={paxSource} size="sm" />
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="pcol">
+            <div className="h">Tripulación · {departureCrew.length}</div>
+            <ul>
+              {departureCrew.length === 0 && (
+                <li className="text-xs italic text-ink-muted">Sin tripulación.</li>
+              )}
+              {departureCrew.map((c) => (
+                <li key={c.id} className="flex items-center gap-2">
+                  <span className="text-ink-1">{c.fullName}</span>
+                  <HelixPill tone="brand">{roleLabel(c.role)}</HelixPill>
+                  <PassportField value={c.passportNumber} source={paxSource} size="sm" />
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+    </article>
+  );
+});
+
+function roleLabel(role: string): string {
+  if (role === "CAPTAIN") return "PIC";
+  if (role === "FIRST_OFFICER") return "SIC";
+  if (role === "CABIN_CREW") return "FA";
+  return role;
+}

@@ -6,6 +6,7 @@ import { Flight, Service, EventLog, LostItem } from "@/types/compat";
 import { dateToSqlString } from "@/lib/time";
 import { useEventStream } from "@/hooks/useEventStream";
 import { ServicePip, Stat, StatBand, useDate } from "@/components/helix";
+import { nextServiceState } from "@/lib/serviceCycle";
 import { QuickTimeEdit } from "@/components/QuickTimeEdit";
 import { InlineTextEdit } from "@/components/InlineTextEdit";
 import { PassengerCrewModal } from "@/components/PassengerCrewModal";
@@ -147,7 +148,7 @@ function DiaPageInner() {
   const cycleCateringService = useCallback(async (f: FlightWithRelations) => {
     const svc = f.services.find((s) => s.type === "CATERING");
     if (!svc) return;
-    const next = svc.state === "PENDING" ? "ARRIVED" : svc.state === "ARRIVED" ? "DELIVERED" : "PENDING";
+    const next = nextServiceState(svc.state);
     setFlights((prev) =>
       prev.map((x) =>
         x.id === f.id

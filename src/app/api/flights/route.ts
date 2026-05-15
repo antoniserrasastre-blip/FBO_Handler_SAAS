@@ -14,26 +14,81 @@ import { palmaDayUtc, getSpainToday } from "@/lib/time";
 import { upsertAircraft, upsertVisit, upsertMovement, upsertOperator } from "@/lib/v2/upsert";
 import { toFlightView } from "@/lib/flightView";
 import { findOperator } from "@/lib/operators";
+import { decrypt } from "@/lib/crypto";
 
-// GET /api/flights?date=YYYY-MM-DD
+// GET /api/flights?date=YYYY-MM-DD[&include=people]
+//
+// `include=people` returns passengers + crew alongside each flight so the
+// VisitCard can render the encrypted PII row in one round-trip.
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const dateParam = req.nextUrl.searchParams.get("date");
+  const includePeople = req.nextUrl.searchParams.get("include") === "people";
   const palmaDay = dateParam ? palmaDayUtc(dateParam) : getSpainToday();
 
   const visits = await prisma.visit.findMany({
     where: { palmaDay },
     include: {
       aircraft: true,
-      movements: true,
+      movements: includePeople
+        ? {
+            include: {
+              passengers: { orderBy: { createdAt: "asc" } },
+              crewAssignments: { include: { crewMember: true } },
+            },
+          }
+        : true,
       services: { orderBy: { createdAt: "asc" } },
       lostItems: { orderBy: { createdAt: "asc" } },
     },
   });
 
   const flights = visits.map(toFlightView);
+
+  // Build a side-channel { [visitId]: { passengers, crew } } so the FlightView
+  // shape stays stable. Decryption happens server-side here; the wire payload
+  // already carries cleartext passport numbers (over TLS).
+  let people: Record<string, { passengers: unknown[]; crew: unknown[]; paxSource: string | null }> = {};
+  if (includePeople) {
+    people = {};
+    for (const v of visits) {
+      const passengers: unknown[] = [];
+      const crew: unknown[] = [];
+      let paxSource: string | null = null;
+      for (const m of v.movements as unknown as Array<{
+        id: string;
+        direction: string;
+        passengers: Array<{ id: string; givenNames: string | null; surname: string | null; passportEncrypted: string | null; nationality: string | null; status: string; verified: boolean; source: string }>;
+        crewAssignments: Array<{ crewMemberId: string; roleOnFlight: string; crewMember: { fullName: string; passportEncrypted: string | null; nationality: string | null } }>;
+      }>) {
+        for (const p of m.passengers || []) {
+          if (!paxSource) paxSource = p.source;
+          passengers.push({
+            id: p.id,
+            direction: m.direction,
+            fullName: [p.givenNames, p.surname].filter(Boolean).join(" ") || "",
+            nationality: p.nationality,
+            passportNumber: p.passportEncrypted ? decrypt(p.passportEncrypted) : null,
+            status: p.status,
+            verified: p.verified,
+          });
+        }
+        for (const a of m.crewAssignments || []) {
+          crew.push({
+            id: `${m.id}__${a.crewMemberId}`,
+            direction: m.direction,
+            fullName: a.crewMember.fullName,
+            role: a.roleOnFlight,
+            passportNumber: a.crewMember.passportEncrypted ? decrypt(a.crewMember.passportEncrypted) : null,
+            nationality: a.crewMember.nationality,
+          });
+        }
+      }
+      people[v.id] = { passengers, crew, paxSource };
+    }
+  }
 
   // Sort chronologically: pernoctas (arrived earlier) by ETD; same-day by ETA→ETD
   const iso = palmaDay.toISOString().slice(2, 10).split("-").reverse().join("/");
@@ -45,10 +100,11 @@ export async function GET(req: NextRequest) {
     return ta.localeCompare(tb);
   });
 
-  // Shape mirrors the legacy endpoint: { daySheet, flights }
+  // Shape mirrors the legacy endpoint: { daySheet, flights, [people] }
   return NextResponse.json({
     daySheet: { id: palmaDay.toISOString(), date: palmaDay },
     flights,
+    ...(includePeople ? { people } : {}),
   });
 }
 

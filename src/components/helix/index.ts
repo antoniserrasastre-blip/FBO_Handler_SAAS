@@ -24,3 +24,17 @@ export { AppShell } from "./AppShell";
 export { useDate } from "./useDate";
 export { SegmentedControl } from "./SegmentedControl";
 export type { SegmentedControlProps, SegmentedControlOption } from "./SegmentedControl";
+
+// v2 — domain-aware primitives
+export { CategoryPill } from "./CategoryPill";
+export type { CategoryPillProps } from "./CategoryPill";
+export { AircraftBadge } from "./AircraftBadge";
+export type { AircraftBadgeProps } from "./AircraftBadge";
+export { OperatorBadge } from "./OperatorBadge";
+export type { OperatorBadgeProps } from "./OperatorBadge";
+export { RqstChip } from "./RqstChip";
+export { PetCount } from "./PetCount";
+export { PassportField } from "./PassportField";
+export type { PassportFieldProps } from "./PassportField";
+export { MovementRow } from "./MovementRow";
+export type { MovementRowProps } from "./MovementRow";
