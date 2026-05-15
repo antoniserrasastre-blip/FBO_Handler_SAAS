@@ -1,0 +1,97 @@
+name: DB Snapshot (Turso)
+
+# Volcado manual de la BD de producción en formato SQL (.dump). El archivo
+# resultante se sube como artifact del run y queda disponible para descarga
+# durante 90 días. Pensado como red de seguridad ANTES de cualquier deploy
+# con cambios de schema destructivos (prisma db push --accept-data-loss).
+#
+# Secrets requeridos en el repo (Settings → Secrets and variables → Actions):
+#   - TURSO_API_TOKEN  : token de plataforma (no el de la BD). Se crea en
+#                        app.turso.tech → Settings → API Tokens.
+#   - TURSO_DB_NAME    : nombre de la BD (sin la org ni el dominio). Ej:
+#                        "fbo-handler-prod". Se ve en el dashboard de Turso.
+#
+# Disparo: Actions → "DB Snapshot (Turso)" → Run workflow → elegir rama y
+# (opcional) escribir un motivo. Funciona desde la app móvil de GitHub.
+
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: "Motivo del snapshot (ej: pre-v2-migration)"
+        required: false
+        default: "manual"
+
+jobs:
+  dump:
+    name: Volcar BD y subir artifact
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Validar secrets
+        env:
+          TURSO_API_TOKEN: ${{ secrets.TURSO_API_TOKEN }}
+          TURSO_DB_NAME: ${{ secrets.TURSO_DB_NAME }}
+        run: |
+          if [ -z "$TURSO_API_TOKEN" ]; then
+            echo "::error::Falta el secret TURSO_API_TOKEN."
+            echo "Crear en app.turso.tech → Settings → API Tokens y añadir en Settings → Secrets → Actions."
+            exit 1
+          fi
+          if [ -z "$TURSO_DB_NAME" ]; then
+            echo "::error::Falta el secret TURSO_DB_NAME (nombre corto de la BD, sin org ni dominio)."
+            exit 1
+          fi
+
+      - name: Instalar Turso CLI
+        run: |
+          curl -sSfL https://get.tur.so/install.sh | bash
+          echo "$HOME/.turso" >> $GITHUB_PATH
+
+      - name: Volcar BD a SQL
+        env:
+          TURSO_API_TOKEN: ${{ secrets.TURSO_API_TOKEN }}
+          TURSO_DB_NAME: ${{ secrets.TURSO_DB_NAME }}
+          REASON: ${{ inputs.reason }}
+        run: |
+          STAMP=$(date -u +"%Y%m%dT%H%M%SZ")
+          SAFE_REASON=$(echo "$REASON" | tr -c 'A-Za-z0-9._-' '_' | cut -c1-40)
+          OUT="${TURSO_DB_NAME}-${STAMP}-${SAFE_REASON}.sql"
+          echo "Volcando '$TURSO_DB_NAME' → $OUT ..."
+          turso db shell "$TURSO_DB_NAME" ".dump" > "$OUT"
+          BYTES=$(stat -c%s "$OUT")
+          if [ "$BYTES" -lt 100 ]; then
+            echo "::error::El dump tiene $BYTES bytes — algo falló."
+            head -50 "$OUT"
+            exit 1
+          fi
+          echo "OK · $BYTES bytes"
+          ls -lh "$OUT"
+          echo "OUT=$OUT" >> $GITHUB_ENV
+          echo "STAMP=$STAMP" >> $GITHUB_ENV
+
+      - name: Resumen
+        env:
+          TURSO_DB_NAME: ${{ secrets.TURSO_DB_NAME }}
+          REASON: ${{ inputs.reason }}
+        run: |
+          {
+            echo "### DB Snapshot creado"
+            echo ""
+            echo "- **BD**: \`$TURSO_DB_NAME\`"
+            echo "- **Timestamp (UTC)**: \`$STAMP\`"
+            echo "- **Commit**: \`${GITHUB_SHA:0:7}\` (rama \`$GITHUB_REF_NAME\`)"
+            echo "- **Motivo**: $REASON"
+            echo "- **Archivo**: \`$OUT\`"
+            echo ""
+            echo "Descárgalo desde la pestaña _Artifacts_ de este run. Disponible 90 días."
+          } >> $GITHUB_STEP_SUMMARY
+
+      - name: Subir artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: turso-snapshot-${{ env.STAMP }}
+          path: ${{ env.OUT }}
+          retention-days: 90
+          if-no-files-found: error
