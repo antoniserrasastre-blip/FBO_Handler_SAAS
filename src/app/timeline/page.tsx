@@ -1,14 +1,13 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { Suspense, useEffect, useState, useCallback, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import { Flight, Service, EventLog, LostItem } from "@/types/compat";
 import { palmaDayUtc, dateToSqlString } from "@/lib/time";
 import { useEventStream } from "@/hooks/useEventStream";
-import { ChevronLeft, ChevronRight } from "lucide-react";
 import { getOperatorName } from "@/lib/operators";
-import { ViewTabs } from "@/components/ViewTabs";
 import { FlightDetailPanel } from "@/app/dia/FlightDetailPanel";
+import { useDate } from "@/components/helix";
 import { PassengerCrewModal } from "@/components/PassengerCrewModal";
 import { CategoryPill } from "@/components/helix/CategoryPill";
 import { RqstChip } from "@/components/helix/RqstChip";
@@ -47,9 +46,17 @@ const ROW_H = 56;
 const BAR_H = 22;
 
 export default function TimelinePage() {
+  return (
+    <Suspense fallback={null}>
+      <TimelinePageInner />
+    </Suspense>
+  );
+}
+
+function TimelinePageInner() {
   const { status } = useSession();
+  const { date, shift, goToday } = useDate();
   const [flights, setFlights] = useState<FlightWithRelations[]>([]);
-  const [date, setDate] = useState(() => palmaDayUtc());
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState(new Date());
   const [selectedFlightId, setSelectedFlightId] = useState<string | null>(null);
@@ -88,13 +95,10 @@ export default function TimelinePage() {
       const tag = (e.target as HTMLElement | null)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA") return;
       if (e.key === "Escape" && selectedFlightId) { setSelectedFlightId(null); return; }
-      if (e.key === "ArrowLeft") {
-        const d = new Date(date); d.setUTCDate(d.getUTCDate() - 1); setDate(d);
-      } else if (e.key === "ArrowRight") {
-        const d = new Date(date); d.setUTCDate(d.getUTCDate() + 1); setDate(d);
-      } else if (e.key === "t" || e.key === "T") {
-        setDate(palmaDayUtc());
-      } else if (e.key === "1") setZoom(6);
+      if (e.key === "ArrowLeft") shift(-1);
+      else if (e.key === "ArrowRight") shift(1);
+      else if (e.key === "t" || e.key === "T") goToday();
+      else if (e.key === "1") setZoom(6);
       else if (e.key === "2") setZoom(12);
       else if (e.key === "3") setZoom(24);
     };
@@ -198,73 +202,6 @@ export default function TimelinePage() {
   return (
     <div className="flex h-screen flex-col bg-[#fafafa] text-sm select-none" style={{ fontFamily: "Inter Tight, system-ui, sans-serif" }}>
       <style>{`@keyframes tlpulse { 0%,100% { opacity: 1 } 50% { opacity: 0.55 } }`}</style>
-      {/* HEADER */}
-      <header className="flex items-center justify-between gap-6 bg-[#0a0a0a] px-7 py-3.5 text-[#e6edf3]">
-        <div className="flex items-center gap-8">
-          <div className="flex items-center gap-2.5">
-            <div
-              className="h-6 w-6 rounded-md relative overflow-hidden"
-              style={{ background: "linear-gradient(135deg, oklch(0.78 0.16 75), oklch(0.62 0.18 60))" }}
-            >
-              <div
-                className="absolute inset-[5px] rounded-full border-[1.5px] border-white/85 border-r-transparent"
-                style={{ transform: "rotate(-30deg)" }}
-              />
-            </div>
-            <div className="leading-tight">
-              <div className="text-[14.5px] font-semibold tracking-tight">Mallorcair Ops</div>
-              <div className="text-[10px] uppercase tracking-widest text-gray-500 mt-px">FBO · LEPA</div>
-            </div>
-          </div>
-
-          <ViewTabs tone="dark" />
-        </div>
-
-        <div className="flex items-center gap-8">
-          <div className="flex items-center gap-1.5 text-[13px] text-gray-300" style={{ fontFamily: "JetBrains Mono, monospace" }}>
-            <button
-              onClick={() => { const d = new Date(date); d.setUTCDate(d.getUTCDate() - 1); setDate(d); }}
-              className="px-2 py-1 text-gray-500 hover:text-gray-200"
-              title="Día anterior (←)"
-            >
-              <ChevronLeft size={14} />
-            </button>
-            <span className="rounded-md bg-white/10 px-2.5 py-1">
-              {date.toLocaleDateString("es-ES", { weekday: "short", day: "2-digit", month: "short", year: "numeric" })
-                .replace(".", "")
-                .replace(/^./, (c) => c.toUpperCase())}
-            </span>
-            <button
-              onClick={() => { const d = new Date(date); d.setUTCDate(d.getUTCDate() + 1); setDate(d); }}
-              className="px-2 py-1 text-gray-500 hover:text-gray-200"
-              title="Día siguiente (→)"
-            >
-              <ChevronRight size={14} />
-            </button>
-            {!isToday && (
-              <button
-                onClick={() => setDate(palmaDayUtc())}
-                className="ml-1 px-2 py-1 text-[10.5px] font-semibold rounded uppercase tracking-wider"
-                style={{ background: "oklch(0.85 0.15 95 / 0.18)", color: "oklch(0.85 0.15 95)" }}
-                title="Volver a hoy (T)"
-              >
-                Hoy
-              </button>
-            )}
-          </div>
-
-          <div className="flex items-baseline gap-7" style={{ fontFamily: "JetBrains Mono, monospace" }}>
-            <div className="flex flex-col items-end">
-              <span className="text-[9px] uppercase tracking-widest text-gray-500">Palma</span>
-              <span className="text-[22px] font-semibold leading-none -tracking-[0.01em]">{fmt(now, "Europe/Madrid")}</span>
-            </div>
-            <div className="flex flex-col items-end">
-              <span className="text-[9px] uppercase tracking-widest text-gray-500">Zulu</span>
-              <span className="text-[22px] font-semibold leading-none -tracking-[0.01em]" style={{ color: "oklch(0.85 0.15 95)" }}>{fmt(now, "UTC")}</span>
-            </div>
-          </div>
-        </div>
-      </header>
 
       {/* SUMMARY band */}
       <div className="flex items-stretch border-b border-gray-200 bg-white px-7">
