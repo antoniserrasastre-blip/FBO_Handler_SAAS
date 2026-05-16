@@ -44,6 +44,9 @@ COPY --from=builder /app/.next/static ./.next/static
 # Schema Prisma (necesario en runtime para `prisma db push`)
 COPY --from=builder /app/prisma ./prisma
 
+# Script de migracion V2 ejecutado en el CMD antes del arranque
+COPY --from=builder /app/scripts/migrate-v2-schema.mjs ./scripts/migrate-v2-schema.mjs
+
 # Cliente Prisma generado (lo usa la app)
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
@@ -69,4 +72,6 @@ USER nextjs
 
 EXPOSE 3000
 
-CMD ["node", "server.js"]
+# Ejecuta la migracion V2 (idempotente) antes de arrancar Next.js.
+# Si falla, el contenedor arranca igualmente — los errores se ven en logs.
+CMD ["sh", "-c", "node scripts/migrate-v2-schema.mjs || echo '[migrate] failed, continuing'; node server.js"]
