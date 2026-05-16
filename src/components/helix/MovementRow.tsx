@@ -5,6 +5,7 @@
 import { StatePill, type FboState } from "./Pill";
 import { ServicePip, type ServicePipState } from "./ServicePip";
 import { QuickTimeEdit } from "@/components/QuickTimeEdit";
+import { checkCompatibility, isFarFromGA, getStandDescription } from "@/lib/parkingStands";
 
 export interface MovementRowProps {
   direction: "ARRIVAL" | "DEPARTURE";
@@ -24,6 +25,8 @@ export interface MovementRowProps {
   date?: string | null;
   /** Operating day of the sheet this row belongs to (DD/MM/YY). */
   sheetDate?: string | null;
+  /** Aircraft type — enables parking compatibility check (warning/error class). */
+  aircraftType?: string | null;
 }
 
 const DIR_LABEL: Record<MovementRowProps["direction"], string> = {
@@ -45,8 +48,26 @@ export function MovementRow({
   onTimeSave,
   date,
   sheetDate,
+  aircraftType,
 }: MovementRowProps) {
   const showDate = date && date !== sheetDate;
+
+  const parkingMeta = (() => {
+    if (!parking) return null;
+    const compat = checkCompatibility(aircraftType, parking);
+    const farFromGA = isFarFromGA(parking);
+    const description = getStandDescription(parking);
+    let cls = "hx-pill hx-pill-default";
+    let title = `Stand: ${description}`;
+    if (compat.severity === "error") {
+      cls = "hx-pill hx-pill-default parking-error";
+      title = compat.message || title;
+    } else if (farFromGA) {
+      cls = "hx-pill hx-pill-default parking-warning";
+      title = `${description} — lejos del GA apron`;
+    }
+    return { cls, title };
+  })();
   return (
     <div className={`hx-movement-row ${cancelled ? "cancelled" : ""}`}>
       <div className={`hx-dir-chip ${direction === "ARRIVAL" ? "hx-dir-arr" : "hx-dir-dep"}`}>
@@ -63,8 +84,8 @@ export function MovementRow({
         <span className="text-xs text-ink-3 font-mono" title={`${paxCount} pax · ${crewCount} crew`}>
           {paxCount}p · {crewCount}c
         </span>
-        {parking ? (
-          <span className="hx-pill hx-pill-default" title="Stand">
+        {parking && parkingMeta ? (
+          <span className={parkingMeta.cls} title={parkingMeta.title}>
             {parking}
           </span>
         ) : null}

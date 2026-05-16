@@ -253,6 +253,84 @@ describe("VisitCard people strip", () => {
   });
 });
 
+describe("VisitCard signal pills + indicators", () => {
+  it("shows a sticky-note indicator when the visit has notes", () => {
+    render(<VisitCard flight={makeFlight({ notes: "VIP llegada anticipada" })} />);
+    expect(screen.getByTitle(/vip llegada anticipada/i)).toBeTruthy();
+  });
+
+  it("does not show the sticky-note indicator when notes are empty", () => {
+    render(<VisitCard flight={makeFlight({ notes: null })} />);
+    expect(screen.queryByTitle(/nota/i)).toBeNull();
+  });
+
+  it("shows a count badge of pending lost items in the hero", () => {
+    const lostItems = [
+      { id: "l1", visitId: "v-1", description: "iPad", location: "AIRCRAFT", state: "FOUND" } as LostItem,
+      { id: "l2", visitId: "v-1", description: "Reloj", location: "LOUNGE", state: "CLAIMED" } as LostItem,
+      { id: "l3", visitId: "v-1", description: "Llaves", location: "RAMP", state: "DELIVERED" } as LostItem,
+    ];
+    render(<VisitCard flight={makeFlight({ lostItems })} />);
+    // Only FOUND + CLAIMED count as pending (DELIVERED is closed)
+    expect(screen.getByText(/2 objetos/i)).toBeTruthy();
+  });
+
+  it("renders a progress bar following FLIGHT_STATE_CONFIG percentage", () => {
+    const { container } = render(<VisitCard flight={makeFlight({ state: "BOARDING" })} />);
+    const bar = container.querySelector(".hx-progress-bar > div") as HTMLElement;
+    expect(bar).toBeTruthy();
+    // BOARDING is well past EXPECTED — width > 0
+    expect(bar.style.width).not.toBe("0%");
+  });
+
+  it("marks the parking pill as warning when the stand is far from GA", () => {
+    // Stand "02" lives in the commercial terminal — far from the GA apron.
+    const { container } = render(
+      <VisitCard flight={makeFlight({ parking: "02", aircraftType: "GLEX" })} />
+    );
+    expect(container.querySelector(".parking-warning")).toBeTruthy();
+  });
+
+  it("marks an overdue service pip with the overdue modifier class", () => {
+    const services = [
+      makeService({ id: "s1", type: "CATERING", state: "PENDING", scheduledAt: "00:01" }),
+    ];
+    const { container } = render(<VisitCard flight={makeFlight({ services })} />);
+    const pipButton = container.querySelector(".services-strip button");
+    expect(pipButton?.className).toMatch(/overdue/);
+  });
+});
+
+describe("VisitCard urgency + audit", () => {
+  it("shows a TurnaroundCountdown when there is a valid ETD and the flight is on the ground", () => {
+    // ETD 10 minutes from now: should render the countdown.
+    const inTenMin = new Date(Date.now() + 10 * 60 * 1000)
+      .toISOString()
+      .slice(11, 16); // HH:MM (UTC)
+    render(<VisitCard flight={makeFlight({ etd: inTenMin, state: "PARKED" })} />);
+    // The countdown surfaces a tiny pill like "10m" or "0h10".
+    expect(screen.getByTitle(/tiempo hasta etd/i)).toBeTruthy();
+  });
+
+  it("renders a LastModifiedBadge when eventLogs are provided", () => {
+    const eventLogs = [
+      {
+        id: "e1",
+        visitId: "v-1",
+        userId: "u-1",
+        action: "Servicio entregado",
+        details: "GPU",
+        timestamp: "2026-05-16T11:30:00Z",
+        user: { name: "Antoni" },
+      },
+    ];
+    const flightWithLogs = { ...makeFlight({ id: "v-1" }), eventLogs };
+    render(<VisitCard flight={flightWithLogs as never} />);
+    expect(screen.getByText(/antoni/i)).toBeTruthy();
+    expect(screen.getByText(/servicio entregado/i)).toBeTruthy();
+  });
+});
+
 describe("VisitCard editing handoff", () => {
   it("offers an Editar button that routes to the detail panel", async () => {
     const onOpenDetail = vi.fn();
