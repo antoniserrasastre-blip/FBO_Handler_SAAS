@@ -8,8 +8,9 @@ export default withAuth({
 
 export const config = {
   matcher: [
-    // /api/setup is intentionally excluded from NextAuth middleware: it does
-    // its own X-Setup-Secret check so it can be invoked before any user exists.
-    "/((?!login|api/auth|api/setup|_next|favicon.ico|manifest.json|icon-.*\\.png).*)",
+    // /api/setup and /api/db/migrate are intentionally excluded from NextAuth
+    // middleware: they do their own X-Setup-Secret check so they can be invoked
+    // before any user exists / to materialise the schema on first deploy.
+    "/((?!login|api/auth|api/setup|api/db/migrate|_next|favicon.ico|manifest.json|icon-.*\\.png).*)",
   ],
 };
