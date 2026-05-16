@@ -36,6 +36,26 @@ import { PassportField } from "@/components/helix/PassportField";
 import { iconForServiceType } from "@/lib/serviceIconMap";
 import { nextServiceState, pipStateFor } from "@/lib/serviceCycle";
 import { ChevronDown, ChevronUp } from "lucide-react";
+import { InlineNumber } from "@/components/InlineNumber";
+import { InlineSelect } from "@/components/InlineSelect";
+import { InlineTextEdit } from "@/components/InlineTextEdit";
+import {
+  FLIGHT_STATES,
+  FLIGHT_STATE_CONFIG,
+  FUEL_STATES,
+  FUEL_LABELS,
+  TOILET_STATES,
+  TOILET_LABELS,
+  SERVICE_TYPES,
+  SERVICE_LABELS,
+  type ServiceType,
+  LOST_ITEM_STATES,
+  LOST_ITEM_STATE_CONFIG,
+  LOST_ITEM_LOCATIONS,
+  LOST_ITEM_LOCATION_LABELS,
+  type LostItemLocation,
+} from "@/types";
+import { Trash2, Plus, X } from "lucide-react";
 
 // ---- State → FboState (visual) ---------------------------------------------
 const STATE_MAP: Record<string, FboState> = {
@@ -84,6 +104,14 @@ export interface VisitCardProps {
   onServiceToggle?: (serviceId: string, newState: string) => void;
   onOpenDetail?: (visitId: string) => void;
   onBadgeClick?: (term: string) => void;
+  /** Inline-edit handler. Partial update against the FlightView shape. */
+  onUpdate?: (id: string, data: Partial<Flight>) => void;
+  onAddService?: (flightId: string, type: ServiceType, customName?: string) => void;
+  onDeleteService?: (serviceId: string) => void;
+  onAddLostItem?: (flightId: string, description: string, location: string) => void;
+  onLostItemToggle?: (itemId: string, newState: string) => void;
+  onDeleteLostItem?: (itemId: string) => void;
+  onDelete?: (id: string) => void;
   readOnly?: boolean;
 }
 
@@ -97,9 +125,20 @@ export const VisitCard = memo(function VisitCard({
   onServiceToggle,
   onOpenDetail,
   onBadgeClick,
+  onUpdate,
+  onAddService,
+  onDeleteService,
+  onAddLostItem,
+  onLostItemToggle,
+  onDeleteLostItem,
+  onDelete,
   readOnly = false,
 }: VisitCardProps) {
   const [expanded, setExpanded] = useState(false);
+  const [showServicePicker, setShowServicePicker] = useState(false);
+  const [newLostDesc, setNewLostDesc] = useState("");
+  const [newLostLoc, setNewLostLoc] = useState<LostItemLocation>("AIRCRAFT");
+  const lostItems = flight.lostItems || [];
 
   const isCancelled = flight.flightCategory === "CANCELLED";
   const services = flight.services || [];
@@ -211,6 +250,7 @@ export const VisitCard = memo(function VisitCard({
           crewCount={flight.crewArrival}
           parking={flight.parking}
           cancelled={isCancelled}
+          onTimeSave={onUpdate && !readOnly ? (v) => onUpdate(flight.id, { eta: v }) : undefined}
         />
         <MovementRow
           direction="DEPARTURE"
@@ -223,6 +263,7 @@ export const VisitCard = memo(function VisitCard({
           cancelled={isCancelled}
           fuelState={fuelPip}
           toiletState={toiletPip}
+          onTimeSave={onUpdate && !readOnly ? (v) => onUpdate(flight.id, { etd: v }) : undefined}
         />
       </div>
 
@@ -257,9 +298,264 @@ export const VisitCard = memo(function VisitCard({
         </div>
       )}
 
+      {/* ─── Inline edit strip (expanded) ──────────────────────────── */}
+      {expanded && !readOnly && onUpdate && (
+        <div className="edit-strip" onClick={(e) => e.stopPropagation()}>
+          <div className="edit-group">
+            <h3 className="edit-group-title">Operación</h3>
+            <label className="edit-field">
+              <span className="edit-field-label">Estado</span>
+              <InlineSelect
+                value={normalizeFlightState(flight.state)}
+                options={FLIGHT_STATES}
+                labels={Object.fromEntries(
+                  FLIGHT_STATES.map((s) => [s, FLIGHT_STATE_CONFIG[s]?.label ?? s])
+                )}
+                onSave={(v) => onUpdate(flight.id, { state: v })}
+              />
+            </label>
+            <label className="edit-field">
+              <span className="edit-field-label">Combustible</span>
+              <InlineSelect
+                value={flight.fuelState}
+                options={FUEL_STATES}
+                labels={FUEL_LABELS}
+                onSave={(v) => {
+                  const data: Partial<Flight> & Record<string, unknown> = { fuelState: v };
+                  if (v === "REQUESTED") data.fuelRequestedAt = new Date().toISOString();
+                  if (v === "SERVED") data.fuelServedAt = new Date().toISOString();
+                  onUpdate(flight.id, data);
+                }}
+              />
+            </label>
+            <label className="edit-field">
+              <span className="edit-field-label">Lavabos</span>
+              <InlineSelect
+                value={flight.toiletState}
+                options={TOILET_STATES}
+                labels={TOILET_LABELS}
+                onSave={(v) => {
+                  const data: Partial<Flight> & Record<string, unknown> = { toiletState: v };
+                  if (v === "REQUESTED") data.toiletRequestedAt = new Date().toISOString();
+                  if (v === "COMPLETED") data.toiletCompletedAt = new Date().toISOString();
+                  onUpdate(flight.id, data);
+                }}
+              />
+            </label>
+            <label className="edit-field">
+              <span className="edit-field-label">Parking</span>
+              <InlineTextEdit
+                value={flight.parking || ""}
+                onSave={(v) => onUpdate(flight.id, { parking: v || null })}
+                placeholder="—"
+                stopPropagation
+              />
+            </label>
+            <label className="edit-field">
+              <span className="edit-field-label">TOBT</span>
+              <InlineTextEdit
+                value={flight.tobt || ""}
+                onSave={(v) => onUpdate(flight.id, { tobt: v || null })}
+                placeholder="HH:MM"
+                stopPropagation
+              />
+            </label>
+            <label className="edit-field edit-field-wide">
+              <span className="edit-field-label">Notas</span>
+              <InlineTextEdit
+                value={flight.notes || ""}
+                onSave={(v) => onUpdate(flight.id, { notes: v || null })}
+                placeholder="—"
+                stopPropagation
+              />
+            </label>
+          </div>
+          <div className="edit-group">
+            <h3 className="edit-group-title">Llegada</h3>
+            <label className="edit-field">
+              <span className="edit-field-label">Pax llegada</span>
+              <InlineNumber value={flight.paxArrival} onSave={(v) => onUpdate(flight.id, { paxArrival: v ?? 0 })} />
+            </label>
+            <label className="edit-field">
+              <span className="edit-field-label">Crew llegada</span>
+              <InlineNumber value={flight.crewArrival} onSave={(v) => onUpdate(flight.id, { crewArrival: v ?? 0 })} />
+            </label>
+            <label className="edit-field">
+              <span className="edit-field-label">Maletas bodega llegada</span>
+              <InlineNumber value={flight.paxArrBagsChecked} onSave={(v) => onUpdate(flight.id, { paxArrBagsChecked: v ?? 0 })} />
+            </label>
+            <label className="edit-field">
+              <span className="edit-field-label">Maletas cabina llegada</span>
+              <InlineNumber value={flight.paxArrBagsCabin} onSave={(v) => onUpdate(flight.id, { paxArrBagsCabin: v ?? 0 })} />
+            </label>
+          </div>
+          <div className="edit-group">
+            <h3 className="edit-group-title">Salida</h3>
+            <label className="edit-field">
+              <span className="edit-field-label">Pax salida</span>
+              <InlineNumber value={flight.paxDeparture} onSave={(v) => onUpdate(flight.id, { paxDeparture: v ?? 0 })} />
+            </label>
+            <label className="edit-field">
+              <span className="edit-field-label">Crew salida</span>
+              <InlineNumber value={flight.crewDeparture} onSave={(v) => onUpdate(flight.id, { crewDeparture: v ?? 0 })} />
+            </label>
+            <label className="edit-field">
+              <span className="edit-field-label">Maletas bodega salida</span>
+              <InlineNumber value={flight.paxDepBagsChecked} onSave={(v) => onUpdate(flight.id, { paxDepBagsChecked: v ?? 0 })} />
+            </label>
+            <label className="edit-field">
+              <span className="edit-field-label">Maletas cabina salida</span>
+              <InlineNumber value={flight.paxDepBagsCabin} onSave={(v) => onUpdate(flight.id, { paxDepBagsCabin: v ?? 0 })} />
+            </label>
+          </div>
+
+          {/* Servicios — add / remove */}
+          <div className="edit-group edit-group-wide">
+            <h3 className="edit-group-title">Servicios</h3>
+            <ul className="edit-service-list">
+              {services.map((s) => {
+                const label = s.customName || SERVICE_LABELS[s.type as ServiceType] || s.type;
+                return (
+                  <li key={s.id} className="edit-service-row">
+                    <span>{label}</span>
+                    {onDeleteService ? (
+                      <button
+                        type="button"
+                        aria-label={`Eliminar ${label}`}
+                        className="hx-btn hx-btn-ghost hx-btn-sm"
+                        onClick={() => onDeleteService(s.id)}
+                      >
+                        <X size={12} />
+                      </button>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+            {onAddService ? (
+              <div className="edit-service-add">
+                <button
+                  type="button"
+                  className="hx-btn hx-btn-ghost hx-btn-sm"
+                  onClick={() => setShowServicePicker((x) => !x)}
+                >
+                  <Plus size={12} /> Añadir servicio
+                </button>
+                {showServicePicker ? (
+                  <div className="edit-service-picker">
+                    {SERVICE_TYPES.filter((t) => t !== "CUSTOM").map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        className="hx-btn hx-btn-ghost hx-btn-sm"
+                        onClick={() => {
+                          onAddService(flight.id, t);
+                          setShowServicePicker(false);
+                        }}
+                      >
+                        {SERVICE_LABELS[t]}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+
+          {/* Lost items — add / state / remove */}
+          {(onAddLostItem || onLostItemToggle || onDeleteLostItem) && (
+            <div className="edit-group edit-group-wide">
+              <h3 className="edit-group-title">Objetos perdidos</h3>
+              <ul className="edit-service-list">
+                {lostItems.map((item) => (
+                  <li key={item.id} className="edit-service-row">
+                    <span>{item.description}</span>
+                    {onLostItemToggle ? (
+                      <select
+                        value={item.state}
+                        onChange={(e) => onLostItemToggle(item.id, e.target.value)}
+                        className="text-xs rounded border border-line bg-transparent px-1"
+                      >
+                        {LOST_ITEM_STATES.map((s) => (
+                          <option key={s} value={s}>
+                            {LOST_ITEM_STATE_CONFIG[s]?.label ?? s}
+                          </option>
+                        ))}
+                      </select>
+                    ) : null}
+                    {onDeleteLostItem ? (
+                      <button
+                        type="button"
+                        aria-label={`Eliminar ${item.description}`}
+                        className="hx-btn hx-btn-ghost hx-btn-sm"
+                        onClick={() => onDeleteLostItem(item.id)}
+                      >
+                        <X size={12} />
+                      </button>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+              {onAddLostItem ? (
+                <div className="edit-service-add">
+                  <input
+                    type="text"
+                    value={newLostDesc}
+                    onChange={(e) => setNewLostDesc(e.target.value)}
+                    placeholder="Descripción del objeto"
+                    className="rounded border border-line px-2 py-1 text-xs"
+                  />
+                  <select
+                    value={newLostLoc}
+                    onChange={(e) => setNewLostLoc(e.target.value as LostItemLocation)}
+                    className="text-xs rounded border border-line bg-transparent px-1"
+                  >
+                    {LOST_ITEM_LOCATIONS.map((l) => (
+                      <option key={l} value={l}>
+                        {LOST_ITEM_LOCATION_LABELS[l]}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    aria-label="Añadir objeto"
+                    className="hx-btn hx-btn-ghost hx-btn-sm"
+                    disabled={!newLostDesc.trim()}
+                    onClick={() => {
+                      onAddLostItem(flight.id, newLostDesc.trim(), newLostLoc);
+                      setNewLostDesc("");
+                    }}
+                  >
+                    <Plus size={12} /> Añadir objeto
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          )}
+
+          {/* Danger zone — delete flight */}
+          {onDelete ? (
+            <div className="edit-group edit-group-wide">
+              <button
+                type="button"
+                className="hx-btn hx-btn-ghost hx-btn-sm danger"
+                onClick={() => {
+                  if (window.confirm(`Eliminar vuelo ${flight.registration} (${flight.callsign})?`)) {
+                    onDelete(flight.id);
+                  }
+                }}
+              >
+                <Trash2 size={12} /> Eliminar vuelo
+              </button>
+            </div>
+          ) : null}
+        </div>
+      )}
+
       {/* ─── People strip (expanded) ──────────────────────────────── */}
       {expanded && (
         <div className="people-strip" onClick={(e) => e.stopPropagation()}>
+
           <div className="pcol">
             <div className="h">Pasajeros · {departurePax.length}</div>
             <ul>

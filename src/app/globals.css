@@ -444,6 +444,78 @@
 }
 .hx-visit-card .people-strip ul { display: flex; flex-direction: column; gap: 2px; }
 
+/* Edit strip: dense inline-edit grid inside the expanded card */
+.hx-visit-card .edit-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--s-3);
+  padding: var(--s-3) var(--s-4);
+  border-top: 1px solid var(--c-border-subtle);
+  background: var(--c-bg-subtle);
+}
+.hx-visit-card .edit-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.hx-visit-card .edit-group-wide { grid-column: 1 / -1; }
+.hx-visit-card .edit-group-title {
+  font-size: var(--t-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--c-text-muted);
+  margin-bottom: 4px;
+}
+.hx-visit-card .edit-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+  font-size: var(--t-sm);
+  padding: 2px 0;
+}
+.hx-visit-card .edit-field-wide { grid-column: span 2; }
+.hx-visit-card .edit-field-label {
+  color: var(--c-text-2);
+  font-size: var(--t-xs);
+  white-space: nowrap;
+}
+.hx-visit-card .edit-service-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 4px;
+}
+.hx-visit-card .edit-service-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+  font-size: var(--t-sm);
+}
+.hx-visit-card .edit-service-add {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  flex-wrap: wrap;
+}
+.hx-visit-card .edit-service-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: var(--s-2);
+  background: var(--c-bg);
+  border: 1px solid var(--c-border-subtle);
+  border-radius: var(--r-md);
+}
+.hx-visit-card .hx-btn.danger {
+  color: var(--c-danger);
+}
+.hx-visit-card .hx-btn.danger:hover {
+  background: var(--c-danger-tint);
+}
+
 /* State pills */
 .hx-state-pill {
   display: inline-flex;

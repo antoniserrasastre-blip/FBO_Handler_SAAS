@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@/test/rtl";
+import { describe, it, expect, vi } from "vitest";
+import { render, screen, userEvent } from "@/test/rtl";
 import { MovementRow } from "./MovementRow";
 
 const baseProps = {
@@ -70,5 +70,29 @@ describe("MovementRow", () => {
       <MovementRow direction="ARRIVAL" time="08:00" {...baseProps} airport={null} />
     );
     expect(screen.getByText("—")).toBeTruthy();
+  });
+
+  it("renders the time as static text when onTimeSave is omitted", () => {
+    render(<MovementRow direction="ARRIVAL" time="08:30" {...baseProps} />);
+    expect(screen.queryByRole("textbox")).toBeNull();
+  });
+
+  it("fires onTimeSave when the inline time editor commits a new value", async () => {
+    const onTimeSave = vi.fn();
+    render(
+      <MovementRow
+        direction="DEPARTURE"
+        time="10:30"
+        {...baseProps}
+        onTimeSave={onTimeSave}
+      />
+    );
+    // Click on the displayed time to enter edit mode
+    await userEvent.click(screen.getByText("10:30"));
+    const input = screen.getByDisplayValue("10:30");
+    await userEvent.clear(input);
+    await userEvent.type(input, "1145");
+    await userEvent.tab();
+    expect(onTimeSave).toHaveBeenCalledWith("11:45");
   });
 });

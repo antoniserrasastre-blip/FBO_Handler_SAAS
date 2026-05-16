@@ -567,7 +567,14 @@ function HomePageInner() {
                     paxSource={ppl?.paxSource || null}
                     isSelected={selectedFlightId === flight.id}
                     onSelect={setSelectedFlightId}
+                    onUpdate={handleFlightUpdate}
                     onServiceToggle={handleServiceToggle}
+                    onAddService={handleAddService}
+                    onDeleteService={handleDeleteService}
+                    onAddLostItem={handleAddLostItem}
+                    onLostItemToggle={handleLostItemToggle}
+                    onDeleteLostItem={handleDeleteLostItem}
+                    onDelete={handleDeleteFlight}
                     onBadgeClick={setSearchQuery}
                     onOpenDetail={(id) => router.push(`/dia?flight=${id}`)}
                     readOnly={false}
