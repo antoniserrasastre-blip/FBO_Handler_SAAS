@@ -74,4 +74,6 @@ EXPOSE 3000
 
 # Ejecuta la migracion V2 (idempotente) antes de arrancar Next.js.
 # Si falla, el contenedor arranca igualmente — los errores se ven en logs.
-CMD ["sh", "-c", "node scripts/migrate-v2-schema.mjs || echo '[migrate] failed, continuing'; node server.js"]
+# Ejecuta la migracion V2 antes de arrancar Next.js. Logueamos exit code y
+# arrancamos el server pase lo que pase — los errores quedan visibles en logs.
+CMD ["sh", "-c", "echo '[startup] running migration script...'; node scripts/migrate-v2-schema.mjs; echo \"[startup] migration exit code: $?\"; echo '[startup] starting Next.js server...'; exec node server.js"]
