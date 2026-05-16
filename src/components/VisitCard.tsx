@@ -37,6 +37,15 @@ import { iconForServiceType } from "@/lib/serviceIconMap";
 import { nextServiceState, pipStateFor } from "@/lib/serviceCycle";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { InlineNumber } from "@/components/InlineNumber";
+import { InlineSelect } from "@/components/InlineSelect";
+import {
+  FLIGHT_STATES,
+  FLIGHT_STATE_CONFIG,
+  FUEL_STATES,
+  FUEL_LABELS,
+  TOILET_STATES,
+  TOILET_LABELS,
+} from "@/types";
 
 // ---- State → FboState (visual) ---------------------------------------------
 const STATE_MAP: Record<string, FboState> = {
@@ -264,13 +273,86 @@ export const VisitCard = memo(function VisitCard({
       {/* ─── Inline edit strip (expanded) ──────────────────────────── */}
       {expanded && !readOnly && onUpdate && (
         <div className="edit-strip" onClick={(e) => e.stopPropagation()}>
-          <label className="edit-field">
-            <span className="edit-field-label">Pax salida</span>
-            <InlineNumber
-              value={flight.paxDeparture}
-              onSave={(v) => onUpdate(flight.id, { paxDeparture: v ?? 0 })}
-            />
-          </label>
+          <div className="edit-group">
+            <h3 className="edit-group-title">Operación</h3>
+            <label className="edit-field">
+              <span className="edit-field-label">Estado</span>
+              <InlineSelect
+                value={normalizeFlightState(flight.state)}
+                options={FLIGHT_STATES}
+                labels={Object.fromEntries(
+                  FLIGHT_STATES.map((s) => [s, FLIGHT_STATE_CONFIG[s]?.label ?? s])
+                )}
+                onSave={(v) => onUpdate(flight.id, { state: v })}
+              />
+            </label>
+            <label className="edit-field">
+              <span className="edit-field-label">Combustible</span>
+              <InlineSelect
+                value={flight.fuelState}
+                options={FUEL_STATES}
+                labels={FUEL_LABELS}
+                onSave={(v) => {
+                  const data: Partial<Flight> & Record<string, unknown> = { fuelState: v };
+                  if (v === "REQUESTED") data.fuelRequestedAt = new Date().toISOString();
+                  if (v === "SERVED") data.fuelServedAt = new Date().toISOString();
+                  onUpdate(flight.id, data);
+                }}
+              />
+            </label>
+            <label className="edit-field">
+              <span className="edit-field-label">Lavabos</span>
+              <InlineSelect
+                value={flight.toiletState}
+                options={TOILET_STATES}
+                labels={TOILET_LABELS}
+                onSave={(v) => {
+                  const data: Partial<Flight> & Record<string, unknown> = { toiletState: v };
+                  if (v === "REQUESTED") data.toiletRequestedAt = new Date().toISOString();
+                  if (v === "COMPLETED") data.toiletCompletedAt = new Date().toISOString();
+                  onUpdate(flight.id, data);
+                }}
+              />
+            </label>
+          </div>
+          <div className="edit-group">
+            <h3 className="edit-group-title">Llegada</h3>
+            <label className="edit-field">
+              <span className="edit-field-label">Pax llegada</span>
+              <InlineNumber value={flight.paxArrival} onSave={(v) => onUpdate(flight.id, { paxArrival: v ?? 0 })} />
+            </label>
+            <label className="edit-field">
+              <span className="edit-field-label">Crew llegada</span>
+              <InlineNumber value={flight.crewArrival} onSave={(v) => onUpdate(flight.id, { crewArrival: v ?? 0 })} />
+            </label>
+            <label className="edit-field">
+              <span className="edit-field-label">Maletas bodega llegada</span>
+              <InlineNumber value={flight.paxArrBagsChecked} onSave={(v) => onUpdate(flight.id, { paxArrBagsChecked: v ?? 0 })} />
+            </label>
+            <label className="edit-field">
+              <span className="edit-field-label">Maletas cabina llegada</span>
+              <InlineNumber value={flight.paxArrBagsCabin} onSave={(v) => onUpdate(flight.id, { paxArrBagsCabin: v ?? 0 })} />
+            </label>
+          </div>
+          <div className="edit-group">
+            <h3 className="edit-group-title">Salida</h3>
+            <label className="edit-field">
+              <span className="edit-field-label">Pax salida</span>
+              <InlineNumber value={flight.paxDeparture} onSave={(v) => onUpdate(flight.id, { paxDeparture: v ?? 0 })} />
+            </label>
+            <label className="edit-field">
+              <span className="edit-field-label">Crew salida</span>
+              <InlineNumber value={flight.crewDeparture} onSave={(v) => onUpdate(flight.id, { crewDeparture: v ?? 0 })} />
+            </label>
+            <label className="edit-field">
+              <span className="edit-field-label">Maletas bodega salida</span>
+              <InlineNumber value={flight.paxDepBagsChecked} onSave={(v) => onUpdate(flight.id, { paxDepBagsChecked: v ?? 0 })} />
+            </label>
+            <label className="edit-field">
+              <span className="edit-field-label">Maletas cabina salida</span>
+              <InlineNumber value={flight.paxDepBagsCabin} onSave={(v) => onUpdate(flight.id, { paxDepBagsCabin: v ?? 0 })} />
+            </label>
+          </div>
         </div>
       )}
 

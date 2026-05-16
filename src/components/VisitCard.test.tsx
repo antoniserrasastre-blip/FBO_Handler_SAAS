@@ -205,23 +205,136 @@ describe("VisitCard editing handoff", () => {
 });
 
 describe("VisitCard inline edits — counts", () => {
+  async function expandAndEdit(labelRegex: RegExp, currentValue: string, newValue: string) {
+    await userEvent.click(screen.getByText(/\d+ pax · \d+ crew/i));
+    const row = screen.getByText(labelRegex).closest("label")!;
+    await userEvent.click(within(row).getByText(currentValue));
+    const input = within(row).getByDisplayValue(currentValue);
+    await userEvent.clear(input);
+    await userEvent.type(input, newValue);
+    await userEvent.tab();
+  }
+
   it("allows editing departure pax count when expanded", async () => {
+    const onUpdate = vi.fn();
+    render(<VisitCard flight={makeFlight({ id: "v-1", paxDeparture: 4 })} onUpdate={onUpdate} />);
+    await expandAndEdit(/pax salida/i, "4", "6");
+    expect(onUpdate).toHaveBeenCalledWith("v-1", { paxDeparture: 6 });
+  });
+
+  it("allows editing arrival pax count when expanded", async () => {
+    const onUpdate = vi.fn();
+    render(<VisitCard flight={makeFlight({ id: "v-1", paxArrival: 3 })} onUpdate={onUpdate} />);
+    await expandAndEdit(/pax llegada/i, "3", "5");
+    expect(onUpdate).toHaveBeenCalledWith("v-1", { paxArrival: 5 });
+  });
+
+  it("allows editing arrival crew count when expanded", async () => {
+    const onUpdate = vi.fn();
+    render(<VisitCard flight={makeFlight({ id: "v-1", crewArrival: 2 })} onUpdate={onUpdate} />);
+    await expandAndEdit(/crew llegada/i, "2", "3");
+    expect(onUpdate).toHaveBeenCalledWith("v-1", { crewArrival: 3 });
+  });
+
+  it("allows editing departure crew count when expanded", async () => {
+    const onUpdate = vi.fn();
+    render(<VisitCard flight={makeFlight({ id: "v-1", crewDeparture: 2 })} onUpdate={onUpdate} />);
+    await expandAndEdit(/crew salida/i, "2", "3");
+    expect(onUpdate).toHaveBeenCalledWith("v-1", { crewDeparture: 3 });
+  });
+
+  it("allows editing arrival checked bags when expanded", async () => {
+    const onUpdate = vi.fn();
+    render(<VisitCard flight={makeFlight({ id: "v-1", paxArrBagsChecked: 0 })} onUpdate={onUpdate} />);
+    await expandAndEdit(/maletas bodega llegada/i, "0", "4");
+    expect(onUpdate).toHaveBeenCalledWith("v-1", { paxArrBagsChecked: 4 });
+  });
+
+  it("allows editing arrival cabin bags when expanded", async () => {
+    const onUpdate = vi.fn();
+    render(<VisitCard flight={makeFlight({ id: "v-1", paxArrBagsCabin: 0 })} onUpdate={onUpdate} />);
+    await expandAndEdit(/maletas cabina llegada/i, "0", "2");
+    expect(onUpdate).toHaveBeenCalledWith("v-1", { paxArrBagsCabin: 2 });
+  });
+
+  it("allows editing departure checked bags when expanded", async () => {
+    const onUpdate = vi.fn();
+    render(<VisitCard flight={makeFlight({ id: "v-1", paxDepBagsChecked: 0 })} onUpdate={onUpdate} />);
+    await expandAndEdit(/maletas bodega salida/i, "0", "5");
+    expect(onUpdate).toHaveBeenCalledWith("v-1", { paxDepBagsChecked: 5 });
+  });
+
+  it("allows editing departure cabin bags when expanded", async () => {
+    const onUpdate = vi.fn();
+    render(<VisitCard flight={makeFlight({ id: "v-1", paxDepBagsCabin: 0 })} onUpdate={onUpdate} />);
+    await expandAndEdit(/maletas cabina salida/i, "0", "1");
+    expect(onUpdate).toHaveBeenCalledWith("v-1", { paxDepBagsCabin: 1 });
+  });
+
+  it("allows changing the visit state from the edit strip", async () => {
+    const onUpdate = vi.fn();
+    render(<VisitCard flight={makeFlight({ id: "v-1", state: "PARKED" })} onUpdate={onUpdate} />);
+    await userEvent.click(screen.getByText(/\d+ pax · \d+ crew/i));
+    const stateRow = screen.getByText(/^estado$/i).closest("label")!;
+    const select = within(stateRow).getByRole("combobox");
+    await userEvent.selectOptions(select, "TURNAROUND");
+    expect(onUpdate).toHaveBeenCalledWith("v-1", { state: "TURNAROUND" });
+  });
+
+  it("sets fuelRequestedAt when fuel state goes to REQUESTED", async () => {
+    const onUpdate = vi.fn();
+    render(<VisitCard flight={makeFlight({ id: "v-1", fuelState: "NOT_REQUESTED" })} onUpdate={onUpdate} />);
+    await userEvent.click(screen.getByText(/\d+ pax · \d+ crew/i));
+    const row = screen.getByText(/^combustible$/i).closest("label")!;
+    await userEvent.selectOptions(within(row).getByRole("combobox"), "REQUESTED");
+    const call = onUpdate.mock.calls[0]![1] as { fuelState: string; fuelRequestedAt?: string };
+    expect(call.fuelState).toBe("REQUESTED");
+    expect(call.fuelRequestedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+
+  it("sets fuelServedAt when fuel state goes to SERVED", async () => {
+    const onUpdate = vi.fn();
+    render(<VisitCard flight={makeFlight({ id: "v-1", fuelState: "REQUESTED" })} onUpdate={onUpdate} />);
+    await userEvent.click(screen.getByText(/\d+ pax · \d+ crew/i));
+    const row = screen.getByText(/^combustible$/i).closest("label")!;
+    await userEvent.selectOptions(within(row).getByRole("combobox"), "SERVED");
+    const call = onUpdate.mock.calls[0]![1] as { fuelState: string; fuelServedAt?: string };
+    expect(call.fuelState).toBe("SERVED");
+    expect(call.fuelServedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+
+  it("sets toiletRequestedAt when toilet state goes to REQUESTED", async () => {
+    const onUpdate = vi.fn();
+    render(<VisitCard flight={makeFlight({ id: "v-1", toiletState: "NOT_REQUESTED" })} onUpdate={onUpdate} />);
+    await userEvent.click(screen.getByText(/\d+ pax · \d+ crew/i));
+    const row = screen.getByText(/^lavabos$/i).closest("label")!;
+    await userEvent.selectOptions(within(row).getByRole("combobox"), "REQUESTED");
+    const call = onUpdate.mock.calls[0]![1] as { toiletState: string; toiletRequestedAt?: string };
+    expect(call.toiletState).toBe("REQUESTED");
+    expect(call.toiletRequestedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+
+  it("sets toiletCompletedAt when toilet state goes to COMPLETED", async () => {
+    const onUpdate = vi.fn();
+    render(<VisitCard flight={makeFlight({ id: "v-1", toiletState: "REQUESTED" })} onUpdate={onUpdate} />);
+    await userEvent.click(screen.getByText(/\d+ pax · \d+ crew/i));
+    const row = screen.getByText(/^lavabos$/i).closest("label")!;
+    await userEvent.selectOptions(within(row).getByRole("combobox"), "COMPLETED");
+    const call = onUpdate.mock.calls[0]![1] as { toiletState: string; toiletCompletedAt?: string };
+    expect(call.toiletState).toBe("COMPLETED");
+    expect(call.toiletCompletedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+
+  it("hides the edit strip in readOnly mode", async () => {
     const onUpdate = vi.fn();
     render(
       <VisitCard
         flight={makeFlight({ id: "v-1", paxDeparture: 4 })}
         onUpdate={onUpdate}
+        readOnly
       />
     );
-    // Expand the card so the inline-edit strip appears
     await userEvent.click(screen.getByText(/\d+ pax · \d+ crew/i));
-    // Locate the field by its label, then the editable value inside the row
-    const row = screen.getByText(/pax salida/i).closest("label")!;
-    await userEvent.click(within(row).getByText("4"));
-    const input = within(row).getByDisplayValue("4");
-    await userEvent.clear(input);
-    await userEvent.type(input, "6");
-    await userEvent.tab();
-    expect(onUpdate).toHaveBeenCalledWith("v-1", { paxDeparture: 6 });
+    expect(screen.queryByText(/pax salida/i)).toBeNull();
   });
 });
