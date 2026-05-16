@@ -38,6 +38,7 @@ import { nextServiceState, pipStateFor } from "@/lib/serviceCycle";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { InlineNumber } from "@/components/InlineNumber";
 import { InlineSelect } from "@/components/InlineSelect";
+import { InlineTextEdit } from "@/components/InlineTextEdit";
 import {
   FLIGHT_STATES,
   FLIGHT_STATE_CONFIG,
@@ -224,6 +225,7 @@ export const VisitCard = memo(function VisitCard({
           crewCount={flight.crewArrival}
           parking={flight.parking}
           cancelled={isCancelled}
+          onTimeSave={onUpdate && !readOnly ? (v) => onUpdate(flight.id, { eta: v }) : undefined}
         />
         <MovementRow
           direction="DEPARTURE"
@@ -236,6 +238,7 @@ export const VisitCard = memo(function VisitCard({
           cancelled={isCancelled}
           fuelState={fuelPip}
           toiletState={toiletPip}
+          onTimeSave={onUpdate && !readOnly ? (v) => onUpdate(flight.id, { etd: v }) : undefined}
         />
       </div>
 
@@ -312,6 +315,33 @@ export const VisitCard = memo(function VisitCard({
                   if (v === "COMPLETED") data.toiletCompletedAt = new Date().toISOString();
                   onUpdate(flight.id, data);
                 }}
+              />
+            </label>
+            <label className="edit-field">
+              <span className="edit-field-label">Parking</span>
+              <InlineTextEdit
+                value={flight.parking || ""}
+                onSave={(v) => onUpdate(flight.id, { parking: v || null })}
+                placeholder="—"
+                stopPropagation
+              />
+            </label>
+            <label className="edit-field">
+              <span className="edit-field-label">TOBT</span>
+              <InlineTextEdit
+                value={flight.tobt || ""}
+                onSave={(v) => onUpdate(flight.id, { tobt: v || null })}
+                placeholder="HH:MM"
+                stopPropagation
+              />
+            </label>
+            <label className="edit-field edit-field-wide">
+              <span className="edit-field-label">Notas</span>
+              <InlineTextEdit
+                value={flight.notes || ""}
+                onSave={(v) => onUpdate(flight.id, { notes: v || null })}
+                placeholder="—"
+                stopPropagation
               />
             </label>
           </div>

@@ -4,6 +4,7 @@
 
 import { StatePill, type FboState } from "./Pill";
 import { ServicePip, type ServicePipState } from "./ServicePip";
+import { QuickTimeEdit } from "@/components/QuickTimeEdit";
 
 export interface MovementRowProps {
   direction: "ARRIVAL" | "DEPARTURE";
@@ -17,6 +18,8 @@ export interface MovementRowProps {
   /** Optional fuel/toilet pip slot (DEPARTURE only typically). */
   fuelState?: ServicePipState;
   toiletState?: ServicePipState;
+  /** When provided, the time becomes editable via QuickTimeEdit. */
+  onTimeSave?: (newTime: string) => void;
 }
 
 const DIR_LABEL: Record<MovementRowProps["direction"], string> = {
@@ -35,6 +38,7 @@ export function MovementRow({
   cancelled,
   fuelState,
   toiletState,
+  onTimeSave,
 }: MovementRowProps) {
   return (
     <div className={`hx-movement-row ${cancelled ? "cancelled" : ""}`}>
@@ -59,9 +63,15 @@ export function MovementRow({
         ) : null}
         {fuelState ? <ServicePip service="fuel" state={fuelState} size="sm" /> : null}
         {toiletState ? <ServicePip service="lavatory" state={toiletState} size="sm" /> : null}
-        <span className={`leg-time ${time ? "" : "placeholder"}`} style={{ minWidth: 70 }}>
-          {time || "--:--"}
-        </span>
+        {onTimeSave ? (
+          <span className="leg-time" style={{ minWidth: 70 }}>
+            <QuickTimeEdit value={time} onSave={onTimeSave} />
+          </span>
+        ) : (
+          <span className={`leg-time ${time ? "" : "placeholder"}`} style={{ minWidth: 70 }}>
+            {time || "--:--"}
+          </span>
+        )}
       </div>
     </div>
   );

@@ -325,6 +325,66 @@ describe("VisitCard inline edits — counts", () => {
     expect(call.toiletCompletedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
 
+  it("allows editing notes inline", async () => {
+    const onUpdate = vi.fn();
+    render(<VisitCard flight={makeFlight({ id: "v-1", notes: "" })} onUpdate={onUpdate} />);
+    await userEvent.click(screen.getByText(/\d+ pax · \d+ crew/i));
+    const row = screen.getByText(/^notas$/i).closest("label")!;
+    // InlineTextEdit: click empty placeholder → input
+    await userEvent.click(within(row).getByTitle(/click para editar/i));
+    const input = within(row).getByRole("textbox");
+    await userEvent.type(input, "VIP arriving late");
+    await userEvent.tab();
+    expect(onUpdate).toHaveBeenCalledWith("v-1", { notes: "VIP arriving late" });
+  });
+
+  it("allows editing parking inline", async () => {
+    const onUpdate = vi.fn();
+    render(<VisitCard flight={makeFlight({ id: "v-1", parking: "P-12" })} onUpdate={onUpdate} />);
+    await userEvent.click(screen.getByText(/\d+ pax · \d+ crew/i));
+    const row = screen.getByText(/^parking$/i).closest("label")!;
+    await userEvent.click(within(row).getByText("P-12"));
+    const input = within(row).getByRole("textbox");
+    await userEvent.clear(input);
+    await userEvent.type(input, "P-7");
+    await userEvent.tab();
+    expect(onUpdate).toHaveBeenCalledWith("v-1", { parking: "P-7" });
+  });
+
+  it("allows editing TOBT inline", async () => {
+    const onUpdate = vi.fn();
+    render(<VisitCard flight={makeFlight({ id: "v-1", tobt: null })} onUpdate={onUpdate} />);
+    await userEvent.click(screen.getByText(/\d+ pax · \d+ crew/i));
+    const row = screen.getByText(/^tobt$/i).closest("label")!;
+    await userEvent.click(within(row).getByTitle(/click para editar/i));
+    const input = within(row).getByRole("textbox");
+    await userEvent.type(input, "10:45");
+    await userEvent.tab();
+    expect(onUpdate).toHaveBeenCalledWith("v-1", { tobt: "10:45" });
+  });
+
+  it("propagates ETA edits from the ARR movement row to onUpdate", async () => {
+    const onUpdate = vi.fn();
+    render(<VisitCard flight={makeFlight({ id: "v-1", eta: "08:00" })} onUpdate={onUpdate} />);
+    await userEvent.click(screen.getByText("08:00"));
+    const input = screen.getByDisplayValue("08:00");
+    await userEvent.clear(input);
+    await userEvent.type(input, "0915");
+    await userEvent.tab();
+    expect(onUpdate).toHaveBeenCalledWith("v-1", { eta: "09:15" });
+  });
+
+  it("propagates ETD edits from the DEP movement row to onUpdate", async () => {
+    const onUpdate = vi.fn();
+    render(<VisitCard flight={makeFlight({ id: "v-1", etd: "10:30" })} onUpdate={onUpdate} />);
+    await userEvent.click(screen.getByText("10:30"));
+    const input = screen.getByDisplayValue("10:30");
+    await userEvent.clear(input);
+    await userEvent.type(input, "1145");
+    await userEvent.tab();
+    expect(onUpdate).toHaveBeenCalledWith("v-1", { etd: "11:45" });
+  });
+
   it("hides the edit strip in readOnly mode", async () => {
     const onUpdate = vi.fn();
     render(
