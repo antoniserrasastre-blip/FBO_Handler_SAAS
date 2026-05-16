@@ -36,6 +36,7 @@ import { PassportField } from "@/components/helix/PassportField";
 import { iconForServiceType } from "@/lib/serviceIconMap";
 import { nextServiceState, pipStateFor } from "@/lib/serviceCycle";
 import { ChevronDown, ChevronUp } from "lucide-react";
+import { InlineNumber } from "@/components/InlineNumber";
 
 // ---- State → FboState (visual) ---------------------------------------------
 const STATE_MAP: Record<string, FboState> = {
@@ -84,6 +85,8 @@ export interface VisitCardProps {
   onServiceToggle?: (serviceId: string, newState: string) => void;
   onOpenDetail?: (visitId: string) => void;
   onBadgeClick?: (term: string) => void;
+  /** Inline-edit handler. Partial update against the FlightView shape. */
+  onUpdate?: (id: string, data: Partial<Flight>) => void;
   readOnly?: boolean;
 }
 
@@ -97,6 +100,7 @@ export const VisitCard = memo(function VisitCard({
   onServiceToggle,
   onOpenDetail,
   onBadgeClick,
+  onUpdate,
   readOnly = false,
 }: VisitCardProps) {
   const [expanded, setExpanded] = useState(false);
@@ -257,9 +261,23 @@ export const VisitCard = memo(function VisitCard({
         </div>
       )}
 
+      {/* ─── Inline edit strip (expanded) ──────────────────────────── */}
+      {expanded && !readOnly && onUpdate && (
+        <div className="edit-strip" onClick={(e) => e.stopPropagation()}>
+          <label className="edit-field">
+            <span className="edit-field-label">Pax salida</span>
+            <InlineNumber
+              value={flight.paxDeparture}
+              onSave={(v) => onUpdate(flight.id, { paxDeparture: v ?? 0 })}
+            />
+          </label>
+        </div>
+      )}
+
       {/* ─── People strip (expanded) ──────────────────────────────── */}
       {expanded && (
         <div className="people-strip" onClick={(e) => e.stopPropagation()}>
+
           <div className="pcol">
             <div className="h">Pasajeros · {departurePax.length}</div>
             <ul>

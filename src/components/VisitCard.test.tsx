@@ -203,3 +203,25 @@ describe("VisitCard editing handoff", () => {
     expect(onOpenDetail).toHaveBeenCalledWith("v-7");
   });
 });
+
+describe("VisitCard inline edits — counts", () => {
+  it("allows editing departure pax count when expanded", async () => {
+    const onUpdate = vi.fn();
+    render(
+      <VisitCard
+        flight={makeFlight({ id: "v-1", paxDeparture: 4 })}
+        onUpdate={onUpdate}
+      />
+    );
+    // Expand the card so the inline-edit strip appears
+    await userEvent.click(screen.getByText(/\d+ pax · \d+ crew/i));
+    // Locate the field by its label, then the editable value inside the row
+    const row = screen.getByText(/pax salida/i).closest("label")!;
+    await userEvent.click(within(row).getByText("4"));
+    const input = within(row).getByDisplayValue("4");
+    await userEvent.clear(input);
+    await userEvent.type(input, "6");
+    await userEvent.tab();
+    expect(onUpdate).toHaveBeenCalledWith("v-1", { paxDeparture: 6 });
+  });
+});
