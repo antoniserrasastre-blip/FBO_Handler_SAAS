@@ -20,6 +20,10 @@ export interface MovementRowProps {
   toiletState?: ServicePipState;
   /** When provided, the time becomes editable via QuickTimeEdit. */
   onTimeSave?: (newTime: string) => void;
+  /** Scheduled date for this leg (DD/MM/YY). Only rendered if it differs from sheetDate. */
+  date?: string | null;
+  /** Operating day of the sheet this row belongs to (DD/MM/YY). */
+  sheetDate?: string | null;
 }
 
 const DIR_LABEL: Record<MovementRowProps["direction"], string> = {
@@ -39,7 +43,10 @@ export function MovementRow({
   fuelState,
   toiletState,
   onTimeSave,
+  date,
+  sheetDate,
 }: MovementRowProps) {
+  const showDate = date && date !== sheetDate;
   return (
     <div className={`hx-movement-row ${cancelled ? "cancelled" : ""}`}>
       <div className={`hx-dir-chip ${direction === "ARRIVAL" ? "hx-dir-arr" : "hx-dir-dep"}`}>
@@ -63,6 +70,11 @@ export function MovementRow({
         ) : null}
         {fuelState ? <ServicePip service="fuel" state={fuelState} size="sm" /> : null}
         {toiletState ? <ServicePip service="lavatory" state={toiletState} size="sm" /> : null}
+        {showDate ? (
+          <span className="leg-date" title="Fecha distinta del dia operativo">
+            {date}
+          </span>
+        ) : null}
         {onTimeSave ? (
           <span className="leg-time" style={{ minWidth: 70 }}>
             <QuickTimeEdit value={time} onSave={onTimeSave} />

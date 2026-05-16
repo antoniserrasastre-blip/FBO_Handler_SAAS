@@ -112,6 +112,8 @@ export interface VisitCardProps {
   onLostItemToggle?: (itemId: string, newState: string) => void;
   onDeleteLostItem?: (itemId: string) => void;
   onDelete?: (id: string) => void;
+  /** Operating-day date of the sheet (DD/MM/YY). Used to mark overnight legs. */
+  sheetDate?: string | null;
   readOnly?: boolean;
 }
 
@@ -132,6 +134,7 @@ export const VisitCard = memo(function VisitCard({
   onLostItemToggle,
   onDeleteLostItem,
   onDelete,
+  sheetDate,
   readOnly = false,
 }: VisitCardProps) {
   const [expanded, setExpanded] = useState(false);
@@ -142,6 +145,12 @@ export const VisitCard = memo(function VisitCard({
 
   const isCancelled = flight.flightCategory === "CANCELLED";
   const services = flight.services || [];
+
+  // Pernocta: use the persisted flag and fall back to date comparison so
+  // legacy data (imports before isOvernight existed) still surfaces it.
+  const isOvernight =
+    flight.isOvernight ||
+    Boolean(flight.arrivalDate && flight.departureDate && flight.arrivalDate !== flight.departureDate);
 
   const arrState = visualState(flight.state);     // FlightView surfaces a single state
   const depState = visualState(flight.state);
@@ -190,14 +199,22 @@ export const VisitCard = memo(function VisitCard({
       {/* ─── Hero ──────────────────────────────────────────────────── */}
       <div className="hero">
         <StatePill state={primaryFboState} />
-        <span style={{ fontFamily: "var(--font-mono)", fontWeight: 600, fontSize: "1.05em" }}>
+        <span
+          style={{ fontFamily: "var(--font-mono)", fontWeight: 600, fontSize: "1.05em", cursor: flight.callsign ? "copy" : "default" }}
+          onClick={(e) => {
+            if (!flight.callsign) return;
+            e.stopPropagation();
+            navigator.clipboard?.writeText(flight.callsign);
+          }}
+          title={flight.callsign ? "Click para copiar indicativo" : undefined}
+        >
           {flight.callsign || "—"}
         </span>
         <RqstChip rqstNumber={flight.rqstNumber} />
         <AircraftBadge
           registration={flight.registration}
           aircraftType={flight.aircraftType}
-          onSelectRegistration={onBadgeClick}
+          onSelectRegistration={(reg) => navigator.clipboard?.writeText(reg)}
         />
         <OperatorBadge callsign={flight.callsign} onSelect={onBadgeClick} />
 
@@ -206,7 +223,7 @@ export const VisitCard = memo(function VisitCard({
             category={(flight.flightCategory || "COMMERCIAL") as FlightCategory}
             modified={flight.modifiedFlag}
           />
-          {flight.isOvernight ? (
+          {isOvernight ? (
             <HelixPill className="hx-pill-overnight">Pernocta</HelixPill>
           ) : null}
           <PetCount count={flight.petCount || 0} />
@@ -250,6 +267,8 @@ export const VisitCard = memo(function VisitCard({
           crewCount={flight.crewArrival}
           parking={flight.parking}
           cancelled={isCancelled}
+          date={flight.arrivalDate}
+          sheetDate={sheetDate}
           onTimeSave={onUpdate && !readOnly ? (v) => onUpdate(flight.id, { eta: v }) : undefined}
         />
         <MovementRow
@@ -263,6 +282,8 @@ export const VisitCard = memo(function VisitCard({
           cancelled={isCancelled}
           fuelState={fuelPip}
           toiletState={toiletPip}
+          date={flight.departureDate}
+          sheetDate={sheetDate}
           onTimeSave={onUpdate && !readOnly ? (v) => onUpdate(flight.id, { etd: v }) : undefined}
         />
       </div>
