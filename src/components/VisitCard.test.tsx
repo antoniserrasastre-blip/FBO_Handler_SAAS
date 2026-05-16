@@ -4,6 +4,7 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen, userEvent, within } from "@/test/rtl";
 import { VisitCard } from "./VisitCard";
 import { makeFlight, makeService } from "@/test/factories";
+import type { LostItem } from "@/types/compat";
 
 describe("VisitCard hero", () => {
   it("shows the callsign and registration on the hero", () => {
@@ -383,6 +384,129 @@ describe("VisitCard inline edits — counts", () => {
     await userEvent.type(input, "1145");
     await userEvent.tab();
     expect(onUpdate).toHaveBeenCalledWith("v-1", { etd: "11:45" });
+  });
+
+  it("allows adding a service from the edit strip", async () => {
+    const onAddService = vi.fn();
+    render(
+      <VisitCard
+        flight={makeFlight({ id: "v-1" })}
+        onUpdate={vi.fn()}
+        onAddService={onAddService}
+      />
+    );
+    await userEvent.click(screen.getByText(/\d+ pax · \d+ crew/i));
+    await userEvent.click(screen.getByRole("button", { name: /añadir servicio/i }));
+    // Choose CATERING from the picker
+    await userEvent.click(screen.getByRole("button", { name: /^catering$/i }));
+    expect(onAddService).toHaveBeenCalledWith("v-1", "CATERING");
+  });
+
+  it("allows deleting a service from the edit strip", async () => {
+    const onDeleteService = vi.fn();
+    const services = [makeService({ id: "s1", type: "CATERING", state: "PENDING" })];
+    render(
+      <VisitCard
+        flight={makeFlight({ id: "v-1", services })}
+        onUpdate={vi.fn()}
+        onDeleteService={onDeleteService}
+      />
+    );
+    await userEvent.click(screen.getByText(/\d+ pax · \d+ crew/i));
+    // Find the delete button next to the CATERING entry in the edit strip
+    await userEvent.click(screen.getByRole("button", { name: /eliminar catering/i }));
+    expect(onDeleteService).toHaveBeenCalledWith("s1");
+  });
+
+  it("allows adding a lost item from the edit strip", async () => {
+    const onAddLostItem = vi.fn();
+    render(
+      <VisitCard
+        flight={makeFlight({ id: "v-1" })}
+        onUpdate={vi.fn()}
+        onAddLostItem={onAddLostItem}
+      />
+    );
+    await userEvent.click(screen.getByText(/\d+ pax · \d+ crew/i));
+    const descInput = screen.getByPlaceholderText(/descripción del objeto/i);
+    await userEvent.type(descInput, "iPad gris");
+    await userEvent.click(screen.getByRole("button", { name: /añadir objeto/i }));
+    expect(onAddLostItem).toHaveBeenCalledWith("v-1", "iPad gris", "AIRCRAFT");
+  });
+
+  it("allows toggling a lost item state from the edit strip", async () => {
+    const onLostItemToggle = vi.fn();
+    const lostItems = [
+      { id: "l1", visitId: "v-1", description: "iPad gris", location: "AIRCRAFT", state: "FOUND" } as LostItem,
+    ];
+    render(
+      <VisitCard
+        flight={makeFlight({ id: "v-1", lostItems })}
+        onUpdate={vi.fn()}
+        onLostItemToggle={onLostItemToggle}
+      />
+    );
+    await userEvent.click(screen.getByText(/\d+ pax · \d+ crew/i));
+    const row = screen.getByText("iPad gris").closest("li")!;
+    await userEvent.selectOptions(within(row).getByRole("combobox"), "CLAIMED");
+    expect(onLostItemToggle).toHaveBeenCalledWith("l1", "CLAIMED");
+  });
+
+  it("allows deleting a lost item from the edit strip", async () => {
+    const onDeleteLostItem = vi.fn();
+    const lostItems = [
+      { id: "l1", visitId: "v-1", description: "iPad gris", location: "AIRCRAFT", state: "FOUND" } as LostItem,
+    ];
+    render(
+      <VisitCard
+        flight={makeFlight({ id: "v-1", lostItems })}
+        onUpdate={vi.fn()}
+        onDeleteLostItem={onDeleteLostItem}
+      />
+    );
+    await userEvent.click(screen.getByText(/\d+ pax · \d+ crew/i));
+    await userEvent.click(screen.getByRole("button", { name: /eliminar ipad gris/i }));
+    expect(onDeleteLostItem).toHaveBeenCalledWith("l1");
+  });
+
+  it("fires onDelete with confirmation when the delete button is clicked", async () => {
+    const onDelete = vi.fn();
+    const original = window.confirm;
+    window.confirm = vi.fn(() => true);
+    try {
+      render(
+        <VisitCard
+          flight={makeFlight({ id: "v-1" })}
+          onUpdate={vi.fn()}
+          onDelete={onDelete}
+        />
+      );
+      await userEvent.click(screen.getByText(/\d+ pax · \d+ crew/i));
+      await userEvent.click(screen.getByRole("button", { name: /eliminar vuelo/i }));
+      expect(onDelete).toHaveBeenCalledWith("v-1");
+    } finally {
+      window.confirm = original;
+    }
+  });
+
+  it("does not call onDelete when the user cancels the confirmation", async () => {
+    const onDelete = vi.fn();
+    const original = window.confirm;
+    window.confirm = vi.fn(() => false);
+    try {
+      render(
+        <VisitCard
+          flight={makeFlight({ id: "v-1" })}
+          onUpdate={vi.fn()}
+          onDelete={onDelete}
+        />
+      );
+      await userEvent.click(screen.getByText(/\d+ pax · \d+ crew/i));
+      await userEvent.click(screen.getByRole("button", { name: /eliminar vuelo/i }));
+      expect(onDelete).not.toHaveBeenCalled();
+    } finally {
+      window.confirm = original;
+    }
   });
 
   it("hides the edit strip in readOnly mode", async () => {

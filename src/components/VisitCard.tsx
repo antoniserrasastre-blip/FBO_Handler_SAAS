@@ -46,7 +46,16 @@ import {
   FUEL_LABELS,
   TOILET_STATES,
   TOILET_LABELS,
+  SERVICE_TYPES,
+  SERVICE_LABELS,
+  type ServiceType,
+  LOST_ITEM_STATES,
+  LOST_ITEM_STATE_CONFIG,
+  LOST_ITEM_LOCATIONS,
+  LOST_ITEM_LOCATION_LABELS,
+  type LostItemLocation,
 } from "@/types";
+import { Trash2, Plus, X } from "lucide-react";
 
 // ---- State → FboState (visual) ---------------------------------------------
 const STATE_MAP: Record<string, FboState> = {
@@ -97,6 +106,12 @@ export interface VisitCardProps {
   onBadgeClick?: (term: string) => void;
   /** Inline-edit handler. Partial update against the FlightView shape. */
   onUpdate?: (id: string, data: Partial<Flight>) => void;
+  onAddService?: (flightId: string, type: ServiceType, customName?: string) => void;
+  onDeleteService?: (serviceId: string) => void;
+  onAddLostItem?: (flightId: string, description: string, location: string) => void;
+  onLostItemToggle?: (itemId: string, newState: string) => void;
+  onDeleteLostItem?: (itemId: string) => void;
+  onDelete?: (id: string) => void;
   readOnly?: boolean;
 }
 
@@ -111,9 +126,19 @@ export const VisitCard = memo(function VisitCard({
   onOpenDetail,
   onBadgeClick,
   onUpdate,
+  onAddService,
+  onDeleteService,
+  onAddLostItem,
+  onLostItemToggle,
+  onDeleteLostItem,
+  onDelete,
   readOnly = false,
 }: VisitCardProps) {
   const [expanded, setExpanded] = useState(false);
+  const [showServicePicker, setShowServicePicker] = useState(false);
+  const [newLostDesc, setNewLostDesc] = useState("");
+  const [newLostLoc, setNewLostLoc] = useState<LostItemLocation>("AIRCRAFT");
+  const lostItems = flight.lostItems || [];
 
   const isCancelled = flight.flightCategory === "CANCELLED";
   const services = flight.services || [];
@@ -383,6 +408,147 @@ export const VisitCard = memo(function VisitCard({
               <InlineNumber value={flight.paxDepBagsCabin} onSave={(v) => onUpdate(flight.id, { paxDepBagsCabin: v ?? 0 })} />
             </label>
           </div>
+
+          {/* Servicios — add / remove */}
+          <div className="edit-group edit-group-wide">
+            <h3 className="edit-group-title">Servicios</h3>
+            <ul className="edit-service-list">
+              {services.map((s) => {
+                const label = s.customName || SERVICE_LABELS[s.type as ServiceType] || s.type;
+                return (
+                  <li key={s.id} className="edit-service-row">
+                    <span>{label}</span>
+                    {onDeleteService ? (
+                      <button
+                        type="button"
+                        aria-label={`Eliminar ${label}`}
+                        className="hx-btn hx-btn-ghost hx-btn-sm"
+                        onClick={() => onDeleteService(s.id)}
+                      >
+                        <X size={12} />
+                      </button>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+            {onAddService ? (
+              <div className="edit-service-add">
+                <button
+                  type="button"
+                  className="hx-btn hx-btn-ghost hx-btn-sm"
+                  onClick={() => setShowServicePicker((x) => !x)}
+                >
+                  <Plus size={12} /> Añadir servicio
+                </button>
+                {showServicePicker ? (
+                  <div className="edit-service-picker">
+                    {SERVICE_TYPES.filter((t) => t !== "CUSTOM").map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        className="hx-btn hx-btn-ghost hx-btn-sm"
+                        onClick={() => {
+                          onAddService(flight.id, t);
+                          setShowServicePicker(false);
+                        }}
+                      >
+                        {SERVICE_LABELS[t]}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+
+          {/* Lost items — add / state / remove */}
+          {(onAddLostItem || onLostItemToggle || onDeleteLostItem) && (
+            <div className="edit-group edit-group-wide">
+              <h3 className="edit-group-title">Objetos perdidos</h3>
+              <ul className="edit-service-list">
+                {lostItems.map((item) => (
+                  <li key={item.id} className="edit-service-row">
+                    <span>{item.description}</span>
+                    {onLostItemToggle ? (
+                      <select
+                        value={item.state}
+                        onChange={(e) => onLostItemToggle(item.id, e.target.value)}
+                        className="text-xs rounded border border-line bg-transparent px-1"
+                      >
+                        {LOST_ITEM_STATES.map((s) => (
+                          <option key={s} value={s}>
+                            {LOST_ITEM_STATE_CONFIG[s]?.label ?? s}
+                          </option>
+                        ))}
+                      </select>
+                    ) : null}
+                    {onDeleteLostItem ? (
+                      <button
+                        type="button"
+                        aria-label={`Eliminar ${item.description}`}
+                        className="hx-btn hx-btn-ghost hx-btn-sm"
+                        onClick={() => onDeleteLostItem(item.id)}
+                      >
+                        <X size={12} />
+                      </button>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+              {onAddLostItem ? (
+                <div className="edit-service-add">
+                  <input
+                    type="text"
+                    value={newLostDesc}
+                    onChange={(e) => setNewLostDesc(e.target.value)}
+                    placeholder="Descripción del objeto"
+                    className="rounded border border-line px-2 py-1 text-xs"
+                  />
+                  <select
+                    value={newLostLoc}
+                    onChange={(e) => setNewLostLoc(e.target.value as LostItemLocation)}
+                    className="text-xs rounded border border-line bg-transparent px-1"
+                  >
+                    {LOST_ITEM_LOCATIONS.map((l) => (
+                      <option key={l} value={l}>
+                        {LOST_ITEM_LOCATION_LABELS[l]}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    aria-label="Añadir objeto"
+                    className="hx-btn hx-btn-ghost hx-btn-sm"
+                    disabled={!newLostDesc.trim()}
+                    onClick={() => {
+                      onAddLostItem(flight.id, newLostDesc.trim(), newLostLoc);
+                      setNewLostDesc("");
+                    }}
+                  >
+                    <Plus size={12} /> Añadir objeto
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          )}
+
+          {/* Danger zone — delete flight */}
+          {onDelete ? (
+            <div className="edit-group edit-group-wide">
+              <button
+                type="button"
+                className="hx-btn hx-btn-ghost hx-btn-sm danger"
+                onClick={() => {
+                  if (window.confirm(`Eliminar vuelo ${flight.registration} (${flight.callsign})?`)) {
+                    onDelete(flight.id);
+                  }
+                }}
+              >
+                <Trash2 size={12} /> Eliminar vuelo
+              </button>
+            </div>
+          ) : null}
         </div>
       )}
 
