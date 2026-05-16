@@ -242,7 +242,7 @@ function unauthorized() {
   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 }
 
-export async function POST(req: NextRequest) {
+async function runMigration(req: NextRequest) {
   const expectedSecret = process.env.SETUP_SECRET;
   if (!expectedSecret) {
     return NextResponse.json(
@@ -250,7 +250,9 @@ export async function POST(req: NextRequest) {
       { status: 500 },
     );
   }
-  const provided = req.headers.get("x-setup-secret");
+  // Accept secret via header (preferred) or query param (mobile-friendly).
+  const provided =
+    req.headers.get("x-setup-secret") || req.nextUrl.searchParams.get("secret");
   if (provided !== expectedSecret) return unauthorized();
 
   const url = process.env.TURSO_DATABASE_URL;
@@ -284,7 +286,6 @@ export async function POST(req: NextRequest) {
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         log.push(`  ✗ ${name}: ${msg}`);
-        // Surface the first conflict so the user knows to pass ?reset=v1.
         return NextResponse.json(
           {
             error: `Migration failed on ${name}: ${msg}. If this is a legacy V1 table with FKs to Flight, re-run with ?reset=v1 to drop and recreate.`,
@@ -300,4 +301,14 @@ export async function POST(req: NextRequest) {
     const msg = e instanceof Error ? e.message : String(e);
     return NextResponse.json({ error: msg, log }, { status: 500 });
   }
+}
+
+export async function POST(req: NextRequest) {
+  return runMigration(req);
+}
+
+// GET variant so the endpoint is callable from a plain Safari tab on mobile
+// (no curl, no Shortcuts). Same auth + same query params.
+export async function GET(req: NextRequest) {
+  return runMigration(req);
 }
