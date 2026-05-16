@@ -1,11 +1,22 @@
-// One-shot migration script: drops legacy V1 tables and creates V2 schema in
-// Turso. Run with TURSO_DATABASE_URL and TURSO_AUTH_TOKEN in env.
-import { createClient } from "/home/user/FBO_Handler_SAAS/node_modules/@libsql/client/node.js";
+// Migration script: drops legacy V1 tables and creates V2 schema in Turso.
+//
+// Runs automatically on container startup (CMD in Dockerfile) so every deploy
+// reconciles the live DB with the current Prisma schema. Idempotent: V1_DROPS
+// are guarded by IF EXISTS, V2_TABLES use IF NOT EXISTS.
+//
+// Skips silently if TURSO_DATABASE_URL is not set (local SQLite dev).
+// Can also be invoked standalone via:
+//   TURSO_DATABASE_URL=… TURSO_AUTH_TOKEN=… node scripts/migrate-v2-schema.mjs
+import { createClient } from "@libsql/client";
 
 const url = process.env.TURSO_DATABASE_URL;
 const authToken = process.env.TURSO_AUTH_TOKEN;
-if (!url || !authToken) {
-  console.error("Set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN");
+if (!url) {
+  console.log("[migrate] TURSO_DATABASE_URL not set — skipping (local dev mode)");
+  process.exit(0);
+}
+if (!authToken) {
+  console.error("[migrate] TURSO_DATABASE_URL is set but TURSO_AUTH_TOKEN is missing");
   process.exit(1);
 }
 
