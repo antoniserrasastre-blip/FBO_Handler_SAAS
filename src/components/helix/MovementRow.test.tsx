@@ -95,4 +95,21 @@ describe("MovementRow", () => {
     await userEvent.tab();
     expect(onTimeSave).toHaveBeenCalledWith("11:45");
   });
+
+  it("does not surface the date when it matches the operating day", () => {
+    // Same-day flights don't need a date next to HH:MM — it's redundant.
+    const { container } = render(
+      <MovementRow direction="ARRIVAL" time="08:00" date="15/05/26" sheetDate="15/05/26" {...baseProps} />
+    );
+    expect(container.textContent).not.toContain("15/05/26");
+  });
+
+  it("surfaces the date next to the time when it differs from the operating day", () => {
+    // Overnight visits: arrival happened yesterday. The handler needs to
+    // see at a glance that this leg is not from today.
+    render(
+      <MovementRow direction="ARRIVAL" time="22:00" date="14/05/26" sheetDate="15/05/26" {...baseProps} />
+    );
+    expect(screen.getByText("14/05/26")).toBeTruthy();
+  });
 });

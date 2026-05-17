@@ -516,6 +516,68 @@
   background: var(--c-danger-tint);
 }
 
+/* State-driven progress bar at the top of the visit card */
+.hx-visit-card .hx-progress-bar {
+  height: 3px;
+  width: 100%;
+  background: var(--c-bg-muted);
+  overflow: hidden;
+}
+.hx-visit-card .hx-progress-bar > div {
+  height: 100%;
+  transition: width 400ms ease-out;
+}
+
+/* Footer with last-modified info */
+.hx-visit-card .card-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 4px var(--s-4);
+  border-top: 1px solid var(--c-border-subtle);
+  background: var(--c-bg-subtle);
+}
+
+/* Date on a MovementRow that doesn't match the operating day */
+.hx-movement-row .leg-date {
+  font-size: var(--t-xs);
+  color: var(--c-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Signal pills in the hero */
+.hx-pill-note {
+  background: oklch(0.95 0.05 90);
+  color: oklch(0.30 0.12 90);
+}
+.hx-pill-lost {
+  background: var(--c-warning-tint);
+  color: var(--c-warning);
+}
+
+/* Parking compatibility surfaces */
+.hx-movement-row .parking-warning {
+  background: var(--c-warning-tint);
+  color: var(--c-warning);
+  ring: 1px solid var(--c-warning);
+}
+.hx-movement-row .parking-error {
+  background: var(--c-danger-tint);
+  color: var(--c-danger);
+  ring: 1px solid var(--c-danger);
+}
+
+/* Overdue service pip — pulsing border so it catches the eye */
+.hx-visit-card .service-pip-btn.overdue {
+  outline: 2px solid var(--c-danger);
+  outline-offset: 1px;
+  border-radius: 50%;
+  animation: hx-pulse 1.6s infinite;
+}
+@keyframes hx-pulse {
+  0%, 100% { outline-color: var(--c-danger); }
+  50% { outline-color: transparent; }
+}
+
 /* State pills */
 .hx-state-pill {
   display: inline-flex;

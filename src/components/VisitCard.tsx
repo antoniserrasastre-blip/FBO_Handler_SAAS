@@ -20,7 +20,7 @@
 "use client";
 
 import { useMemo, useState, memo } from "react";
-import type { Flight, Service, LostItem } from "@/types/compat";
+import type { Flight, Service, LostItem, EventLog } from "@/types/compat";
 import type { FlightCategory } from "@/types/v2";
 import { normalizeFlightState } from "@/types";
 import { StatePill, type FboState } from "@/components/helix/Pill";
@@ -35,7 +35,11 @@ import { PetCount } from "@/components/helix/PetCount";
 import { PassportField } from "@/components/helix/PassportField";
 import { iconForServiceType } from "@/lib/serviceIconMap";
 import { nextServiceState, pipStateFor } from "@/lib/serviceCycle";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronDown, ChevronUp, StickyNote } from "lucide-react";
+import { LostItemIcon } from "@/components/Icons";
+import { TurnaroundCountdown } from "@/components/TurnaroundCountdown";
+import { LastModifiedBadge } from "@/components/LastModifiedBadge";
+import { isServiceOverdue } from "@/lib/overdue";
 import { InlineNumber } from "@/components/InlineNumber";
 import { InlineSelect } from "@/components/InlineSelect";
 import { InlineTextEdit } from "@/components/InlineTextEdit";
@@ -73,6 +77,7 @@ function visualState(s: string): FboState {
 type FlightWithRelations = Flight & {
   services?: Service[];
   lostItems?: LostItem[];
+  eventLogs?: (EventLog & { user: { name: string } | null })[];
 };
 
 // Pax / crew records as the legacy endpoints return them
@@ -112,6 +117,8 @@ export interface VisitCardProps {
   onLostItemToggle?: (itemId: string, newState: string) => void;
   onDeleteLostItem?: (itemId: string) => void;
   onDelete?: (id: string) => void;
+  /** Operating-day date of the sheet (DD/MM/YY). Used to mark overnight legs. */
+  sheetDate?: string | null;
   readOnly?: boolean;
 }
 
@@ -132,6 +139,7 @@ export const VisitCard = memo(function VisitCard({
   onLostItemToggle,
   onDeleteLostItem,
   onDelete,
+  sheetDate,
   readOnly = false,
 }: VisitCardProps) {
   const [expanded, setExpanded] = useState(false);
@@ -142,6 +150,12 @@ export const VisitCard = memo(function VisitCard({
 
   const isCancelled = flight.flightCategory === "CANCELLED";
   const services = flight.services || [];
+
+  // Pernocta: use the persisted flag and fall back to date comparison so
+  // legacy data (imports before isOvernight existed) still surfaces it.
+  const isOvernight =
+    flight.isOvernight ||
+    Boolean(flight.arrivalDate && flight.departureDate && flight.arrivalDate !== flight.departureDate);
 
   const arrState = visualState(flight.state);     // FlightView surfaces a single state
   const depState = visualState(flight.state);
@@ -190,14 +204,23 @@ export const VisitCard = memo(function VisitCard({
       {/* ─── Hero ──────────────────────────────────────────────────── */}
       <div className="hero">
         <StatePill state={primaryFboState} />
-        <span style={{ fontFamily: "var(--font-mono)", fontWeight: 600, fontSize: "1.05em" }}>
+        <span
+          style={{ fontFamily: "var(--font-mono)", fontWeight: 600, fontSize: "1.05em", cursor: flight.callsign ? "copy" : "default" }}
+          onClick={(e) => {
+            if (!flight.callsign) return;
+            e.stopPropagation();
+            navigator.clipboard?.writeText(flight.callsign);
+          }}
+          title={flight.callsign ? "Click para copiar indicativo" : undefined}
+        >
           {flight.callsign || "—"}
         </span>
         <RqstChip rqstNumber={flight.rqstNumber} />
+        <TurnaroundCountdown eta={flight.eta} etd={flight.etd} flightState={flight.state} />
         <AircraftBadge
           registration={flight.registration}
           aircraftType={flight.aircraftType}
-          onSelectRegistration={onBadgeClick}
+          onSelectRegistration={(reg) => navigator.clipboard?.writeText(reg)}
         />
         <OperatorBadge callsign={flight.callsign} onSelect={onBadgeClick} />
 
@@ -206,7 +229,7 @@ export const VisitCard = memo(function VisitCard({
             category={(flight.flightCategory || "COMMERCIAL") as FlightCategory}
             modified={flight.modifiedFlag}
           />
-          {flight.isOvernight ? (
+          {isOvernight ? (
             <HelixPill className="hx-pill-overnight">Pernocta</HelixPill>
           ) : null}
           <PetCount count={flight.petCount || 0} />
@@ -215,6 +238,20 @@ export const VisitCard = memo(function VisitCard({
               {paxSource}
             </span>
           ) : null}
+          {flight.notes ? (
+            <span className="hx-pill hx-pill-note" title={flight.notes}>
+              <StickyNote size={10} /> Nota
+            </span>
+          ) : null}
+          {(() => {
+            const pending = (flight.lostItems || []).filter((li) => li.state !== "DELIVERED").length;
+            if (pending === 0) return null;
+            return (
+              <span className="hx-pill hx-pill-lost" title={`${pending} objeto${pending !== 1 ? "s" : ""} pendiente${pending !== 1 ? "s" : ""}`}>
+                <LostItemIcon size={10} /> {pending} objeto{pending !== 1 ? "s" : ""}
+              </span>
+            );
+          })()}
         </div>
 
         <div className="spacer" />
@@ -239,6 +276,17 @@ export const VisitCard = memo(function VisitCard({
         ) : null}
       </div>
 
+      {/* ─── Progress bar (state-driven) ──────────────────────────── */}
+      {(() => {
+        const cfg = FLIGHT_STATE_CONFIG[normalizeFlightState(flight.state)];
+        const pct = Math.max(cfg?.progress ?? 0, 2);
+        return (
+          <div className="hx-progress-bar" aria-hidden="true">
+            <div style={{ width: `${pct}%`, backgroundColor: cfg?.color }} />
+          </div>
+        );
+      })()}
+
       {/* ─── Body: two MovementRow ────────────────────────────────── */}
       <div className="hx-visit-timeline">
         <MovementRow
@@ -249,7 +297,10 @@ export const VisitCard = memo(function VisitCard({
           paxCount={flight.paxArrival}
           crewCount={flight.crewArrival}
           parking={flight.parking}
+          aircraftType={flight.aircraftType}
           cancelled={isCancelled}
+          date={flight.arrivalDate}
+          sheetDate={sheetDate}
           onTimeSave={onUpdate && !readOnly ? (v) => onUpdate(flight.id, { eta: v }) : undefined}
         />
         <MovementRow
@@ -260,9 +311,12 @@ export const VisitCard = memo(function VisitCard({
           paxCount={flight.paxDeparture}
           crewCount={flight.crewDeparture}
           parking={flight.parking}
+          aircraftType={flight.aircraftType}
           cancelled={isCancelled}
           fuelState={fuelPip}
           toiletState={toiletPip}
+          date={flight.departureDate}
+          sheetDate={sheetDate}
           onTimeSave={onUpdate && !readOnly ? (v) => onUpdate(flight.id, { etd: v }) : undefined}
         />
       </div>
@@ -270,26 +324,30 @@ export const VisitCard = memo(function VisitCard({
       {/* ─── Services strip ────────────────────────────────────────── */}
       {services.length > 0 && (
         <div className="services-strip">
-          {services.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              disabled={readOnly}
-              onClick={(e) => {
-                e.stopPropagation();
-                if (!onServiceToggle) return;
-                onServiceToggle(s.id, nextServiceState(s.state));
-              }}
-              style={{ background: "transparent", border: 0, padding: 0, cursor: readOnly ? "default" : "pointer" }}
-              title={`${s.customName || s.type}${s.reference ? ` · #${s.reference}` : ""}${s.target ? ` · ${s.target}` : ""}`}
-            >
-              <ServicePip
-                service={iconForServiceType(s.type)}
-                state={pipStateFor(s.state)}
-                size="sm"
-              />
-            </button>
-          ))}
+          {services.map((s) => {
+            const overdue = isServiceOverdue(s);
+            return (
+              <button
+                key={s.id}
+                type="button"
+                disabled={readOnly}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!onServiceToggle) return;
+                  onServiceToggle(s.id, nextServiceState(s.state));
+                }}
+                className={overdue ? "service-pip-btn overdue" : "service-pip-btn"}
+                style={{ background: "transparent", border: 0, padding: 0, cursor: readOnly ? "default" : "pointer" }}
+                title={`${s.customName || s.type}${s.reference ? ` · #${s.reference}` : ""}${s.target ? ` · ${s.target}` : ""}${overdue ? " · ¡Retrasado!" : ""}`}
+              >
+                <ServicePip
+                  service={iconForServiceType(s.type)}
+                  state={pipStateFor(s.state)}
+                  size="sm"
+                />
+              </button>
+            );
+          })}
           {services.length > 0 ? (
             <span className="text-xs text-ink-muted ml-2">
               {services.filter((s) => s.state === "DELIVERED").length}/{services.length} servidos
@@ -593,6 +651,13 @@ export const VisitCard = memo(function VisitCard({
           </div>
         </div>
       )}
+
+      {/* ─── Footer: last modified ───────────────────────────────── */}
+      {flight.eventLogs && flight.eventLogs.length > 0 ? (
+        <div className="card-footer" onClick={(e) => e.stopPropagation()}>
+          <LastModifiedBadge log={flight.eventLogs[0]} />
+        </div>
+      ) : null}
     </article>
   );
 });
