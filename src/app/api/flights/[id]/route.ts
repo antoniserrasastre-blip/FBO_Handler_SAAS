@@ -15,8 +15,8 @@ import { palmaDayUtc } from "@/lib/time";
 
 const ALLOWED_FLIGHT_PATCH_FIELDS = new Set([
   "callsign", "registration", "aircraftType",
-  "origin", "eta", "arrivalDate",
-  "destination", "etd", "departureDate",
+  "origin", "eta", "ata", "arrivalDate",
+  "destination", "etd", "atd", "departureDate",
   "parking", "tobt",
   "state", "isOvernight",
   "crewArrival", "crewArrivalReal", "paxArrival", "paxArrivalReal",

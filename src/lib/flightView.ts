@@ -120,8 +120,8 @@ export function toFlightView(visit: VisitWithMovements): FlightView {
 
     services: visit.services as FlightViewService[] | undefined,
     lostItems: visit.lostItems as FlightViewLostItem[] | undefined,
-    ata: null,
-    atd: null,
+    ata: (arr?.ata as string | null) ?? null,
+    atd: (dep?.atd as string | null) ?? null,
     livePhase: null,
     liveLastSeenAt: null,
     liveOnGround: null,
@@ -152,6 +152,7 @@ export function routeFieldToMovement(
   const arrivalMap: Record<string, string> = {
     origin: "origin",
     eta: "eta",
+    ata: "ata",
     arrivalDate: "__scheduledDate",
     crewArrival: "crewCount",
     crewArrivalReal: "crewCountReal",
@@ -171,6 +172,7 @@ export function routeFieldToMovement(
   const departureMap: Record<string, string> = {
     destination: "destination",
     etd: "etd",
+    atd: "atd",
     departureDate: "__scheduledDate",
     callsign: "callsign",
     parking: "parking",

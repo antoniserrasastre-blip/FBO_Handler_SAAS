@@ -98,6 +98,8 @@ model Movement {
   // Zulu (UTC) times as HH:MM (kept as string for parity with current PDF format)
   eta         String?  // only on ARRIVAL
   etd         String?  // only on DEPARTURE
+  ata         String?  // actual time of arrival (handler override, HH:MM Zulu)
+  atd         String?  // actual time of departure (handler override, HH:MM Zulu)
 
   parking     String?
   tobt        String?
