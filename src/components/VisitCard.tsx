@@ -117,6 +117,8 @@ export interface VisitCardProps {
   onLostItemToggle?: (itemId: string, newState: string) => void;
   onDeleteLostItem?: (itemId: string) => void;
   onDelete?: (id: string) => void;
+  /** Opens the PassengerCrewModal in the parent for a given direction. */
+  onOpenPeople?: (visitId: string, direction: "ARRIVAL" | "DEPARTURE") => void;
   /** Operating-day date of the sheet (DD/MM/YY). Used to mark overnight legs. */
   sheetDate?: string | null;
   readOnly?: boolean;
@@ -139,6 +141,7 @@ export const VisitCard = memo(function VisitCard({
   onLostItemToggle,
   onDeleteLostItem,
   onDelete,
+  onOpenPeople,
   sheetDate,
   readOnly = false,
 }: VisitCardProps) {
@@ -610,45 +613,25 @@ export const VisitCard = memo(function VisitCard({
         </div>
       )}
 
-      {/* ─── People strip (expanded) ──────────────────────────────── */}
+      {/* ─── People strip (expanded) — ARR + DEP sections ───────────── */}
       {expanded && (
         <div className="people-strip" onClick={(e) => e.stopPropagation()}>
-
-          <div className="pcol">
-            <div className="h">Pasajeros · {departurePax.length}</div>
-            <ul>
-              {departurePax.length === 0 && (
-                <li className="text-xs italic text-ink-muted">Sin datos importados.</li>
-              )}
-              {departurePax.map((p) => (
-                <li key={p.id} className="flex items-center gap-2">
-                  <span className="text-ink-1">{p.fullName}</span>
-                  {p.status === "NO_SHOW" ? (
-                    <HelixPill tone="danger">no-show</HelixPill>
-                  ) : null}
-                  {p.status === "ADDED" ? (
-                    <HelixPill tone="info">añadido</HelixPill>
-                  ) : null}
-                  <PassportField value={p.passportNumber} source={paxSource} size="sm" />
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div className="pcol">
-            <div className="h">Tripulación · {departureCrew.length}</div>
-            <ul>
-              {departureCrew.length === 0 && (
-                <li className="text-xs italic text-ink-muted">Sin tripulación.</li>
-              )}
-              {departureCrew.map((c) => (
-                <li key={c.id} className="flex items-center gap-2">
-                  <span className="text-ink-1">{c.fullName}</span>
-                  <HelixPill tone="brand">{roleLabel(c.role)}</HelixPill>
-                  <PassportField value={c.passportNumber} source={paxSource} size="sm" />
-                </li>
-              ))}
-            </ul>
-          </div>
+          <PeopleSection
+            direction="ARRIVAL"
+            title="Llegada"
+            passengers={arrivalPaxDep}
+            crew={arrivalCrew}
+            paxSource={paxSource}
+            onEdit={onOpenPeople ? () => onOpenPeople(flight.id, "ARRIVAL") : undefined}
+          />
+          <PeopleSection
+            direction="DEPARTURE"
+            title="Salida"
+            passengers={departurePax}
+            crew={departureCrew}
+            paxSource={paxSource}
+            onEdit={onOpenPeople ? () => onOpenPeople(flight.id, "DEPARTURE") : undefined}
+          />
         </div>
       )}
 
@@ -667,4 +650,66 @@ function roleLabel(role: string): string {
   if (role === "FIRST_OFFICER") return "SIC";
   if (role === "CABIN_CREW") return "FA";
   return role;
+}
+
+interface PeopleSectionProps {
+  direction: "ARRIVAL" | "DEPARTURE";
+  title: string;
+  passengers: PaxLite[];
+  crew: CrewLite[];
+  paxSource: string | null | undefined;
+  onEdit?: () => void;
+}
+
+function PeopleSection({ direction, title, passengers, crew, paxSource, onEdit }: PeopleSectionProps) {
+  const directionEs = direction === "ARRIVAL" ? "llegada" : "salida";
+  return (
+    <div className="people-section">
+      <div className="people-section-header">
+        <h3 className="people-section-title">{title}</h3>
+        {onEdit ? (
+          <button
+            type="button"
+            aria-label={`Editar personas ${directionEs}`}
+            className="hx-btn hx-btn-ghost hx-btn-sm"
+            onClick={onEdit}
+          >
+            Editar
+          </button>
+        ) : null}
+      </div>
+      <div className="pcol">
+        <div className="h">Pasajeros · {passengers.length}</div>
+        <ul>
+          {passengers.length === 0 && (
+            <li className="text-xs italic text-ink-muted">Sin datos importados.</li>
+          )}
+          {passengers.map((p) => (
+            <li key={p.id} className="flex items-center gap-2">
+              <span className="text-ink-1">{p.fullName}</span>
+              {p.status === "NO_SHOW" ? <HelixPill tone="danger">no-show</HelixPill> : null}
+              {p.status === "ADDED" ? <HelixPill tone="info">añadido</HelixPill> : null}
+              {p.verified ? <HelixPill tone="success">verificado</HelixPill> : null}
+              <PassportField value={p.passportNumber} source={paxSource} size="sm" />
+            </li>
+          ))}
+        </ul>
+      </div>
+      <div className="pcol">
+        <div className="h">Tripulación · {crew.length}</div>
+        <ul>
+          {crew.length === 0 && (
+            <li className="text-xs italic text-ink-muted">Sin tripulación.</li>
+          )}
+          {crew.map((c) => (
+            <li key={c.id} className="flex items-center gap-2">
+              <span className="text-ink-1">{c.fullName}</span>
+              <HelixPill tone="brand">{roleLabel(c.role)}</HelixPill>
+              <PassportField value={c.passportNumber} source={paxSource} size="sm" />
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
 }

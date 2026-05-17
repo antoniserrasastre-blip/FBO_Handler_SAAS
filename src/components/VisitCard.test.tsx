@@ -331,6 +331,34 @@ describe("VisitCard urgency + audit", () => {
   });
 });
 
+describe("VisitCard people editor handoff", () => {
+  it("offers an arrival people editor that fires onOpenPeople with direction ARRIVAL", async () => {
+    const onOpenPeople = vi.fn();
+    render(
+      <VisitCard
+        flight={makeFlight({ id: "v-1" })}
+        onOpenPeople={onOpenPeople}
+      />
+    );
+    await userEvent.click(screen.getByText(/\d+ pax · \d+ crew/i));
+    await userEvent.click(screen.getByRole("button", { name: /editar personas llegada/i }));
+    expect(onOpenPeople).toHaveBeenCalledWith("v-1", "ARRIVAL");
+  });
+
+  it("offers a departure people editor that fires onOpenPeople with direction DEPARTURE", async () => {
+    const onOpenPeople = vi.fn();
+    render(
+      <VisitCard
+        flight={makeFlight({ id: "v-1" })}
+        onOpenPeople={onOpenPeople}
+      />
+    );
+    await userEvent.click(screen.getByText(/\d+ pax · \d+ crew/i));
+    await userEvent.click(screen.getByRole("button", { name: /editar personas salida/i }));
+    expect(onOpenPeople).toHaveBeenCalledWith("v-1", "DEPARTURE");
+  });
+});
+
 describe("VisitCard editing handoff", () => {
   it("offers an Editar button that routes to the detail panel", async () => {
     const onOpenDetail = vi.fn();

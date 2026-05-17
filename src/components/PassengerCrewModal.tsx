@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Passenger, CrewMember } from "@/types/compat";
 import { Modal } from "./Modal";
 import { CloseIcon } from "./Icons";
+import { GenDecPasteSection } from "./GenDecPasteSection";
 import {
   PASSENGER_STATUS_CONFIG,
   PassengerStatus,
@@ -170,9 +171,70 @@ export function PassengerCrewModal({ isOpen, onClose, flightId, direction, fligh
             {noShowPax > 0 ? `, ${noShowPax} no-show` : ""}
             {addedPax > 0 ? `, ${addedPax} anadidos` : ""}
           </div>
+
+          {/* Import affordances — GenDec paste + NetJets ALS */}
+          <NetJetsImportButton flightId={flightId} direction={direction} onImported={fetchData} />
+          <GenDecPasteSection flightId={flightId} direction={direction} onImported={fetchData} />
         </div>
       )}
     </Modal>
+  );
+}
+
+// --- NetJets PAX import button -------------------------------------------
+// Posts the visitId + direction to /api/import/netjets-pax which calls the
+// pdf-microservice and persists Passenger[] + CrewAssignment. The button only
+// shows when the visit's callsign hints at NetJets (NJE/NJA/EJM).
+
+function NetJetsImportButton({
+  flightId,
+  direction,
+  onImported,
+}: {
+  flightId: string;
+  direction: "ARRIVAL" | "DEPARTURE";
+  onImported: () => void;
+}) {
+  const [importing, setImporting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleImport() {
+    setError(null);
+    setImporting(true);
+    try {
+      const res = await fetch(`/api/import/netjets-pax`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ visitId: flightId, direction }),
+      });
+      if (res.ok) {
+        onImported();
+      } else {
+        const body = await res.json().catch(() => ({}));
+        setError(body.error || "No se pudo importar desde NetJets");
+      }
+    } catch {
+      setError("Sin conexión — importación NetJets fallida");
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  return (
+    <div className="rounded-md border border-line bg-bg-subtle px-3 py-2 text-xs">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-ink-2">Importar PAX desde NetJets ALS</span>
+        <button
+          type="button"
+          onClick={handleImport}
+          disabled={importing}
+          className="rounded bg-brand px-2 py-1 text-[11px] font-semibold text-white hover:bg-brand-hover disabled:opacity-50"
+        >
+          {importing ? "Importando…" : "Importar PAX"}
+        </button>
+      </div>
+      {error ? <p className="mt-1 text-danger-strong">{error}</p> : null}
+    </div>
   );
 }
 

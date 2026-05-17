@@ -443,6 +443,25 @@
   margin-bottom: 4px;
 }
 .hx-visit-card .people-strip ul { display: flex; flex-direction: column; gap: 2px; }
+.hx-visit-card .people-section {
+  flex: 1 1 320px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+.hx-visit-card .people-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+}
+.hx-visit-card .people-section-title {
+  font-size: var(--t-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--c-text-muted);
+}
 
 /* Edit strip: dense inline-edit grid inside the expanded card */
 .hx-visit-card .edit-strip {
