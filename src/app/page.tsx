@@ -15,6 +15,7 @@ import { SearchBar } from "@/components/SearchBar";
 import { ShortcutsHelp } from "@/components/ShortcutsHelp";
 import { PendingServicesPanel } from "@/components/PendingServicesPanel";
 import { QuickAddFlight } from "@/components/QuickAddFlight";
+import { PassengerCrewModal } from "@/components/PassengerCrewModal";
 import { useOverdueAlert } from "@/hooks/useOverdueAlert";
 import { Volume2, VolumeX, FileCheck2, Printer } from "lucide-react";
 import { ShiftHandover } from "@/components/ShiftHandover";
@@ -61,6 +62,7 @@ function HomePageInner() {
   const [searchQuery, setSearchQuery] = useState("");
   const [soundEnabled, setSoundEnabled] = useState(false);
   const [showHandover, setShowHandover] = useState(false);
+  const [peopleModal, setPeopleModal] = useState<{ visitId: string; direction: "ARRIVAL" | "DEPARTURE" } | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(true);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -577,6 +579,7 @@ function HomePageInner() {
                     onDelete={handleDeleteFlight}
                     onBadgeClick={setSearchQuery}
                     onOpenDetail={(id) => router.push(`/dia?flight=${id}`)}
+                    onOpenPeople={(visitId, direction) => setPeopleModal({ visitId, direction })}
                     readOnly={false}
                   />
                 </div>
@@ -588,6 +591,23 @@ function HomePageInner() {
 
       <ShortcutsHelp isOpen={showShortcuts} onClose={() => setShowShortcuts(false)} />
       <ShiftHandover isOpen={showHandover} onClose={() => setShowHandover(false)} flights={flights} date={date} />
+      {peopleModal ? (
+        (() => {
+          const visit = flights.find((f) => f.id === peopleModal.visitId);
+          return (
+            <PassengerCrewModal
+              isOpen
+              onClose={() => {
+                setPeopleModal(null);
+                fetchFlights();
+              }}
+              flightId={peopleModal.visitId}
+              direction={peopleModal.direction}
+              flightLabel={visit ? `${visit.callsign} (${visit.registration})` : ""}
+            />
+          );
+        })()
+      ) : null}
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
