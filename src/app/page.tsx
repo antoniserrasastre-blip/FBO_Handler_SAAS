@@ -472,7 +472,7 @@ function HomePageInner() {
         </StatBand>
       )}
 
-      {isToday && <TurnaroundAlerts flights={flights} />}
+      {isToday && <TurnaroundAlerts flights={flights} referenceDate={date} />}
 
       <PendingServicesPanel flights={flights} onQuickFilter={setSearchQuery} />
 
