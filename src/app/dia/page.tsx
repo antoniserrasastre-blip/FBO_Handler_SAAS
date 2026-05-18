@@ -242,8 +242,10 @@ function DiaPageInner() {
                 const atd = deriveATD(fLite);
                 const dotCls = STATE_DOT_CLASS[f.state] ?? "bg-gray-300";
                 const sheetDay = shortDate(date);
-                const arrDayLabel = f.arrivalDate && f.arrivalDate.slice(0, 5) !== sheetDay ? f.arrivalDate.slice(0, 5) : "";
-                const depDayLabel = f.departureDate && f.departureDate.slice(0, 5) !== sheetDay ? f.departureDate.slice(0, 5) : "";
+                const arrDayLabel = f.arrivalDate ? f.arrivalDate.slice(0, 5) : "";
+                const depDayLabel = f.departureDate ? f.departureDate.slice(0, 5) : "";
+                const arrDayIsOther = arrDayLabel !== "" && arrDayLabel !== sheetDay;
+                const depDayIsOther = depDayLabel !== "" && depDayLabel !== sheetDay;
 
                 const isCancelled = f.flightCategory === "CANCELLED";
                 return (
@@ -277,7 +279,7 @@ function DiaPageInner() {
                     <td className={`border-b border-line-subtle px-2 py-1.5 text-center ${arrCellCls || "text-ink-2"}`}>
                       {f.origin}
                     </td>
-                    <td className={`border-b border-line-subtle px-1 py-1.5 text-center text-xs ${arrCellCls || (arrDayLabel ? "text-ink-2 font-semibold" : "text-ink-disabled")}`}>
+                    <td className={`border-b border-line-subtle px-1 py-1.5 text-center text-xs ${arrCellCls || (arrDayIsOther ? "text-ink-2 font-semibold" : arrDayLabel ? "text-ink-3" : "text-ink-disabled")}`}>
                       {arrDayLabel || "—"}
                     </td>
                     <td className={`border-b border-line-subtle px-2 py-1.5 text-center font-semibold ${arrCellCls || "text-ink-1"}`}>
@@ -348,7 +350,7 @@ function DiaPageInner() {
                     <td className={`border-b border-line-subtle px-2 py-1.5 text-center ${depCellCls || "text-ink-2"}`}>
                       {f.destination}
                     </td>
-                    <td className={`border-b border-line-subtle px-1 py-1.5 text-center text-xs ${depCellCls || (depDayLabel ? "text-ink-2 font-semibold" : "text-ink-disabled")}`}>
+                    <td className={`border-b border-line-subtle px-1 py-1.5 text-center text-xs ${depCellCls || (depDayIsOther ? "text-ink-2 font-semibold" : depDayLabel ? "text-ink-3" : "text-ink-disabled")}`}>
                       {depDayLabel || "—"}
                     </td>
                     <td className={`border-b border-line-subtle px-2 py-1.5 text-center font-semibold ${depCellCls || "text-ink-1"}`}>
