@@ -94,7 +94,16 @@ function HomePageInner() {
       const res = await fetch(`/api/flights?date=${dateStr}&include=people`);
       if (res.ok) {
         const data = await res.json();
-        setFlights(data.flights);
+        // Lista = operaciones del día. Ocultamos visits cuyo arrivalDate y
+        // departureDate no coincidan con el día seleccionado (p. ej. pernoctas
+        // en su día intermedio sin movimiento, u órfanos sin fechas).
+        const dayStr = shortDate(date);
+        const todayOnly = (data.flights as FlightWithRelations[]).filter((f) => {
+          const arr = f.arrivalDate ? f.arrivalDate.slice(0, 5) : null;
+          const dep = f.departureDate ? f.departureDate.slice(0, 5) : null;
+          return arr === dayStr || dep === dayStr;
+        });
+        setFlights(todayOnly);
         setPeople(data.people || {});
       }
     } catch (err) {
