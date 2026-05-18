@@ -23,6 +23,7 @@ import { detectParkingConflicts } from "@/lib/parkingConflicts";
 import { HelixButton, Stat, StatBand, useDate } from "@/components/helix";
 
 import { dateToSqlString } from "@/lib/time";
+import { shortDate } from "@/app/dia/diaHelpers";
 
 export const dynamic = "force-dynamic";
 
@@ -564,6 +565,7 @@ function HomePageInner() {
                 <div key={flight.id} id={`flight-${flight.id}`}>
                   <VisitCard
                     flight={flight}
+                    sheetDate={shortDate(date)}
                     passengers={ppl?.passengers || []}
                     crew={ppl?.crew || []}
                     paxSource={ppl?.paxSource || null}

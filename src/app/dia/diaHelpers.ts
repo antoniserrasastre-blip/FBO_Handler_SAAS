@@ -112,10 +112,11 @@ export function departureSegmentState(
   return "today-pending";
 }
 
-/** Clases de fondo+texto para cada estado de segmento (highlighter style). */
+/** Clases de fondo+texto para cada estado de segmento (highlighter style).
+ *  past y future comparten gris flojo: ambos son "día distinto del visualizado". */
 export const SEGMENT_CELL_CLASS: Record<SegmentState, string> = {
   "past":          "bg-slate-100 text-slate-500",
-  "future":        "bg-indigo-50 text-indigo-700",
+  "future":        "bg-slate-100 text-slate-500",
   "today-pending": "",
   "today-overdue": "bg-red-100 text-red-800",
   "today-done":    "bg-emerald-50 text-emerald-800",

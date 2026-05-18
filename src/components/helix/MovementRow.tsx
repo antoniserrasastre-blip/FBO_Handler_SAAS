@@ -69,7 +69,10 @@ export function MovementRow({
     return { cls, title };
   })();
   return (
-    <div className={`hx-movement-row ${cancelled ? "cancelled" : ""}`}>
+    <div
+      className={`hx-movement-row ${cancelled ? "cancelled" : ""} ${showDate ? "other-day" : ""}`}
+      title={showDate ? `Día distinto del operativo (${date})` : undefined}
+    >
       <div className={`hx-dir-chip ${direction === "ARRIVAL" ? "hx-dir-arr" : "hx-dir-dep"}`}>
         {direction === "ARRIVAL" ? "ARR" : "DEP"}
       </div>

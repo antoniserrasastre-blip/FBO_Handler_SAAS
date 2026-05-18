@@ -332,6 +332,12 @@
 }
 .hx-movement-row:first-child { border-top: 0; }
 .hx-movement-row.cancelled { opacity: 0.55; }
+.hx-movement-row.other-day {
+  background: var(--c-bg-muted);
+  color: var(--c-text-3);
+}
+.hx-movement-row.other-day .leg-route .airport,
+.hx-movement-row.other-day .leg-time { color: var(--c-text-2); }
 .hx-movement-row .leg-time {
   font-family: var(--font-mono);
   font-size: var(--t-2xl);
