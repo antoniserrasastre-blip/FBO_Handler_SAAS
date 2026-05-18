@@ -19,6 +19,8 @@ export interface FlightLike {
   state: string;
   eta?: string | null;
   etd?: string | null;
+  ata?: string | null;
+  atd?: string | null;
   isOvernight?: boolean | null;
   fuelState?: string | null;
   toiletState?: string | null;
@@ -95,9 +97,14 @@ export function suggestNextState(
   const state = normalizeFlightState(flight.state);
   const arrivalDone = isArrivalComplete(flight, services);
 
+  // ATD fijado ⇒ el avión se ha ido, salta directo a OFF_BLOCKS sea cual sea
+  // el estado intermedio. Permite que poner ATD en /dia cierre el ciclo.
+  if (flight.atd && state !== "OFF_BLOCKS") return "OFF_BLOCKS";
+
   switch (state) {
     case "EXPECTED": {
       const arrivalTouched =
+        Boolean(flight.ata) ||
         (flight.fuelState && flight.fuelState !== "NOT_REQUESTED") ||
         (flight.toiletState && flight.toiletState !== "NOT_REQUESTED") ||
         (flight.paxArrState && flight.paxArrState !== "IN_AIRCRAFT");

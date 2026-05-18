@@ -37,6 +37,10 @@ type FlightWithRelations = Flight & {
 
 type PipState = "ok" | "req" | "no" | "hide";
 
+function nowHHMM(): string {
+  return new Date().toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+}
+
 function fuelPip(state: string | null | undefined): PipState {
   if (!state || state === "NONE") return "hide";
   if (state === "SERVED" || state === "DELIVERED" || state === "COMPLETED") return "ok";
@@ -141,13 +145,21 @@ function DiaPageInner() {
   const cycleFuel = useCallback(async (f: FlightWithRelations) => {
     const next =
       f.fuelState === "NOT_REQUESTED" ? "REQUESTED" : f.fuelState === "REQUESTED" ? "SERVED" : "NOT_REQUESTED";
-    patchFlight(f.id, { fuelState: next });
+    const data: Partial<Flight> & Record<string, unknown> = { fuelState: next };
+    const stamp = nowHHMM();
+    if (next === "REQUESTED") data.fuelRequestedAt = stamp;
+    if (next === "SERVED") data.fuelServedAt = stamp;
+    patchFlight(f.id, data);
   }, [patchFlight]);
 
   const cycleToilet = useCallback(async (f: FlightWithRelations) => {
     const next =
       f.toiletState === "NOT_REQUESTED" ? "REQUESTED" : f.toiletState === "REQUESTED" ? "COMPLETED" : "NOT_REQUESTED";
-    patchFlight(f.id, { toiletState: next });
+    const data: Partial<Flight> & Record<string, unknown> = { toiletState: next };
+    const stamp = nowHHMM();
+    if (next === "REQUESTED") data.toiletRequestedAt = stamp;
+    if (next === "COMPLETED") data.toiletCompletedAt = stamp;
+    patchFlight(f.id, data);
   }, [patchFlight]);
 
   const cycleCateringService = useCallback(async (f: FlightWithRelations) => {
@@ -366,13 +378,17 @@ function DiaPageInner() {
                       />
                     </td>
 
-                    {/* PAX / CREW */}
+                    {/* PAX / CREW — prioriza el valor real (GenDec/paste) sobre el estimado */}
                     <td className="whitespace-nowrap border-b border-l border-line-subtle px-2 py-1.5 text-center">
                       <span className="inline-flex items-center gap-1.5">
                         <span>
-                          <span className="text-ink-1">{f.paxArrival}·{f.paxDeparture}</span>
+                          <PaxCrewNumber real={f.paxArrivalReal} est={f.paxArrival} tone="ink-1" />
+                          <span className="text-ink-disabled">·</span>
+                          <PaxCrewNumber real={f.paxDepartureReal} est={f.paxDeparture} tone="ink-1" />
                           <span className="mx-1.5 text-ink-disabled">/</span>
-                          <span className="text-ink-3">{f.crewArrival}·{f.crewDeparture}</span>
+                          <PaxCrewNumber real={f.crewArrivalReal} est={f.crewArrival} tone="ink-3" />
+                          <span className="text-ink-disabled">·</span>
+                          <PaxCrewNumber real={f.crewDepartureReal} est={f.crewDeparture} tone="ink-3" />
                         </span>
                         <PetCount count={f.petCount || 0} />
                       </span>
@@ -411,6 +427,31 @@ function DiaPageInner() {
         />
       ) : null}
     </div>
+  );
+}
+
+/** Muestra el valor real (negrita) si existe; si no, el estimado (atenuado).
+ *  Cuando ambos existen y difieren, marca el real subrayado punteado. */
+function PaxCrewNumber({
+  real,
+  est,
+  tone,
+}: {
+  real: number | null | undefined;
+  est: number | null | undefined;
+  tone: "ink-1" | "ink-3";
+}) {
+  const hasReal = real !== null && real !== undefined;
+  const value = hasReal ? real : est ?? 0;
+  const toneCls = tone === "ink-1" ? "text-ink-1" : "text-ink-3";
+  const diverged = hasReal && est !== null && est !== undefined && real !== est;
+  return (
+    <span
+      className={`${toneCls} ${hasReal ? "font-semibold" : ""} ${diverged ? "underline decoration-dotted underline-offset-2" : ""}`}
+      title={diverged ? `Real ${real} · estimado ${est}` : undefined}
+    >
+      {value}
+    </span>
   );
 }
 
