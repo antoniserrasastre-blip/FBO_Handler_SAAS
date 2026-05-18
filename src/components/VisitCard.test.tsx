@@ -292,12 +292,20 @@ describe("VisitCard signal pills + indicators", () => {
   });
 
   it("marks an overdue service pip with the overdue modifier class", () => {
-    const services = [
-      makeService({ id: "s1", type: "CATERING", state: "PENDING", scheduledAt: "00:01" }),
-    ];
-    const { container } = render(<VisitCard flight={makeFlight({ services })} />);
-    const pipButton = container.querySelector(".services-strip button");
-    expect(pipButton?.className).toMatch(/overdue/);
+    // isServiceOverdue compara contra `new Date()` local; fijamos la hora
+    // para que el test no dependa del reloj del runner.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2025-01-01T10:00:00Z"));
+    try {
+      const services = [
+        makeService({ id: "s1", type: "CATERING", state: "PENDING", scheduledAt: "00:01" }),
+      ];
+      const { container } = render(<VisitCard flight={makeFlight({ services })} />);
+      const pipButton = container.querySelector(".services-strip button");
+      expect(pipButton?.className).toMatch(/overdue/);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
