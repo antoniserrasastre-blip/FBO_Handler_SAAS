@@ -39,6 +39,7 @@ import { ChevronDown, ChevronUp, StickyNote } from "lucide-react";
 import { LostItemIcon } from "@/components/Icons";
 import { TurnaroundCountdown } from "@/components/TurnaroundCountdown";
 import { LastModifiedBadge } from "@/components/LastModifiedBadge";
+import { OpsToggleStrip } from "@/components/OpsToggleStrip";
 import { isServiceOverdue } from "@/lib/overdue";
 import { InlineNumber } from "@/components/InlineNumber";
 import { InlineSelect } from "@/components/InlineSelect";
@@ -357,6 +358,11 @@ export const VisitCard = memo(function VisitCard({
             </span>
           ) : null}
         </div>
+      )}
+
+      {/* ─── Ops toggle strip — touch-friendly cycle buttons ────────── */}
+      {onUpdate && !readOnly && (
+        <OpsToggleStrip flight={flight} onUpdate={onUpdate} readOnly={readOnly} />
       )}
 
       {/* ─── Inline edit strip (expanded) ──────────────────────────── */}
