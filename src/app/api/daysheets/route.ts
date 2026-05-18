@@ -1,31 +1,47 @@
-// /api/daysheets — v2. DaySheet is no longer a row in the DB; it's derived
-// from `Visit.palmaDay`. We aggregate Visits by palmaDay and expose the same
-// shape the UI expects.
+// /api/daysheets — v2. The day list is the UNION of two sources:
+//   1. Days derived from Visit.palmaDay (auto-materialised when flights exist)
+//   2. Explicit DaySheet rows (supervisor "prepared" a day before flights)
+// Both are merged into one response, sorted desc by date. The optional
+// DaySheet row contributes day-level metadata (notes, closed); when only
+// (1) is present, those fields are null/false.
 
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { requireAdmin, requireSupervisor } from "@/lib/roles";
+import { requireAdmin, requireSupervisor, requireWriter } from "@/lib/roles";
 import { palmaDayUtc } from "@/lib/time";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const visits = await prisma.visit.findMany({
-    include: {
-      movements: { select: { paxCount: true, state: true } },
-      services: { select: { state: true } },
-    },
-  });
+  const [visits, daySheets] = await Promise.all([
+    prisma.visit.findMany({
+      include: {
+        movements: { select: { paxCount: true, state: true } },
+        services: { select: { state: true } },
+      },
+    }),
+    prisma.daySheet.findMany(),
+  ]);
 
-  // Group by palmaDay ISO key
+  // Group Visits by palmaDay ISO key
   const byDay = new Map<string, typeof visits>();
   for (const v of visits) {
     const key = v.palmaDay.toISOString();
     if (!byDay.has(key)) byDay.set(key, []);
     byDay.get(key)!.push(v);
+  }
+
+  // Index DaySheet rows by date ISO for O(1) lookup + ensure every explicit
+  // day is represented even if it has zero Visits.
+  const daySheetByDate = new Map<string, (typeof daySheets)[number]>();
+  for (const ds of daySheets) {
+    daySheetByDate.set(ds.date.toISOString(), ds);
+    if (!byDay.has(ds.date.toISOString())) {
+      byDay.set(ds.date.toISOString(), []);
+    }
   }
 
   const result = Array.from(byDay.entries())
@@ -46,6 +62,7 @@ export async function GET() {
         (sum, v) => sum + v.services.filter((s) => s.state === "DELIVERED").length,
         0
       );
+      const ds = daySheetByDate.get(iso);
       return {
         id: iso,
         date,
@@ -54,11 +71,44 @@ export async function GET() {
         totalPax,
         totalServices,
         deliveredServices,
+        notes: ds?.notes ?? null,
+        closed: ds?.closed ?? false,
+        manual: !!ds && totalFlights === 0,
       };
     })
     .sort((a, b) => b.date.getTime() - a.date.getTime());
 
   return NextResponse.json(result);
+}
+
+// POST /api/daysheets — body: { date: ISO 8601 string | YYYY-MM-DD }
+// Upserts a DaySheet row at palmaDayUtc(date). Idempotent.
+export async function POST(req: NextRequest) {
+  const { session, error } = await requireWriter();
+  if (error) return error;
+
+  const body = (await req.json().catch(() => null)) as { date?: string; notes?: string } | null;
+  if (!body?.date) return NextResponse.json({ error: "Falta date" }, { status: 400 });
+
+  const palmaDay = palmaDayUtc(new Date(body.date));
+  if (Number.isNaN(palmaDay.getTime())) {
+    return NextResponse.json({ error: "Fecha inválida" }, { status: 400 });
+  }
+
+  const ds = await prisma.daySheet.upsert({
+    where: { date: palmaDay },
+    create: { date: palmaDay, notes: body.notes ?? null },
+    update: body.notes !== undefined ? { notes: body.notes } : {},
+  });
+
+  await prisma.eventLog.create({
+    data: {
+      userId: session.user.id,
+      action: `DaySheet preparado: ${palmaDay.toISOString().slice(0, 10)}`,
+    },
+  });
+
+  return NextResponse.json({ id: ds.date.toISOString(), date: ds.date, notes: ds.notes, closed: ds.closed });
 }
 
 export async function DELETE(req: NextRequest) {
@@ -75,6 +125,7 @@ export async function DELETE(req: NextRequest) {
     await prisma.lostItem.deleteMany();
     await prisma.movement.deleteMany();
     await prisma.visit.deleteMany();
+    await prisma.daySheet.deleteMany();
     return NextResponse.json({ ok: true, message: "Todos los datos eliminados" });
   }
 
@@ -82,9 +133,11 @@ export async function DELETE(req: NextRequest) {
   if (error) return error;
 
   if (id) {
-    // `id` is a palmaDay ISO; delete every Visit on that day
+    // `id` is a palmaDay ISO; delete every Visit on that day AND any
+    // manual DaySheet row at that date.
     const palmaDay = palmaDayUtc(new Date(id));
     const count = await prisma.visit.deleteMany({ where: { palmaDay } });
+    await prisma.daySheet.deleteMany({ where: { date: palmaDay } });
     return NextResponse.json({
       ok: true,
       message: `${count.count} visits eliminadas para ${palmaDay.toISOString().slice(0, 10)}`,

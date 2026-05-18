@@ -24,6 +24,24 @@ model User {
 }
 
 // ============================================================================
+// DaySheet — opt-in row for days the supervisor wants to materialise
+// (e.g. prepare tomorrow before any Visit is imported). When absent, the
+// day still appears in /historico derived from Visit.palmaDay. When present
+// the row may carry day-level metadata (notes for now; closed flag reserved).
+// ============================================================================
+
+model DaySheet {
+  id        String   @id @default(cuid())
+  date      DateTime @unique  // UTC midnight of Palma-local date
+  notes     String?
+  closed    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([date])
+}
+
+// ============================================================================
 // Core domain: Operator → Aircraft → Visit → Movement
 // ============================================================================
 

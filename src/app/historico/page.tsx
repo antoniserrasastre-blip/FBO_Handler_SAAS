@@ -13,20 +13,50 @@ interface DaySheetSummary {
   totalPax: number;
   totalServices: number;
   deliveredServices: number;
+  notes?: string | null;
+  closed?: boolean;
+  manual?: boolean;
 }
 
 export default function HistoricoPage() {
   const router = useRouter();
   const [daySheets, setDaySheets] = useState<DaySheetSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [preparing, setPreparing] = useState(false);
+  const [newDate, setNewDate] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
+  const reload = () =>
     fetch("/api/daysheets")
       .then((res) => res.json())
       .then(setDaySheets)
-      .catch(console.error)
-      .finally(() => setLoading(false));
+      .catch(console.error);
+
+  useEffect(() => {
+    reload().finally(() => setLoading(false));
   }, []);
+
+  async function createDay() {
+    if (!newDate) return;
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/daysheets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: newDate }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(err.error || "No se pudo crear el día");
+        return;
+      }
+      setPreparing(false);
+      setNewDate("");
+      await reload();
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   function navigateToDay(dateStr: string) {
     const d = palmaDayUtc(new Date(dateStr));
@@ -57,9 +87,41 @@ export default function HistoricoPage() {
             <h1 className="text-2xl font-semibold tracking-tight text-ink-1">Histórico</h1>
             <p className="mt-1 text-sm text-ink-3">Consulta y exporta datos de días anteriores.</p>
           </div>
-          <HelixButton variant="secondary" size="sm" onClick={() => router.push("/")}>
-            Volver al panel
-          </HelixButton>
+          <div className="flex items-center gap-2">
+            {preparing ? (
+              <>
+                <input
+                  type="date"
+                  value={newDate}
+                  onChange={(e) => setNewDate(e.target.value)}
+                  className="rounded-hx-sm border border-line bg-bg px-2 py-1 text-sm text-ink-1 focus:outline-none focus:ring-1 focus:ring-brand"
+                  autoFocus
+                />
+                <HelixButton
+                  variant="primary"
+                  size="sm"
+                  onClick={createDay}
+                  disabled={!newDate || submitting}
+                >
+                  Crear
+                </HelixButton>
+                <HelixButton
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => { setPreparing(false); setNewDate(""); }}
+                >
+                  Cancelar
+                </HelixButton>
+              </>
+            ) : (
+              <HelixButton variant="secondary" size="sm" onClick={() => setPreparing(true)}>
+                Preparar día…
+              </HelixButton>
+            )}
+            <HelixButton variant="secondary" size="sm" onClick={() => router.push("/")}>
+              Volver al panel
+            </HelixButton>
+          </div>
         </div>
 
         {daySheets.length === 0 ? (
@@ -89,6 +151,7 @@ export default function HistoricoPage() {
                     <div className="flex items-center gap-2">
                       <h3 className="text-sm font-semibold capitalize text-ink-1">{dateStr}</h3>
                       {isToday ? <HelixPill tone="brand">HOY</HelixPill> : null}
+                      {ds.manual ? <HelixPill tone="info">PREPARADO</HelixPill> : null}
                     </div>
                     <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 font-mono text-xs text-ink-3 [font-variant-numeric:tabular-nums]">
                       <span>
