@@ -23,6 +23,7 @@ import {
   deriveATA,
   deriveATD,
   computeHeaderStats,
+  shortDate,
   type FlightLite,
 } from "./diaHelpers";
 
@@ -208,10 +209,11 @@ function DiaPageInner() {
                 {/* LLEGADA */}
                 <th className="border-b border-l border-line px-2 py-1.5 text-left font-semibold" style={{ width: 96 }}>Vuelo llegada</th>
                 <th className="border-b border-line px-2 py-1.5 text-center font-semibold" style={{ width: 56 }}>Origen</th>
+                <th className="border-b border-line px-2 py-1.5 text-center font-semibold" style={{ width: 48 }}>Día</th>
                 <th className="border-b border-line px-2 py-1.5 text-center font-semibold" style={{ width: 56 }}>ETA Z</th>
                 <th className="border-b border-line px-2 py-1.5 text-center font-semibold" style={{ width: 56 }}>ATA Z</th>
                 {/* AVIÓN */}
-                <th className="border-b border-l border-line px-2 py-1.5 text-center font-semibold" style={{ width: 96 }}>Matrícula</th>
+                <th className="border-b border-l border-line px-2 py-1.5 text-center font-semibold whitespace-nowrap" style={{ width: 116 }}>Matrícula</th>
                 <th className="border-b border-line px-2 py-1.5 text-center font-semibold" style={{ width: 56 }}>Tipo</th>
                 <th className="border-b border-line px-2 py-1.5 text-center font-semibold" style={{ width: 56 }}>Stand</th>
                 {/* SVC */}
@@ -221,6 +223,7 @@ function DiaPageInner() {
                 {/* SALIDA */}
                 <th className="border-b border-l border-line px-2 py-1.5 text-left font-semibold" style={{ width: 96 }}>Vuelo salida</th>
                 <th className="border-b border-line px-2 py-1.5 text-center font-semibold" style={{ width: 56 }}>Destino</th>
+                <th className="border-b border-line px-2 py-1.5 text-center font-semibold" style={{ width: 48 }}>Día</th>
                 <th className="border-b border-line px-2 py-1.5 text-center font-semibold" style={{ width: 56 }}>ETD Z</th>
                 <th className="border-b border-line px-2 py-1.5 text-center font-semibold" style={{ width: 56 }}>ATD Z</th>
                 {/* PAX */}
@@ -238,6 +241,9 @@ function DiaPageInner() {
                 const ata = deriveATA(fLite);
                 const atd = deriveATD(fLite);
                 const dotCls = STATE_DOT_CLASS[f.state] ?? "bg-gray-300";
+                const sheetDay = shortDate(date);
+                const arrDayLabel = f.arrivalDate && f.arrivalDate.slice(0, 5) !== sheetDay ? f.arrivalDate.slice(0, 5) : "";
+                const depDayLabel = f.departureDate && f.departureDate.slice(0, 5) !== sheetDay ? f.departureDate.slice(0, 5) : "";
 
                 const isCancelled = f.flightCategory === "CANCELLED";
                 return (
@@ -271,6 +277,9 @@ function DiaPageInner() {
                     <td className={`border-b border-line-subtle px-2 py-1.5 text-center ${arrCellCls || "text-ink-2"}`}>
                       {f.origin}
                     </td>
+                    <td className={`border-b border-line-subtle px-1 py-1.5 text-center text-xs ${arrCellCls || (arrDayLabel ? "text-ink-2 font-semibold" : "text-ink-disabled")}`}>
+                      {arrDayLabel || "—"}
+                    </td>
                     <td className={`border-b border-line-subtle px-2 py-1.5 text-center font-semibold ${arrCellCls || "text-ink-1"}`}>
                       <QuickTimeEdit
                         value={f.eta}
@@ -285,14 +294,14 @@ function DiaPageInner() {
                     </td>
 
                     {/* AVIÓN */}
-                    <td className="border-b border-l border-line-subtle px-2 py-1.5 text-center">
-                      <span className="inline-flex items-center gap-1">
-                        <span className="inline-block rounded border border-line bg-bg px-1.5 py-px font-semibold tracking-tight text-ink-1">
+                    <td className="border-b border-l border-line-subtle px-2 py-1.5 text-center whitespace-nowrap">
+                      <span className="inline-flex flex-nowrap items-center justify-center gap-1 whitespace-nowrap">
+                        <span className="inline-block whitespace-nowrap rounded border border-line bg-bg px-1.5 py-px font-semibold tracking-tight text-ink-1">
                           {f.registration}
                         </span>
                         {f.isOvernight ? (
                           <span
-                            className="hx-pill hx-pill-overnight"
+                            className="hx-pill hx-pill-overnight shrink-0"
                             title="Pernocta"
                             style={{ padding: "0 5px", fontSize: 10 }}
                           >
@@ -338,6 +347,9 @@ function DiaPageInner() {
                     </td>
                     <td className={`border-b border-line-subtle px-2 py-1.5 text-center ${depCellCls || "text-ink-2"}`}>
                       {f.destination}
+                    </td>
+                    <td className={`border-b border-line-subtle px-1 py-1.5 text-center text-xs ${depCellCls || (depDayLabel ? "text-ink-2 font-semibold" : "text-ink-disabled")}`}>
+                      {depDayLabel || "—"}
                     </td>
                     <td className={`border-b border-line-subtle px-2 py-1.5 text-center font-semibold ${depCellCls || "text-ink-1"}`}>
                       <QuickTimeEdit

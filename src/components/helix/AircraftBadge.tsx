@@ -19,10 +19,14 @@ export function AircraftBadge({
 }: AircraftBadgeProps) {
   const reg = registration || "—";
   const content = (
-    <span className={`hx-pill hx-pill-aircraft ${className}`} {...rest}>
-      <span>{reg}</span>
+    <span
+      className={`hx-pill hx-pill-aircraft ${className}`}
+      style={{ whiteSpace: "nowrap", flexWrap: "nowrap" }}
+      {...rest}
+    >
+      <span style={{ whiteSpace: "nowrap" }}>{reg}</span>
       {aircraftType ? (
-        <span className="text-ink-muted" style={{ fontWeight: 400 }}>
+        <span className="text-ink-muted" style={{ fontWeight: 400, whiteSpace: "nowrap" }}>
           · {aircraftType}
         </span>
       ) : null}
