@@ -25,7 +25,7 @@ import type { FlightCategory } from "@/types/v2";
 import { normalizeFlightState } from "@/types";
 import { StatePill, type FboState } from "@/components/helix/Pill";
 import { HelixPill } from "@/components/helix/Pill";
-import { ServicePip, type ServicePipState } from "@/components/helix/ServicePip";
+import type { ServicePipState } from "@/components/helix/ServicePip";
 import { MovementRow } from "@/components/helix/MovementRow";
 import { OperatorBadge } from "@/components/helix/OperatorBadge";
 import { AircraftBadge } from "@/components/helix/AircraftBadge";
@@ -33,14 +33,12 @@ import { CategoryPill } from "@/components/helix/CategoryPill";
 import { RqstChip } from "@/components/helix/RqstChip";
 import { PetCount } from "@/components/helix/PetCount";
 import { PassportField } from "@/components/helix/PassportField";
-import { iconForServiceType } from "@/lib/serviceIconMap";
-import { nextServiceState, pipStateFor } from "@/lib/serviceCycle";
 import { ChevronDown, ChevronUp, StickyNote } from "lucide-react";
 import { LostItemIcon } from "@/components/Icons";
 import { TurnaroundCountdown } from "@/components/TurnaroundCountdown";
 import { LastModifiedBadge } from "@/components/LastModifiedBadge";
 import { OpsToggleStrip } from "@/components/OpsToggleStrip";
-import { isServiceOverdue } from "@/lib/overdue";
+import { ServiceChipRow } from "@/components/ServiceChipRow";
 import { InlineNumber } from "@/components/InlineNumber";
 import { InlineSelect } from "@/components/InlineSelect";
 import { InlineTextEdit } from "@/components/InlineTextEdit";
@@ -325,40 +323,14 @@ export const VisitCard = memo(function VisitCard({
         />
       </div>
 
-      {/* ─── Services strip ────────────────────────────────────────── */}
-      {services.length > 0 && (
-        <div className="services-strip">
-          {services.map((s) => {
-            const overdue = isServiceOverdue(s);
-            return (
-              <button
-                key={s.id}
-                type="button"
-                disabled={readOnly}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (!onServiceToggle) return;
-                  onServiceToggle(s.id, nextServiceState(s.state));
-                }}
-                className={overdue ? "service-pip-btn overdue" : "service-pip-btn"}
-                style={{ background: "transparent", border: 0, padding: 0, cursor: readOnly ? "default" : "pointer" }}
-                title={`${s.customName || s.type}${s.reference ? ` · #${s.reference}` : ""}${s.target ? ` · ${s.target}` : ""}${overdue ? " · ¡Retrasado!" : ""}`}
-              >
-                <ServicePip
-                  service={iconForServiceType(s.type)}
-                  state={pipStateFor(s.state)}
-                  size="sm"
-                />
-              </button>
-            );
-          })}
-          {services.length > 0 ? (
-            <span className="text-xs text-ink-muted ml-2">
-              {services.filter((s) => s.state === "DELIVERED").length}/{services.length} servidos
-            </span>
-          ) : null}
-        </div>
-      )}
+      {/* ─── Services strip (chips touch-friendly) ───────────────────── */}
+      {onServiceToggle ? (
+        <ServiceChipRow
+          services={services}
+          onToggle={(serviceId, newState) => onServiceToggle(serviceId, newState)}
+          readOnly={readOnly}
+        />
+      ) : null}
 
       {/* ─── Ops toggle strip — touch-friendly cycle buttons ────────── */}
       {onUpdate && !readOnly && (
