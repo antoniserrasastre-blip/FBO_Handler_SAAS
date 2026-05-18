@@ -64,7 +64,7 @@ function ServiceChip({ service, onClick, disabled }: ServiceChipProps) {
         e.stopPropagation();
         if (!disabled) onClick();
       }}
-      className={`flex min-h-[48px] min-w-[88px] flex-col items-start justify-center gap-0.5 rounded-hx-md border px-2 py-1 text-left transition active:scale-95 disabled:cursor-default disabled:opacity-50 ${TONE_CLASS[tone]} ${overdue ? "ring-2 ring-danger-strong" : ""}`}
+      className={`flex min-h-[48px] min-w-[88px] flex-col items-start justify-center gap-0.5 rounded-hx-md border px-2 py-1 text-left transition active:scale-95 disabled:cursor-default disabled:opacity-50 ${TONE_CLASS[tone]} ${overdue ? "overdue ring-2 ring-danger-strong" : ""}`}
       aria-label={`${baseLabel}${targetSuffix}: ${stateText}${overdue ? " (retrasado)" : ""}`}
       title={service.reference ? `#${service.reference}` : undefined}
     >
@@ -82,25 +82,26 @@ function ServiceChip({ service, onClick, disabled }: ServiceChipProps) {
 
 export interface ServiceChipRowProps {
   services: Service[];
-  onToggle: (serviceId: string, newState: ServiceCycleState) => void;
+  onToggle?: (serviceId: string, newState: ServiceCycleState) => void;
   readOnly?: boolean;
 }
 
 export function ServiceChipRow({ services, onToggle, readOnly = false }: ServiceChipRowProps) {
   if (services.length === 0) return null;
   const delivered = services.filter((s) => s.state === "DELIVERED").length;
+  const disabled = readOnly || !onToggle;
 
   return (
     <div
-      className="flex flex-wrap items-center gap-1.5 border-t border-line-subtle bg-bg px-2 py-2"
+      className="services-strip flex flex-wrap items-center gap-1.5 border-t border-line-subtle bg-bg px-2 py-2"
       onClick={(e) => e.stopPropagation()}
     >
       {services.map((s) => (
         <ServiceChip
           key={s.id}
           service={s}
-          disabled={readOnly}
-          onClick={() => onToggle(s.id, nextServiceState(s.state))}
+          disabled={disabled}
+          onClick={() => onToggle?.(s.id, nextServiceState(s.state))}
         />
       ))}
       <span className="ml-auto text-xs font-mono text-ink-muted">

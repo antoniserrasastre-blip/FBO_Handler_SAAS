@@ -324,13 +324,11 @@ export const VisitCard = memo(function VisitCard({
       </div>
 
       {/* ─── Services strip (chips touch-friendly) ───────────────────── */}
-      {onServiceToggle ? (
-        <ServiceChipRow
-          services={services}
-          onToggle={(serviceId, newState) => onServiceToggle(serviceId, newState)}
-          readOnly={readOnly}
-        />
-      ) : null}
+      <ServiceChipRow
+        services={services}
+        onToggle={onServiceToggle}
+        readOnly={readOnly}
+      />
 
       {/* ─── Ops toggle strip — touch-friendly cycle buttons ────────── */}
       {onUpdate && !readOnly && (
