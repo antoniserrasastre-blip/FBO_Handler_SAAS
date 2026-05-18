@@ -25,7 +25,6 @@ import type { FlightCategory } from "@/types/v2";
 import { normalizeFlightState } from "@/types";
 import { StatePill, type FboState } from "@/components/helix/Pill";
 import { HelixPill } from "@/components/helix/Pill";
-import type { ServicePipState } from "@/components/helix/ServicePip";
 import { MovementRow } from "@/components/helix/MovementRow";
 import { OperatorBadge } from "@/components/helix/OperatorBadge";
 import { AircraftBadge } from "@/components/helix/AircraftBadge";
@@ -169,18 +168,6 @@ export const VisitCard = memo(function VisitCard({
     normalizeFlightState(flight.state) === "BOARDING"   ? "board" :
     arrState;
 
-  const fuelPip = useMemo<ServicePipState>(() => {
-    if (flight.fuelState === "SERVED") return "ok";
-    if (flight.fuelState === "REQUESTED") return "req";
-    return "no";
-  }, [flight.fuelState]);
-
-  const toiletPip = useMemo<ServicePipState>(() => {
-    if (flight.toiletState === "COMPLETED") return "ok";
-    if (flight.toiletState === "REQUESTED") return "req";
-    return "no";
-  }, [flight.toiletState]);
-
   const arrivalPaxDep = useMemo(
     () => passengers.filter((p) => p.direction === "ARRIVAL"),
     [passengers]
@@ -315,8 +302,6 @@ export const VisitCard = memo(function VisitCard({
           parking={flight.parking}
           aircraftType={flight.aircraftType}
           cancelled={isCancelled}
-          fuelState={fuelPip}
-          toiletState={toiletPip}
           date={flight.departureDate}
           sheetDate={sheetDate}
           onTimeSave={onUpdate && !readOnly ? (v) => onUpdate(flight.id, { etd: v }) : undefined}
