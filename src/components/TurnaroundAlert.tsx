@@ -8,6 +8,8 @@ type FlightWithServices = Flight & { services: Service[] };
 
 interface TurnaroundAlertsProps {
   flights: FlightWithServices[];
+  /** Día operativo visualizado. Por defecto, hoy UTC. */
+  referenceDate?: Date;
 }
 
 type AlertKind = "ARRIVAL" | "DEPARTURE";
@@ -20,22 +22,41 @@ interface FlightAlert {
   pendingServices: number;
 }
 
-export function getTurnaroundAlerts(flights: FlightWithServices[]): FlightAlert[] {
+/** "DD/MM" UTC del día de referencia (formato que usa Flight.arrivalDate/departureDate). */
+function refShortDate(d: Date): string {
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  const month = String(d.getUTCMonth() + 1).padStart(2, "0");
+  return `${day}/${month}`;
+}
+
+/** Una pernocta trae arrivalDate de ayer y departureDate de hoy (o viceversa).
+ *  La alerta solo es relevante si la leg en cuestión cae en el día visualizado. */
+function isSameDay(stored: string | null | undefined, refDay: string): boolean {
+  if (!stored) return true; // sin fecha explícita → asumimos hoy (datos legacy)
+  return stored.slice(0, 5) === refDay;
+}
+
+export function getTurnaroundAlerts(
+  flights: FlightWithServices[],
+  referenceDate: Date = new Date(),
+): FlightAlert[] {
   const alerts: FlightAlert[] = [];
 
   const now = new Date();
   // Per CLAUDE.md: flight ETA/ETD are in Zulu (UTC); compare against UTC now, not local.
   const currentMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
+  const refDay = refShortDate(referenceDate);
 
   for (const flight of flights) {
     const state = normalizeFlightState(flight.state);
 
-    // Llegada: vuelo EXPECTED con ETA <= 30 min
+    // Llegada: vuelo EXPECTED con ETA en ventana [-15, +30] min y arrivalDate de hoy
     if (state === "EXPECTED" && flight.eta) {
+      if (!isSameDay(flight.arrivalDate, refDay)) continue;
       const [h, m] = flight.eta.split(":").map(Number);
       if (!isNaN(h) && !isNaN(m)) {
         const minutesUntilArrival = h * 60 + m - currentMinutes;
-        if (minutesUntilArrival <= 30) {
+        if (minutesUntilArrival > -15 && minutesUntilArrival <= 30) {
           alerts.push({
             flightId: flight.id,
             callsign: flight.callsign,
@@ -48,11 +69,12 @@ export function getTurnaroundAlerts(flights: FlightWithServices[]): FlightAlert[
       continue;
     }
 
-    // Salida: ON_BLOCKS / PARKED / TURNAROUND / BOARDING con ETD <= 90 min y servicios pendientes
+    // Salida: ON_BLOCKS / PARKED / TURNAROUND / BOARDING con ETD <= 90 min y departureDate de hoy
     if (
       (state === "ON_BLOCKS" || state === "PARKED" || state === "TURNAROUND" || state === "BOARDING") &&
       flight.etd
     ) {
+      if (!isSameDay(flight.departureDate, refDay)) continue;
       const [h, m] = flight.etd.split(":").map(Number);
       if (isNaN(h) || isNaN(m)) continue;
 
@@ -80,8 +102,8 @@ export function getTurnaroundAlerts(flights: FlightWithServices[]): FlightAlert[
   return alerts.sort((a, b) => a.minutesLeft - b.minutesLeft);
 }
 
-export function TurnaroundAlerts({ flights }: TurnaroundAlertsProps) {
-  const alerts = getTurnaroundAlerts(flights);
+export function TurnaroundAlerts({ flights, referenceDate }: TurnaroundAlertsProps) {
+  const alerts = getTurnaroundAlerts(flights, referenceDate);
 
   if (alerts.length === 0) return null;
 

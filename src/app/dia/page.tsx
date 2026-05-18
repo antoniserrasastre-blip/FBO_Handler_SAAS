@@ -233,7 +233,7 @@ function DiaPageInner() {
       {/* Date nav + brand chrome + clocks all live in the global Helix
           AppShell. /dia only ships the data surface. */}
 
-      {isToday && <TurnaroundAlerts flights={flights} />}
+      {isToday && <TurnaroundAlerts flights={flights} referenceDate={date} />}
 
       <PendingServicesPanel flights={flights} onQuickFilter={setSearchQuery} />
 
