@@ -9,6 +9,8 @@ import { ServicePip, Stat, StatBand, useDate } from "@/components/helix";
 import { CategoryPill } from "@/components/helix/CategoryPill";
 import { RqstChip } from "@/components/helix/RqstChip";
 import { PetCount } from "@/components/helix/PetCount";
+import { StickyNote } from "lucide-react";
+import { LostItemIcon } from "@/components/Icons";
 import { nextServiceState } from "@/lib/serviceCycle";
 import type { FlightCategory } from "@/types/v2";
 import { QuickTimeEdit } from "@/components/QuickTimeEdit";
@@ -233,7 +235,7 @@ function DiaPageInner() {
                 <th className="border-b border-line px-1 py-1.5 text-center font-semibold" style={{ width: 36 }} title="Catering">C</th>
                 <th className="border-b border-line px-1 py-1.5 text-center font-semibold" style={{ width: 36 }} title="Lavatory">T</th>
                 {/* SALIDA */}
-                <th className="border-b border-l border-line px-2 py-1.5 text-left font-semibold" style={{ width: 96 }}>Vuelo salida</th>
+                <th className="border-b border-l border-line px-2 py-1.5 text-center font-semibold" style={{ width: 64 }} title="Target Off-Block Time">TOBT</th>
                 <th className="border-b border-line px-2 py-1.5 text-center font-semibold" style={{ width: 56 }}>Destino</th>
                 <th className="border-b border-line px-2 py-1.5 text-center font-semibold" style={{ width: 48 }}>Día</th>
                 <th className="border-b border-line px-2 py-1.5 text-center font-semibold" style={{ width: 56 }}>ETD Z</th>
@@ -286,6 +288,20 @@ function DiaPageInner() {
                           category={(f.flightCategory || "COMMERCIAL") as FlightCategory}
                           modified={f.modifiedFlag}
                         />
+                        {f.notes ? (
+                          <span className="text-amber-600" title={f.notes}>
+                            <StickyNote size={11} />
+                          </span>
+                        ) : null}
+                        {(() => {
+                          const pending = (f.lostItems || []).filter((li) => li.state !== "DELIVERED").length;
+                          if (pending === 0) return null;
+                          return (
+                            <span className="text-purple-600" title={`${pending} objeto${pending !== 1 ? "s" : ""} pendiente${pending !== 1 ? "s" : ""}`}>
+                              <LostItemIcon size={11} />
+                            </span>
+                          );
+                        })()}
                       </span>
                     </td>
                     <td className={`border-b border-line-subtle px-2 py-1.5 text-center ${arrCellCls || "text-ink-2"}`}>
@@ -355,9 +371,12 @@ function DiaPageInner() {
                       onCycle={(ev) => { ev.stopPropagation(); cycleToilet(f); }}
                     />
 
-                    {/* SALIDA */}
-                    <td className={`border-b border-l border-line-subtle px-2 py-1.5 font-semibold ${depCellCls || "text-ink-1"}`}>
-                      {f.callsign}
+                    {/* SALIDA — TOBT (target off-block) reemplaza el callsign duplicado */}
+                    <td className={`border-b border-l border-line-subtle px-2 py-1.5 text-center ${depCellCls || (f.tobt ? "text-ink-1" : "text-ink-disabled")}`}>
+                      <QuickTimeEdit
+                        value={f.tobt}
+                        onSave={(v) => patchFlight(f.id, { tobt: v })}
+                      />
                     </td>
                     <td className={`border-b border-line-subtle px-2 py-1.5 text-center ${depCellCls || "text-ink-2"}`}>
                       {f.destination}

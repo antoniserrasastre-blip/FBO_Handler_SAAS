@@ -165,7 +165,15 @@ export function FlightDetailPanel({ flight, onClose, onMutated, onOpenPaxCrew, o
           <DepartureFieldsPanel flight={flight} patchFlight={patchFlight} />
         </CollapsibleSection>
 
-        <CollapsibleSection title="Servicios" defaultOpen badge={`${flight.services.length}+ ${flight.fuelState !== "NOT_REQUESTED" ? "fuel" : ""} ${flight.toiletState !== "NOT_REQUESTED" ? "toilet" : ""}`.trim()}>
+        <CollapsibleSection
+          title="Servicios"
+          defaultOpen
+          badge={[
+            flight.services.length > 0 ? `${flight.services.length} svc` : null,
+            flight.fuelState !== "NOT_REQUESTED" ? "fuel" : null,
+            flight.toiletState !== "NOT_REQUESTED" ? "toilet" : null,
+          ].filter(Boolean).join(" · ") || undefined}
+        >
           <ServicesPanel
             flight={flight}
             patchFlight={patchFlight}
