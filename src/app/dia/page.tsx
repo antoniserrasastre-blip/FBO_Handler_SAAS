@@ -1,11 +1,11 @@
 "use client";
 
-import { Suspense, useEffect, useState, useCallback, useMemo, type MouseEvent as ReactMouseEvent } from "react";
+import { Suspense, useEffect, useRef, useState, useCallback, useMemo, type MouseEvent as ReactMouseEvent } from "react";
 import { useSession } from "next-auth/react";
 import { Flight, Service, EventLog, LostItem } from "@/types/compat";
 import { dateToSqlString } from "@/lib/time";
 import { useEventStream } from "@/hooks/useEventStream";
-import { ServicePip, Stat, StatBand, useDate } from "@/components/helix";
+import { HelixButton, ServicePip, Stat, StatBand, useDate } from "@/components/helix";
 import { CategoryPill } from "@/components/helix/CategoryPill";
 import { RqstChip } from "@/components/helix/RqstChip";
 import { PetCount } from "@/components/helix/PetCount";
@@ -16,6 +16,11 @@ import type { FlightCategory } from "@/types/v2";
 import { QuickTimeEdit } from "@/components/QuickTimeEdit";
 import { InlineTextEdit } from "@/components/InlineTextEdit";
 import { PassengerCrewModal } from "@/components/PassengerCrewModal";
+import { SearchBar } from "@/components/SearchBar";
+import { QuickAddFlight } from "@/components/QuickAddFlight";
+import { TurnaroundAlerts } from "@/components/TurnaroundAlert";
+import { PendingServicesPanel } from "@/components/PendingServicesPanel";
+import { ToastContainer, ToastMessage } from "@/components/Toast";
 import { FlightDetailPanel } from "./FlightDetailPanel";
 import {
   STATE_DOT_CLASS,
@@ -68,12 +73,27 @@ export default function DiaPage() {
 
 function DiaPageInner() {
   const { status } = useSession();
-  const { date } = useDate();
+  const { date, isToday } = useDate();
   const [flights, setFlights] = useState<FlightWithRelations[]>([]);
+  const [filteredFlights, setFilteredFlights] = useState<FlightWithRelations[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showQuickAdd, setShowQuickAdd] = useState(false);
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const toastIdRef = useRef(0);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState(new Date());
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [paxCrewModal, setPaxCrewModal] = useState<{ flightId: string; direction: "ARRIVAL" | "DEPARTURE" } | null>(null);
+
+  const addToast = useCallback((text: string, userName?: string, type?: ToastMessage["type"], onRetry?: () => void) => {
+    const id = String(++toastIdRef.current);
+    setToasts((prev) => [...prev.slice(-4), { id, text, userName, type, onRetry }]);
+  }, []);
+
+  const dismissToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 30_000);
@@ -213,6 +233,41 @@ function DiaPageInner() {
       {/* Date nav + brand chrome + clocks all live in the global Helix
           AppShell. /dia only ships the data surface. */}
 
+      {isToday && <TurnaroundAlerts flights={flights} />}
+
+      <PendingServicesPanel flights={flights} onQuickFilter={setSearchQuery} />
+
+      {/* Search + action bar (paridad con la home) */}
+      {flights.length > 0 && (
+        <div className="border-b border-line bg-bg-subtle/40 px-3 py-2 space-y-2">
+          <SearchBar
+            flights={flights}
+            onFilteredFlights={setFilteredFlights}
+            resultCount={filteredFlights.length}
+            totalCount={flights.length}
+            inputRef={searchInputRef}
+            query={searchQuery}
+            onQueryChange={setSearchQuery}
+          />
+          <div className="flex items-center justify-end gap-1.5">
+            <HelixButton variant="primary" size="sm" onClick={() => setShowQuickAdd(true)}>
+              + Nuevo vuelo
+            </HelixButton>
+          </div>
+        </div>
+      )}
+
+      {showQuickAdd && (
+        <div className="border-b border-line bg-bg-subtle/40 px-3 py-2">
+          <QuickAddFlight
+            date={date}
+            onCreated={() => { setShowQuickAdd(false); fetchFlights(); addToast("Vuelo creado", undefined, "success"); }}
+            onCancel={() => setShowQuickAdd(false)}
+            onError={(msg) => addToast(msg, undefined, "warning")}
+          />
+        </div>
+      )}
+
       {/* Body: table + side panel */}
       <div className="flex flex-1 min-h-0 overflow-hidden">
         <main className="flex-1 overflow-auto bg-bg">
@@ -245,7 +300,7 @@ function DiaPageInner() {
               </tr>
             </thead>
             <tbody className="font-mono [font-variant-numeric:tabular-nums]">
-              {flights.map((f) => {
+              {filteredFlights.map((f) => {
                 const isSelected = selectedId === f.id;
                 const fLite = f as unknown as FlightLite;
                 const arrState = arrivalSegmentState(fLite, date, now);
@@ -422,6 +477,10 @@ function DiaPageInner() {
             <div className="p-12 text-center italic text-ink-muted">
               No hay vuelos registrados para este día.
             </div>
+          ) : filteredFlights.length === 0 ? (
+            <div className="p-8 text-center italic text-ink-muted">
+              Ningún vuelo coincide con la búsqueda.
+            </div>
           ) : null}
         </main>
 
@@ -445,6 +504,8 @@ function DiaPageInner() {
           onClose={() => { setPaxCrewModal(null); fetchFlights(); }}
         />
       ) : null}
+
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }
