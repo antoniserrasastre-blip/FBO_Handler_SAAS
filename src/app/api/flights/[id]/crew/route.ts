@@ -9,7 +9,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { requireWriter } from "@/lib/roles";
 import { eventBus } from "@/lib/events";
-import { encrypt, hashPII, decrypt } from "@/lib/crypto";
+import { encrypt, hashPII, tryDecrypt } from "@/lib/crypto";
 import { upsertOperator } from "@/lib/v2/upsert";
 import { findOperator } from "@/lib/operators";
 
@@ -55,8 +55,8 @@ function legacyShape(args: {
     direction: args.direction,
     fullName: args.crewMember.fullName,
     nationality: args.crewMember.nationality,
-    passportNumber: args.crewMember.passportEncrypted ? decrypt(args.crewMember.passportEncrypted) : null,
-    dateOfBirth: args.crewMember.dobEncrypted ? decrypt(args.crewMember.dobEncrypted) : null,
+    passportNumber: tryDecrypt(args.crewMember.passportEncrypted),
+    dateOfBirth: tryDecrypt(args.crewMember.dobEncrypted),
     role: args.roleOnFlight,
     createdAt: args.createdAt,
     updatedAt: args.updatedAt,

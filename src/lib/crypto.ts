@@ -69,6 +69,22 @@ export function decrypt(payload: string | null | undefined): string | null {
 }
 
 /**
+ * Like `decrypt`, but returns `null` instead of throwing when the payload
+ * cannot be decrypted (missing key, key mismatch, malformed ciphertext).
+ * Use on read paths where one corrupt row should not 500 the whole response.
+ */
+export function tryDecrypt(payload: string | null | undefined): string | null {
+  if (!payload) return null;
+  try {
+    return decrypt(payload);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`[crypto] tryDecrypt failed: ${msg}`);
+    return null;
+  }
+}
+
+/**
  * Deterministic SHA-256 hash for indexable PII (passport number, fullName).
  * Input is normalised: trimmed and upper-cased so "ab12cd" and " Ab12CD "
  * collide as expected for dedupe.

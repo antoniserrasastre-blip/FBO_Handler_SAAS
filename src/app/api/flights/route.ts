@@ -14,7 +14,7 @@ import { palmaDayUtc, getSpainToday } from "@/lib/time";
 import { upsertAircraft, upsertVisit, upsertMovement, upsertOperator } from "@/lib/v2/upsert";
 import { toFlightView } from "@/lib/flightView";
 import { findOperator } from "@/lib/operators";
-import { decrypt } from "@/lib/crypto";
+import { tryDecrypt } from "@/lib/crypto";
 
 // GET /api/flights?date=YYYY-MM-DD[&include=people]
 //
@@ -70,7 +70,7 @@ export async function GET(req: NextRequest) {
             direction: m.direction,
             fullName: [p.givenNames, p.surname].filter(Boolean).join(" ") || "",
             nationality: p.nationality,
-            passportNumber: p.passportEncrypted ? decrypt(p.passportEncrypted) : null,
+            passportNumber: tryDecrypt(p.passportEncrypted),
             status: p.status,
             verified: p.verified,
           });
@@ -81,7 +81,7 @@ export async function GET(req: NextRequest) {
             direction: m.direction,
             fullName: a.crewMember.fullName,
             role: a.roleOnFlight,
-            passportNumber: a.crewMember.passportEncrypted ? decrypt(a.crewMember.passportEncrypted) : null,
+            passportNumber: tryDecrypt(a.crewMember.passportEncrypted),
             nationality: a.crewMember.nationality,
           });
         }

@@ -8,7 +8,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { requireWriter } from "@/lib/roles";
 import { eventBus } from "@/lib/events";
-import { encrypt, hashPII, decrypt } from "@/lib/crypto";
+import { encrypt, hashPII, tryDecrypt } from "@/lib/crypto";
 
 async function resolveMovementId(visitId: string, direction: string): Promise<string | null> {
   const m = await prisma.movement.findUnique({
@@ -36,8 +36,8 @@ function legacyShape(p: {
   createdAt: Date;
   updatedAt: Date;
 }, direction: string) {
-  const passportNumber = p.passportEncrypted ? decrypt(p.passportEncrypted) : null;
-  const dateOfBirth = p.dobEncrypted ? decrypt(p.dobEncrypted) : null;
+  const passportNumber = tryDecrypt(p.passportEncrypted);
+  const dateOfBirth = tryDecrypt(p.dobEncrypted);
   return {
     id: p.id,
     flightId: p.movementId,             // legacy alias (consumers expect flightId)
