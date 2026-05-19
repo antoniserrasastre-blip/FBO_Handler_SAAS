@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useIsMobile } from "@/hooks/useMediaQuery";
 import { ReactNode, useEffect, useRef, useState } from "react";
 import { HelixLogo } from "./Logo";
 
@@ -67,17 +68,18 @@ export function HelixHeader({
   extras,
 }: HelixHeaderProps) {
   const { palma, zulu } = useClocks();
+  const isMobile = useIsMobile();
   return (
     <header className="hx-header">
       <Link href="/dia" className="brand" style={{ textDecoration: "none", color: "inherit" }}>
         <HelixLogo size={26} className="brand-mark" />
         <div className="brand-text">
           <div className="brand-name">Helix</div>
-          <div className="brand-tag">{clientLabel}</div>
+          {!isMobile ? <div className="brand-tag">{clientLabel}</div> : null}
         </div>
       </Link>
 
-      {tabs && tabs.length > 0 ? (
+      {!isMobile && tabs && tabs.length > 0 ? (
         <nav className="hx-tabs">
           {tabs.map((t) => (
             <Link key={t.href} href={t.href} className={t.active ? "on" : undefined}>
@@ -110,6 +112,7 @@ export function HelixHeader({
 
       {extras}
 
+      {!isMobile ? (
       <div className="hx-clocks">
         <div className="hx-clock">
           <span className="l">Palma</span>
@@ -120,6 +123,7 @@ export function HelixHeader({
           <span className="v">{zulu}</span>
         </div>
       </div>
+      ) : null}
 
       {user ? <UserPopover user={user} /> : null}
     </header>
