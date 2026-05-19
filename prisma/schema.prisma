@@ -86,6 +86,10 @@ model Visit {
   departureDate DateTime? // UTC date of actual departure
   notes         String?
 
+  // Provenance — drives sync semantics on PDF re-imports. PDF-sourced visits
+  // are eligible for "cancel" on diff sync; MANUAL/EXTRAS are protected.
+  source        String   @default("MANUAL") // PDF | MANUAL | EXTRAS
+
   movements   Movement[]
   services    Service[]
   lostItems   LostItem[]

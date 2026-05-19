@@ -1,20 +1,84 @@
 // /api/import — Cybermax PDF import. v2 implementation.
 //
-// POST  → parse + preview (no DB write)
-// PUT   → persist parsed flights as Aircraft + Visit + Movement(ARR/DEP)
+// POST  → parse PDF + diff against existing Visits on the target palmaDay.
+//         Returns three lists: toCreate / toUpdate / toCancel so the UI can
+//         show an explicit sync preview before any DB write.
+// PUT   → execute an array of explicit per-row actions (create | update |
+//         cancel | ignore). "cancel" marks both Movements as CANCELLED — it
+//         never deletes a Visit, so attached services/passengers/state survive.
 
 import "@/lib/pdfPolyfills";
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { parseCybermaxPdf, parseDate } from "@/lib/pdfParser";
+import { parseCybermaxPdf, parseDate, type ParsedFlight } from "@/lib/pdfParser";
 import { eventBus } from "@/lib/events";
 import { validateUpload, validateContentLength } from "@/lib/uploadValidation";
 import { upsertAircraft, upsertVisit, upsertMovement, upsertOperator } from "@/lib/v2/upsert";
 import { findOperator } from "@/lib/operators";
 
-// POST — preview
+// Fields shown to the user in the "to update" diff. Keys are the parsed-PDF
+// names; the resolver below maps each one to the equivalent DB value so we
+// can compare them.
+const DIFF_FIELDS = [
+  "callsign",
+  "origin",
+  "eta",
+  "destination",
+  "etd",
+  "parking",
+  "aircraftType",
+  "crewArrival",
+  "crewDeparture",
+  "paxArrival",
+  "paxDeparture",
+] as const;
+type DiffField = (typeof DIFF_FIELDS)[number];
+
+// A movement is "in progress" (and thus protected from a sync-cancel) when the
+// handler has done any operational work that wouldn't make sense to discard.
+function isMovementInProgress(m: {
+  state: string;
+  ata: string | null;
+  atd: string | null;
+  paxState: string;
+  bagsState: string;
+  fuelState: string;
+  toiletState: string;
+}): boolean {
+  if (m.state && m.state !== "EXPECTED") return true;
+  if (m.ata || m.atd) return true;
+  if (m.paxState && !["IN_AIRCRAFT", "NOT_ARRIVED"].includes(m.paxState)) return true;
+  if (m.bagsState && !["IN_AIRCRAFT", "NOT_ARRIVED"].includes(m.bagsState)) return true;
+  if (m.fuelState && m.fuelState !== "NOT_REQUESTED") return true;
+  if (m.toiletState && m.toiletState !== "NOT_REQUESTED") return true;
+  return false;
+}
+
+interface DiffRow {
+  registration: string;
+  callsign: string;
+  flight: ParsedFlight;
+}
+
+interface UpdateDiffRow extends DiffRow {
+  visitId: string;
+  changes: { field: DiffField; from: string | number | null; to: string | number | null }[];
+}
+
+interface CancelCandidateRow {
+  visitId: string;
+  registration: string;
+  callsign: string;
+  source: string;                  // PDF | MANUAL | EXTRAS
+  hasServices: boolean;
+  hasPassengers: boolean;
+  inProgress: boolean;
+  protectedReason: string | null;  // null when the row is safe to cancel
+}
+
+// POST — parse + diff (no DB write)
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -31,7 +95,7 @@ export async function POST(req: NextRequest) {
     if (!v.ok) return NextResponse.json({ error: v.message }, { status: v.status });
   }
 
-  const allFlights: Awaited<ReturnType<typeof parseCybermaxPdf>>["flights"] = [];
+  const allFlights: ParsedFlight[] = [];
   const allErrors: string[] = [];
   let date = "";
 
@@ -49,19 +113,189 @@ export async function POST(req: NextRequest) {
   }
 
   if (!allFlights.length && allErrors.length) {
-    return NextResponse.json({ error: allErrors.join("; "), flights: [], errors: allErrors }, { status: 500 });
+    return NextResponse.json(
+      { error: allErrors.join("; "), flights: [], errors: allErrors, diff: null },
+      { status: 500 },
+    );
   }
-  return NextResponse.json({ date, flights: allFlights, errors: allErrors });
+
+  // Compute diff against existing visits on the same Palma operating day.
+  // Match key = Aircraft.registration (case-insensitive). Two PDF rows with
+  // the same registration on the same day fold into one match — same as the
+  // current upsert semantics.
+  const targetDate = date ? parseDate(date) : null;
+  const diff: {
+    toCreate: DiffRow[];
+    toUpdate: UpdateDiffRow[];
+    toCancel: CancelCandidateRow[];
+  } = { toCreate: [], toUpdate: [], toCancel: [] };
+
+  if (targetDate) {
+    const existing = await prisma.visit.findMany({
+      where: { palmaDay: targetDate },
+      include: {
+        aircraft: true,
+        movements: true,
+        services: { select: { id: true } },
+      },
+    });
+
+    // Passenger counts come from a separate aggregate query so the include
+    // above stays flat.
+    const visitsWithCounts = await Promise.all(
+      existing.map(async (v) => {
+        const pax = await prisma.passenger.count({
+          where: { movement: { visitId: v.id } },
+        });
+        return { v, paxCount: pax };
+      }),
+    );
+
+    const byReg = new Map<string, (typeof visitsWithCounts)[number]>();
+    for (const row of visitsWithCounts) {
+      const reg = row.v.aircraft?.registration?.toUpperCase().trim();
+      if (reg) byReg.set(reg, row);
+    }
+
+    const seenRegs = new Set<string>();
+    for (const f of allFlights) {
+      const reg = f.registration.toUpperCase().trim();
+      seenRegs.add(reg);
+      const match = byReg.get(reg);
+      if (!match) {
+        diff.toCreate.push({ registration: f.registration, callsign: f.callsign, flight: f });
+        continue;
+      }
+      const changes = computeChanges(f, match.v.movements);
+      if (changes.length > 0) {
+        diff.toUpdate.push({
+          registration: f.registration,
+          callsign: f.callsign,
+          flight: f,
+          visitId: match.v.id,
+          changes,
+        });
+      }
+    }
+
+    // Cancellation candidates: anything in DB on this palmaDay whose registration
+    // is missing from the new PDF. Each row is tagged with protection metadata so
+    // the UI can disable the checkbox where appropriate.
+    for (const { v, paxCount } of visitsWithCounts) {
+      const reg = v.aircraft?.registration?.toUpperCase().trim() || "";
+      if (seenRegs.has(reg)) continue;
+
+      const dep = v.movements.find((m) => m.direction === "DEPARTURE");
+      const arr = v.movements.find((m) => m.direction === "ARRIVAL");
+      const isCancelled = (dep?.flightCategory || arr?.flightCategory) === "CANCELLED";
+      if (isCancelled) continue; // already cancelled — skip
+
+      const inProgress =
+        (dep ? isMovementInProgress(dep as unknown as Parameters<typeof isMovementInProgress>[0]) : false) ||
+        (arr ? isMovementInProgress(arr as unknown as Parameters<typeof isMovementInProgress>[0]) : false);
+
+      let protectedReason: string | null = null;
+      if (v.source && v.source !== "PDF") protectedReason = `Origen: ${v.source}`;
+      else if (inProgress) protectedReason = "Operativa en curso";
+
+      diff.toCancel.push({
+        visitId: v.id,
+        registration: v.aircraft?.registration || "",
+        callsign: (dep?.callsign as string) || (arr?.callsign as string) || "",
+        source: v.source || "MANUAL",
+        hasServices: v.services.length > 0,
+        hasPassengers: paxCount > 0,
+        inProgress,
+        protectedReason,
+      });
+    }
+  }
+
+  return NextResponse.json({ date, flights: allFlights, errors: allErrors, diff });
 }
 
-// PUT — persist
+// Compute per-field changes between a parsed PDF row and the current DB state.
+function computeChanges(
+  f: ParsedFlight,
+  movements: { direction: string; [k: string]: unknown }[],
+): UpdateDiffRow["changes"] {
+  const arr = movements.find((m) => m.direction === "ARRIVAL");
+  const dep = movements.find((m) => m.direction === "DEPARTURE");
+
+  const dbValues: Record<DiffField, string | number | null> = {
+    callsign: (dep?.callsign as string) || (arr?.callsign as string) || null,
+    origin: (arr?.origin as string | null) ?? null,
+    eta: (arr?.eta as string | null) ?? null,
+    destination: (dep?.destination as string | null) ?? null,
+    etd: (dep?.etd as string | null) ?? null,
+    parking: ((dep?.parking as string | null) || (arr?.parking as string | null)) ?? null,
+    aircraftType: null, // filled by caller via aircraft if needed; not on movement
+    crewArrival: (arr?.crewCount as number) ?? 0,
+    crewDeparture: (dep?.crewCount as number) ?? 0,
+    paxArrival: (arr?.paxCount as number) ?? 0,
+    paxDeparture: (dep?.paxCount as number) ?? 0,
+  };
+
+  const pdfValues: Record<DiffField, string | number | null> = {
+    callsign: f.callsign || null,
+    origin: f.origin || null,
+    eta: f.eta || null,
+    destination: f.destination || null,
+    etd: f.etd || null,
+    parking: f.parking || null,
+    aircraftType: f.aircraftType || null,
+    crewArrival: f.crewArrival || 0,
+    crewDeparture: f.crewDeparture || 0,
+    paxArrival: f.paxArrival || 0,
+    paxDeparture: f.paxDeparture || 0,
+  };
+
+  const out: UpdateDiffRow["changes"] = [];
+  for (const field of DIFF_FIELDS) {
+    if (field === "aircraftType") continue; // skip: not tracked on Movement
+    const a = normalize(dbValues[field]);
+    const b = normalize(pdfValues[field]);
+    if (a !== b) out.push({ field, from: dbValues[field], to: pdfValues[field] });
+  }
+  return out;
+}
+
+function normalize(v: string | number | null): string {
+  if (v === null || v === undefined) return "";
+  return typeof v === "number" ? String(v) : v.trim().toUpperCase();
+}
+
+// ============================================================================
+// PUT — execute explicit per-row actions
+// ============================================================================
+
+interface SyncCreate { action: "create"; flight: ParsedFlight }
+interface SyncUpdate { action: "update"; flight: ParsedFlight }
+interface SyncCancel { action: "cancel"; visitId: string }
+type SyncAction = SyncCreate | SyncUpdate | SyncCancel;
+
+interface LegacyBody {
+  date: string;
+  flights?: ParsedFlight[];           // legacy path (no diff yet)
+  actions?: SyncAction[];             // new diff-based sync
+}
+
 export async function PUT(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = await req.json();
-  const { date, flights } = body;
-  if (!date || !flights || !Array.isArray(flights)) {
+  const body = (await req.json()) as LegacyBody;
+  const { date } = body;
+  if (!date) return NextResponse.json({ error: "Datos invalidos" }, { status: 400 });
+
+  // Build the action list. Legacy callers still send `flights: [...]` — treat
+  // each one as an upsert (create-or-update) so behaviour stays identical.
+  const actions: SyncAction[] = [];
+  if (Array.isArray(body.actions)) {
+    actions.push(...body.actions);
+  } else if (Array.isArray(body.flights)) {
+    for (const f of body.flights) actions.push({ action: "update", flight: f });
+  } else {
     return NextResponse.json({ error: "Datos invalidos" }, { status: 400 });
   }
 
@@ -69,8 +303,18 @@ export async function PUT(req: NextRequest) {
 
   let created = 0;
   let updated = 0;
+  let cancelled = 0;
+  let skipped = 0;
 
-  for (const f of flights) {
+  for (const a of actions) {
+    if (a.action === "cancel") {
+      const result = await cancelVisit(a.visitId, session.user.id);
+      if (result === "cancelled") cancelled++;
+      else skipped++;
+      continue;
+    }
+
+    const f = a.flight;
     const callsign: string = f.callsign;
     const registration: string = f.registration;
     const arrDate = f.arrivalDate ? parseDate(f.arrivalDate) : targetDate;
@@ -79,7 +323,6 @@ export async function PUT(req: NextRequest) {
       f.arrivalDate && f.departureDate && f.arrivalDate !== f.departureDate,
     );
 
-    // Operator
     let operatorId: string | null = null;
     const op = findOperator(callsign);
     if (op) {
@@ -87,20 +330,17 @@ export async function PUT(req: NextRequest) {
       operatorId = dbOp.id;
     }
 
-    // Aircraft
     const aircraft = await upsertAircraft({
       registration,
       aircraftType: f.aircraftType,
       callsignForOperator: callsign,
     });
 
-    // Visit keyed by aircraft + arrival palmaDay. If arrived earlier (pernocta),
-    // the visit lives in the arrival's day; the departure leg refers to the same
-    // Visit even though it's "on" the target sheet.
     const visit = await upsertVisit({
       aircraftId: aircraft.id,
       palmaDay: arrDate,
       operatorId,
+      source: "PDF",
     });
 
     const isUpdate = visit.createdAt.getTime() !== visit.updatedAt.getTime();
@@ -114,7 +354,6 @@ export async function PUT(req: NextRequest) {
       },
     });
 
-    // ARRIVAL movement
     await upsertMovement({
       visitId: visit.id,
       direction: "ARRIVAL",
@@ -126,12 +365,12 @@ export async function PUT(req: NextRequest) {
         parking: f.parking || null,
         paxCount: f.paxArrival || 0,
         crewCount: f.crewArrival || 0,
-        // pernocta arrived in the past → already on the ground
         state: isOvernight && arrDate.getTime() < targetDate.getTime() ? "PARKED" : "EXPECTED",
+        // If the visit was previously CANCELLED, re-importing un-cancels it.
+        flightCategory: "COMMERCIAL",
       },
     });
 
-    // DEPARTURE movement
     await upsertMovement({
       visitId: visit.id,
       direction: "DEPARTURE",
@@ -144,6 +383,7 @@ export async function PUT(req: NextRequest) {
         paxCount: f.paxDeparture || 0,
         crewCount: f.crewDeparture || 0,
         state: isOvernight && arrDate.getTime() < targetDate.getTime() ? "PARKED" : "EXPECTED",
+        flightCategory: "COMMERCIAL",
       },
     });
 
@@ -163,6 +403,7 @@ export async function PUT(req: NextRequest) {
   const parts = [];
   if (created > 0) parts.push(`${created} nuevos`);
   if (updated > 0) parts.push(`${updated} actualizados`);
+  if (cancelled > 0) parts.push(`${cancelled} cancelados`);
 
   eventBus.emit({
     type: "flight_created",
@@ -176,7 +417,36 @@ export async function PUT(req: NextRequest) {
   return NextResponse.json({
     created,
     updated,
+    cancelled,
+    skipped,
     linked: 0,
-    total: flights.length,
+    total: actions.length,
   });
+}
+
+// Mark every Movement of a Visit as CANCELLED. Returns "cancelled" on success
+// or "skipped" if the visit doesn't exist or was already cancelled. Never
+// deletes — services, passengers, lost items and event logs all survive.
+async function cancelVisit(visitId: string, userId: string): Promise<"cancelled" | "skipped"> {
+  const visit = await prisma.visit.findUnique({
+    where: { id: visitId },
+    include: { movements: true, aircraft: true },
+  });
+  if (!visit) return "skipped";
+  const allCancelled = visit.movements.every((m) => m.flightCategory === "CANCELLED");
+  if (allCancelled) return "skipped";
+
+  await prisma.movement.updateMany({
+    where: { visitId },
+    data: { flightCategory: "CANCELLED" },
+  });
+  await prisma.eventLog.create({
+    data: {
+      visitId,
+      userId,
+      action: "Cancelado por sync de PDF",
+      details: `${visit.movements[0]?.callsign || ""} (${visit.aircraft?.registration || ""})`,
+    },
+  });
+  return "cancelled";
 }

@@ -9,11 +9,51 @@ import { HelixButton, SegmentedControl } from "@/components/helix";
 
 type Tab = "pdf" | "extras";
 
+interface DiffCreate {
+  registration: string;
+  callsign: string;
+  flight: ParsedFlight;
+}
+interface DiffUpdate extends DiffCreate {
+  visitId: string;
+  changes: { field: string; from: string | number | null; to: string | number | null }[];
+}
+interface DiffCancel {
+  visitId: string;
+  registration: string;
+  callsign: string;
+  source: string;
+  hasServices: boolean;
+  hasPassengers: boolean;
+  inProgress: boolean;
+  protectedReason: string | null;
+}
+interface DiffPreview {
+  toCreate: DiffCreate[];
+  toUpdate: DiffUpdate[];
+  toCancel: DiffCancel[];
+}
+
 interface ParseResult {
   date: string;
   flights: ParsedFlight[];
   errors: string[];
+  diff: DiffPreview | null;
 }
+
+const FIELD_LABELS: Record<string, string> = {
+  callsign: "Indicativo",
+  origin: "Origen",
+  eta: "ETA",
+  destination: "Destino",
+  etd: "ETD",
+  parking: "Parking",
+  aircraftType: "Tipo",
+  crewArrival: "Crew arr",
+  crewDeparture: "Crew dep",
+  paxArrival: "Pax arr",
+  paxDeparture: "Pax dep",
+};
 
 interface ParsedService {
   type: string;
@@ -75,9 +115,14 @@ function PdfImportTab() {
   const [parsing, setParsing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<ParseResult | null>(null);
-  const [saveResult, setSaveResult] = useState<{ created: number; updated: number } | null>(null);
+  const [saveResult, setSaveResult] = useState<{ created: number; updated: number; cancelled: number; skipped: number } | null>(null);
   const [error, setError] = useState("");
-  const [selectedFlights, setSelectedFlights] = useState<Set<number>>(new Set());
+
+  // Per-section selection. "create" and "update" default to all-selected; "cancel"
+  // defaults to none-selected and protected rows can't be selected at all.
+  const [createSel, setCreateSel] = useState<Set<string>>(new Set());
+  const [updateSel, setUpdateSel] = useState<Set<string>>(new Set());
+  const [cancelSel, setCancelSel] = useState<Set<string>>(new Set());
 
   async function handleFileUpload(files: File[]) {
     setError(""); setResult(null); setSaveResult(null); setParsing(true);
@@ -88,7 +133,18 @@ function PdfImportTab() {
       if (!res.ok) { setError((await res.json()).error || "Error"); return; }
       const data: ParseResult = await res.json();
       setResult(data);
-      setSelectedFlights(new Set(data.flights.map((_, i) => i)));
+      const d = data.diff;
+      if (d) {
+        setCreateSel(new Set(d.toCreate.map(r => r.registration)));
+        setUpdateSel(new Set(d.toUpdate.map(r => r.registration)));
+        setCancelSel(new Set()); // cancel is opt-in
+      } else {
+        // No diff (no date parsed). Fall back to treating every parsed flight
+        // as a create-or-update.
+        setCreateSel(new Set(data.flights.map(f => f.registration)));
+        setUpdateSel(new Set());
+        setCancelSel(new Set());
+      }
     } catch { setError("Error de conexion"); } finally { setParsing(false); }
   }
 
@@ -96,23 +152,37 @@ function PdfImportTab() {
     if (!result) return;
     setSaving(true); setError("");
     try {
+      const actions: { action: "create" | "update" | "cancel"; flight?: ParsedFlight; visitId?: string }[] = [];
+      const d = result.diff;
+      if (d) {
+        for (const r of d.toCreate) if (createSel.has(r.registration)) actions.push({ action: "create", flight: r.flight });
+        for (const r of d.toUpdate) if (updateSel.has(r.registration)) actions.push({ action: "update", flight: r.flight });
+        for (const r of d.toCancel) if (cancelSel.has(r.visitId) && !r.protectedReason) actions.push({ action: "cancel", visitId: r.visitId });
+      } else {
+        for (const f of result.flights) if (createSel.has(f.registration)) actions.push({ action: "update", flight: f });
+      }
+
       const res = await fetch("/api/import", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date: result.date, flights: result.flights.filter((_, i) => selectedFlights.has(i)) }),
+        body: JSON.stringify({ date: result.date, actions }),
       });
       if (!res.ok) { setError((await res.json()).error || "Error"); return; }
       setSaveResult(await res.json());
     } catch { setError("Error de conexion"); } finally { setSaving(false); }
   }
 
-  function toggleFlight(i: number) {
-    setSelectedFlights(prev => { const n = new Set(prev); n.has(i) ? n.delete(i) : n.add(i); return n; });
+  function toggleIn(set: Set<string>, setter: (s: Set<string>) => void, key: string) {
+    const n = new Set(set);
+    n.has(key) ? n.delete(key) : n.add(key);
+    setter(n);
   }
-  function toggleAll() {
-    if (!result) return;
-    setSelectedFlights(prev => prev.size === result.flights.length ? new Set() : new Set(result.flights.map((_, i) => i)));
+  function toggleAllIn(keys: string[], set: Set<string>, setter: (s: Set<string>) => void) {
+    if (set.size === keys.length) setter(new Set());
+    else setter(new Set(keys));
   }
+
+  const totalSelected = createSel.size + updateSel.size + cancelSel.size;
 
   return (
     <>
@@ -133,69 +203,48 @@ function PdfImportTab() {
       {result?.errors.length ? <WarningBanner items={result.errors} /> : null}
 
       {result && result.flights.length > 0 && !saveResult && (
-        <div className="mt-6">
-          <div className="mb-3 flex items-center justify-between">
+        <div className="mt-6 space-y-6">
+          <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold text-ink-1">
-              <span className="font-mono [font-variant-numeric:tabular-nums]">{result.flights.length}</span>{" "}
-              vuelos — <span className="font-mono">{result.date}</span>
+              Sincronizar orden del día — <span className="font-mono">{result.date}</span>
             </h2>
-            <button
-              onClick={toggleAll}
-              className="font-mono text-xs font-semibold text-brand-active hover:text-brand-hover"
-            >
-              {selectedFlights.size === result.flights.length ? "Deseleccionar" : "Seleccionar"} todo
-            </button>
+            <span className="font-mono text-xs text-ink-muted">
+              {result.diff
+                ? `+${result.diff.toCreate.length} nuevos · ~${result.diff.toUpdate.length} con cambios · −${result.diff.toCancel.length} ausentes del PDF`
+                : `${result.flights.length} vuelos`}
+            </span>
           </div>
-          <div className="overflow-x-auto rounded-hx-md border border-line bg-bg">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-bg-subtle">
-                <tr className="font-mono text-[10px] uppercase tracking-wider text-ink-muted">
-                  <th className="border-b border-line px-3 py-2">
-                    <input type="checkbox" checked={selectedFlights.size === result.flights.length} onChange={toggleAll} />
-                  </th>
-                  <th className="border-b border-line px-3 py-2">Matrícula</th>
-                  <th className="border-b border-line px-3 py-2">Indicativo</th>
-                  <th className="border-b border-line px-3 py-2">Tipo</th>
-                  <th className="border-b border-line px-3 py-2">Origen</th>
-                  <th className="border-b border-line px-3 py-2">ETA</th>
-                  <th className="border-b border-line px-3 py-2">Destino</th>
-                  <th className="border-b border-line px-3 py-2">ETD</th>
-                  <th className="border-b border-line px-3 py-2">Parking</th>
-                  <th className="border-b border-line px-3 py-2">Crew</th>
-                  <th className="border-b border-line px-3 py-2">Pax</th>
-                </tr>
-              </thead>
-              <tbody className="font-mono [font-variant-numeric:tabular-nums]">
-                {result.flights.map((f, i) => (
-                  <tr
-                    key={i}
-                    className={`cursor-pointer border-b border-line-subtle transition-colors hover:bg-bg-subtle ${
-                      selectedFlights.has(i) ? "" : "opacity-50"
-                    }`}
-                    onClick={() => toggleFlight(i)}
-                  >
-                    <td className="px-3 py-2"><input type="checkbox" checked={selectedFlights.has(i)} onChange={() => toggleFlight(i)} /></td>
-                    <td className="px-3 py-2 font-semibold text-ink-1">{f.registration}</td>
-                    <td className="px-3 py-2 text-ink-3">{f.callsign}</td>
-                    <td className="px-3 py-2 text-ink-2">{f.aircraftType}</td>
-                    <td className="px-3 py-2 text-ink-2">{f.origin}</td>
-                    <td className="px-3 py-2 text-ink-2">{f.arrivalDate !== result.date ? f.arrivalDate + " " : ""}{f.eta}</td>
-                    <td className="px-3 py-2 text-ink-2">{f.destination}</td>
-                    <td className="px-3 py-2 text-ink-2">{f.departureDate !== result.date ? f.departureDate + " " : ""}{f.etd}</td>
-                    <td className="px-3 py-2 text-ink-2">{f.parking}</td>
-                    <td className="px-3 py-2 text-ink-2">{f.crewArrival}/{f.crewDeparture}</td>
-                    <td className="px-3 py-2 text-ink-2">{f.paxArrival}/{f.paxDeparture}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="mt-4 flex justify-end gap-2">
+
+          {result.diff && (
+            <>
+              <DiffCreateSection
+                rows={result.diff.toCreate}
+                selected={createSel}
+                onToggle={(k) => toggleIn(createSel, setCreateSel, k)}
+                onToggleAll={() => toggleAllIn(result.diff!.toCreate.map(r => r.registration), createSel, setCreateSel)}
+                sheetDate={result.date}
+              />
+              <DiffUpdateSection
+                rows={result.diff.toUpdate}
+                selected={updateSel}
+                onToggle={(k) => toggleIn(updateSel, setUpdateSel, k)}
+                onToggleAll={() => toggleAllIn(result.diff!.toUpdate.map(r => r.registration), updateSel, setUpdateSel)}
+              />
+              <DiffCancelSection
+                rows={result.diff.toCancel}
+                selected={cancelSel}
+                onToggle={(k) => toggleIn(cancelSel, setCancelSel, k)}
+                onToggleAll={() => toggleAllIn(result.diff!.toCancel.filter(r => !r.protectedReason).map(r => r.visitId), cancelSel, setCancelSel)}
+              />
+            </>
+          )}
+
+          <div className="flex justify-end gap-2">
             <HelixButton variant="secondary" onClick={() => { setResult(null); setError(""); }}>
               Cancelar
             </HelixButton>
-            <HelixButton variant="primary" onClick={handleConfirm} disabled={saving || !selectedFlights.size}>
-              {saving ? "Importando…" : `Importar ${selectedFlights.size} vuelo${selectedFlights.size !== 1 ? "s" : ""}`}
+            <HelixButton variant="primary" onClick={handleConfirm} disabled={saving || totalSelected === 0}>
+              {saving ? "Sincronizando…" : `Sincronizar ${totalSelected} cambio${totalSelected !== 1 ? "s" : ""}`}
             </HelixButton>
           </div>
         </div>
@@ -206,6 +255,8 @@ function PdfImportTab() {
           lines={[
             saveResult.created > 0 ? `${saveResult.created} vuelos creados` : null,
             saveResult.updated > 0 ? `${saveResult.updated} vuelos actualizados` : null,
+            saveResult.cancelled > 0 ? `${saveResult.cancelled} vuelos cancelados` : null,
+            saveResult.skipped > 0 ? `${saveResult.skipped} omitidos` : null,
           ]}
           onReset={() => { setResult(null); setSaveResult(null); setError(""); }}
           resetLabel="Importar otro archivo"
@@ -407,5 +458,193 @@ function SuccessResult({ lines, onReset, resetLabel }: { lines: (string | null)[
         <HelixButton variant="primary" onClick={() => router.push("/")}>Ir al panel</HelixButton>
       </div>
     </div>
+  );
+}
+
+// ======= Diff sections =======
+
+function SectionHeader({ count, title, tone, onToggleAll, allSelected, disabledToggle }: {
+  count: number; title: string; tone: "create" | "update" | "cancel";
+  onToggleAll: () => void; allSelected: boolean; disabledToggle?: boolean;
+}) {
+  const palette = {
+    create: "border-success-strong bg-success-bg text-success-strong",
+    update: "border-warning-strong bg-warning-bg text-warning-strong",
+    cancel: "border-danger-strong bg-danger-bg text-danger-strong",
+  }[tone];
+  return (
+    <div className={`flex items-center justify-between rounded-hx-md border px-3 py-2 ${palette}`}>
+      <h3 className="font-mono text-xs uppercase tracking-wider">
+        {title} · <span className="[font-variant-numeric:tabular-nums]">{count}</span>
+      </h3>
+      {count > 0 && !disabledToggle && (
+        <button onClick={onToggleAll} className="font-mono text-[10px] font-semibold underline">
+          {allSelected ? "Deseleccionar" : "Seleccionar"} todo
+        </button>
+      )}
+    </div>
+  );
+}
+
+function DiffCreateSection({ rows, selected, onToggle, onToggleAll, sheetDate }: {
+  rows: DiffCreate[]; selected: Set<string>; onToggle: (key: string) => void; onToggleAll: () => void; sheetDate: string;
+}) {
+  if (rows.length === 0) return null;
+  return (
+    <section>
+      <SectionHeader count={rows.length} title="Vuelos nuevos a crear" tone="create" onToggleAll={onToggleAll} allSelected={selected.size === rows.length} />
+      <div className="mt-2 overflow-x-auto rounded-hx-md border border-line bg-bg">
+        <table className="w-full text-left text-xs">
+          <thead className="bg-bg-subtle">
+            <tr className="font-mono text-[10px] uppercase tracking-wider text-ink-muted">
+              <th className="border-b border-line px-3 py-2 w-8"></th>
+              <th className="border-b border-line px-3 py-2">Matrícula</th>
+              <th className="border-b border-line px-3 py-2">Indicativo</th>
+              <th className="border-b border-line px-3 py-2">Tipo</th>
+              <th className="border-b border-line px-3 py-2">Origen</th>
+              <th className="border-b border-line px-3 py-2">ETA</th>
+              <th className="border-b border-line px-3 py-2">Destino</th>
+              <th className="border-b border-line px-3 py-2">ETD</th>
+              <th className="border-b border-line px-3 py-2">Parking</th>
+            </tr>
+          </thead>
+          <tbody className="font-mono [font-variant-numeric:tabular-nums]">
+            {rows.map((r) => {
+              const f = r.flight;
+              const checked = selected.has(r.registration);
+              return (
+                <tr key={r.registration} onClick={() => onToggle(r.registration)} className={`cursor-pointer border-b border-line-subtle transition-colors hover:bg-bg-subtle ${checked ? "" : "opacity-50"}`}>
+                  <td className="px-3 py-2"><input type="checkbox" checked={checked} onChange={() => onToggle(r.registration)} /></td>
+                  <td className="px-3 py-2 font-semibold text-ink-1">{f.registration}</td>
+                  <td className="px-3 py-2 text-ink-3">{f.callsign}</td>
+                  <td className="px-3 py-2 text-ink-2">{f.aircraftType}</td>
+                  <td className="px-3 py-2 text-ink-2">{f.origin}</td>
+                  <td className="px-3 py-2 text-ink-2">{f.arrivalDate !== sheetDate ? f.arrivalDate + " " : ""}{f.eta}</td>
+                  <td className="px-3 py-2 text-ink-2">{f.destination}</td>
+                  <td className="px-3 py-2 text-ink-2">{f.departureDate !== sheetDate ? f.departureDate + " " : ""}{f.etd}</td>
+                  <td className="px-3 py-2 text-ink-2">{f.parking}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function DiffUpdateSection({ rows, selected, onToggle, onToggleAll }: {
+  rows: DiffUpdate[]; selected: Set<string>; onToggle: (key: string) => void; onToggleAll: () => void;
+}) {
+  if (rows.length === 0) return null;
+  return (
+    <section>
+      <SectionHeader count={rows.length} title="Vuelos con cambios" tone="update" onToggleAll={onToggleAll} allSelected={selected.size === rows.length} />
+      <div className="mt-2 space-y-2">
+        {rows.map((r) => {
+          const checked = selected.has(r.registration);
+          return (
+            <div key={r.registration} onClick={() => onToggle(r.registration)} className={`cursor-pointer rounded-hx-md border border-line bg-bg px-4 py-3 transition-colors hover:bg-bg-subtle ${checked ? "" : "opacity-50"}`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <input type="checkbox" checked={checked} onChange={() => onToggle(r.registration)} onClick={(e) => e.stopPropagation()} />
+                  <span className="font-mono text-sm font-semibold text-ink-1">{r.registration}</span>
+                  <span className="font-mono text-xs text-ink-3">{r.callsign}</span>
+                </div>
+                <span className="font-mono text-[10px] uppercase tracking-wider text-ink-muted">
+                  {r.changes.length} cambio{r.changes.length !== 1 ? "s" : ""}
+                </span>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {r.changes.map((c, i) => (
+                  <span key={i} className="inline-flex items-center gap-1 rounded-hx-pill bg-warning-bg px-2 py-0.5 font-mono text-[11px]">
+                    <span className="font-semibold text-warning-strong">{FIELD_LABELS[c.field] || c.field}</span>
+                    <span className="text-ink-muted line-through">{String(c.from ?? "—")}</span>
+                    <span className="text-warning-strong">→</span>
+                    <span className="font-semibold text-warning-strong">{String(c.to ?? "—")}</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function DiffCancelSection({ rows, selected, onToggle, onToggleAll }: {
+  rows: DiffCancel[]; selected: Set<string>; onToggle: (key: string) => void; onToggleAll: () => void;
+}) {
+  if (rows.length === 0) return null;
+  const togglable = rows.filter(r => !r.protectedReason);
+  return (
+    <section>
+      <SectionHeader
+        count={rows.length}
+        title="Ausentes del nuevo PDF (cancelar)"
+        tone="cancel"
+        onToggleAll={onToggleAll}
+        allSelected={togglable.length > 0 && selected.size === togglable.length}
+        disabledToggle={togglable.length === 0}
+      />
+      <p className="mt-1 px-1 font-mono text-[11px] text-ink-muted">
+        Marcados como CANCELLED — no se borran. Pasajeros, servicios y estado operativo se conservan.
+      </p>
+      <div className="mt-2 space-y-2">
+        {rows.map((r) => {
+          const isProtected = !!r.protectedReason;
+          const checked = !isProtected && selected.has(r.visitId);
+          return (
+            <div
+              key={r.visitId}
+              onClick={() => !isProtected && onToggle(r.visitId)}
+              className={`rounded-hx-md border border-line bg-bg px-4 py-3 transition-colors ${isProtected ? "cursor-not-allowed opacity-60" : "cursor-pointer hover:bg-bg-subtle"} ${checked ? "border-danger-strong bg-danger-bg" : ""}`}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    disabled={isProtected}
+                    onChange={() => !isProtected && onToggle(r.visitId)}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                  <span className="font-mono text-sm font-semibold text-ink-1">{r.registration || "—"}</span>
+                  <span className="font-mono text-xs text-ink-3">{r.callsign || "—"}</span>
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {r.source !== "PDF" && (
+                    <span className="rounded-hx-pill bg-bg-muted px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-ink-3">
+                      {r.source}
+                    </span>
+                  )}
+                  {r.inProgress && (
+                    <span className="rounded-hx-pill bg-warning-bg px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-warning-strong">
+                      en curso
+                    </span>
+                  )}
+                  {r.hasServices && (
+                    <span className="rounded-hx-pill bg-brand-tint px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-brand-active">
+                      servicios
+                    </span>
+                  )}
+                  {r.hasPassengers && (
+                    <span className="rounded-hx-pill bg-brand-tint px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-brand-active">
+                      pax
+                    </span>
+                  )}
+                </div>
+              </div>
+              {r.protectedReason && (
+                <p className="mt-1 font-mono text-[11px] text-ink-muted">
+                  Protegido: {r.protectedReason}. Cancela manualmente desde la ficha si procede.
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }

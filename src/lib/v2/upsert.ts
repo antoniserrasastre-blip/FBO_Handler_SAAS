@@ -66,17 +66,22 @@ export async function upsertVisit(args: {
   aircraftId: string;
   palmaDay: Date | string;
   operatorId?: string | null;
+  // Provenance — preserved on update unless explicitly upgraded (MANUAL → PDF
+  // when a manual entry is later confirmed by a PDF re-import).
+  source?: "PDF" | "MANUAL" | "EXTRAS";
 }) {
   const palmaDay = args.palmaDay instanceof Date ? args.palmaDay : palmaDayUtc(args.palmaDay);
   const existing = await prisma.visit.findFirst({
     where: { aircraftId: args.aircraftId, palmaDay },
   });
   if (existing) {
-    if (!existing.operatorId && args.operatorId) {
-      return prisma.visit.update({
-        where: { id: existing.id },
-        data: { operatorId: args.operatorId },
-      });
+    const patch: Record<string, unknown> = {};
+    if (!existing.operatorId && args.operatorId) patch.operatorId = args.operatorId;
+    // Upgrade-only: MANUAL/EXTRAS → PDF when a PDF later vouches for the visit.
+    // Never downgrade (PDF is the strongest provenance and protects from sync).
+    if (args.source === "PDF" && existing.source !== "PDF") patch.source = "PDF";
+    if (Object.keys(patch).length) {
+      return prisma.visit.update({ where: { id: existing.id }, data: patch });
     }
     return existing;
   }
@@ -85,6 +90,7 @@ export async function upsertVisit(args: {
       aircraftId: args.aircraftId,
       operatorId: args.operatorId || null,
       palmaDay,
+      source: args.source || "MANUAL",
     },
   });
 }

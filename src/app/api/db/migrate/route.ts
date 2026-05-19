@@ -56,6 +56,7 @@ const V2_TABLES = [
     "arrivalDate" DATETIME,
     "departureDate" DATETIME,
     "notes" TEXT,
+    "source" TEXT NOT NULL DEFAULT 'MANUAL',
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" DATETIME NOT NULL,
     CONSTRAINT "Visit_aircraftId_fkey" FOREIGN KEY ("aircraftId") REFERENCES "Aircraft" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
@@ -226,6 +227,13 @@ const V2_TABLES = [
   `CREATE INDEX IF NOT EXISTS "EventLog_userId_idx" ON "EventLog"("userId")`,
 ];
 
+// Idempotent additive migrations for columns added after the initial V2 schema.
+// SQLite has no IF NOT EXISTS on ADD COLUMN, so we swallow "duplicate column"
+// errors. Order is irrelevant — each must be self-contained.
+const V2_ADDITIVE_MIGRATIONS: { sql: string; note: string }[] = [
+  { sql: `ALTER TABLE "Visit" ADD COLUMN "source" TEXT NOT NULL DEFAULT 'MANUAL'`, note: "Visit.source" },
+];
+
 // Tables that exist in V1 with incompatible FKs (point to Flight, which no
 // longer exists in the V2 code). DROP order respects FK dependencies.
 const V1_DROPS = [
@@ -293,6 +301,23 @@ async function runMigration(req: NextRequest) {
           },
           { status: 409 },
         );
+      }
+    }
+
+    log.push("== ADD COLUMNS (idempotent) ==");
+    for (const m of V2_ADDITIVE_MIGRATIONS) {
+      try {
+        await client.execute(m.sql);
+        log.push(`  ✓ ${m.note}`);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        // SQLite returns "duplicate column name" when the column already exists.
+        if (/duplicate column/i.test(msg)) {
+          log.push(`  · ${m.note} (already present)`);
+        } else {
+          log.push(`  ✗ ${m.note}: ${msg}`);
+          return NextResponse.json({ error: `Additive migration failed: ${msg}`, log }, { status: 500 });
+        }
       }
     }
 

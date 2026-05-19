@@ -138,6 +138,7 @@ export async function POST(req: NextRequest) {
     aircraftId: aircraft.id,
     palmaDay,
     operatorId,
+    source: "MANUAL",
   });
 
   // Create DEPARTURE movement (manual quick-adds typically capture the departure leg)

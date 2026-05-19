@@ -122,7 +122,7 @@ export async function PUT(req: NextRequest) {
       if (!visit) {
         // Orphan: create Aircraft + Visit, no Movements yet.
         const aircraft = await upsertAircraft({ registration: extra.registration });
-        visit = await upsertVisit({ aircraftId: aircraft.id, palmaDay });
+        visit = await upsertVisit({ aircraftId: aircraft.id, palmaDay, source: "EXTRAS" });
         pendingCreated.push(extra.registration);
         visitByReg.set(reg, visit);
         await prisma.eventLog.create({
