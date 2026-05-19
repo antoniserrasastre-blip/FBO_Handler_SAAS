@@ -139,6 +139,7 @@ export async function POST(req: NextRequest) {
     palmaDay,
     operatorId,
     source: "MANUAL",
+    legCallsign: flightData.callsign,
   });
 
   // Create DEPARTURE movement (manual quick-adds typically capture the departure leg)

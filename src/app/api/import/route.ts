@@ -119,10 +119,16 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Compute diff against existing visits on the same Palma operating day.
-  // Match key = Aircraft.registration (case-insensitive). Two PDF rows with
-  // the same registration on the same day fold into one match — same as the
-  // current upsert semantics.
+  // Compute diff against existing visits on this Palma operating day.
+  //
+  // Match key is (registration, arrivalCallsign) — never (registration) alone.
+  // The same aircraft can do two distinct turnarounds in a single day with
+  // different callsigns; folding them by registration would lose one.
+  //
+  // The DB-side scope includes both:
+  //   - Visits whose palmaDay == targetDate (today's arrivals)
+  //   - Visits whose departureDate == targetDate and palmaDay < targetDate
+  //     (pernoctas leaving today — they're listed on today's PDF too)
   const targetDate = date ? parseDate(date) : null;
   const diff: {
     toCreate: DiffRow[];
@@ -132,7 +138,12 @@ export async function POST(req: NextRequest) {
 
   if (targetDate) {
     const existing = await prisma.visit.findMany({
-      where: { palmaDay: targetDate },
+      where: {
+        OR: [
+          { palmaDay: targetDate },
+          { departureDate: targetDate, palmaDay: { lt: targetDate } },
+        ],
+      },
       include: {
         aircraft: true,
         movements: true,
@@ -151,21 +162,49 @@ export async function POST(req: NextRequest) {
       }),
     );
 
-    const byReg = new Map<string, (typeof visitsWithCounts)[number]>();
-    for (const row of visitsWithCounts) {
-      const reg = row.v.aircraft?.registration?.toUpperCase().trim();
-      if (reg) byReg.set(reg, row);
+    // Helper: build a stable compound key for a visit. Prefer the ARRIVAL
+    // callsign; fall back to DEPARTURE for pernoctas / departure-only rows.
+    function visitKey(v: (typeof visitsWithCounts)[number]["v"]): string {
+      const reg = v.aircraft?.registration?.toUpperCase().trim() || "";
+      const arr = v.movements.find((m) => m.direction === "ARRIVAL");
+      const dep = v.movements.find((m) => m.direction === "DEPARTURE");
+      const cs = (arr?.callsign || dep?.callsign || "").toUpperCase().trim();
+      return `${reg}::${cs}`;
+    }
+    function pdfKey(f: ParsedFlight): string {
+      const reg = f.registration.toUpperCase().trim();
+      const cs = (f.callsign || f.departureCallsign || "").toUpperCase().trim();
+      return `${reg}::${cs}`;
     }
 
-    const seenRegs = new Set<string>();
+    // Index DB visits by compound key. Multimap-ish: if two visits collide on
+    // the same key (extremely rare: identical reg + identical callsign), we
+    // keep them as an array so we can match them positionally to PDF rows.
+    const byKey = new Map<string, (typeof visitsWithCounts)[number][]>();
+    for (const row of visitsWithCounts) {
+      const key = visitKey(row.v);
+      const bucket = byKey.get(key);
+      if (bucket) bucket.push(row);
+      else byKey.set(key, [row]);
+    }
+
+    // Aircrafts that the PDF mentions at all — orphan adoption (see below).
+    const seenRegs = new Set<string>(
+      allFlights.map((f) => f.registration.toUpperCase().trim()),
+    );
+    const seenKeys = new Set<string>();
+    const usedVisitIds = new Set<string>();
+
     for (const f of allFlights) {
-      const reg = f.registration.toUpperCase().trim();
-      seenRegs.add(reg);
-      const match = byReg.get(reg);
+      const key = pdfKey(f);
+      seenKeys.add(key);
+      const bucket = byKey.get(key) || [];
+      const match = bucket.find((r) => !usedVisitIds.has(r.v.id));
       if (!match) {
         diff.toCreate.push({ registration: f.registration, callsign: f.callsign, flight: f });
         continue;
       }
+      usedVisitIds.add(match.v.id);
       const changes = computeChanges(f, match.v.movements);
       if (changes.length > 0) {
         diff.toUpdate.push({
@@ -178,17 +217,22 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Cancellation candidates: anything in DB on this palmaDay whose registration
-    // is missing from the new PDF. Each row is tagged with protection metadata so
-    // the UI can disable the checkbox where appropriate.
+    // Cancellation candidates: any DB visit not matched by a PDF row.
+    // Two extra exclusions on top of "already cancelled":
+    //   - Orphan visits (no Movements) for an aircraft the PDF still
+    //     mentions: upsertVisit will adopt the orphan on PUT, so cancelling
+    //     it would be wrong. (Same logic that keeps EXTRAS services linked.)
     for (const { v, paxCount } of visitsWithCounts) {
-      const reg = v.aircraft?.registration?.toUpperCase().trim() || "";
-      if (seenRegs.has(reg)) continue;
+      if (usedVisitIds.has(v.id)) continue;
 
       const dep = v.movements.find((m) => m.direction === "DEPARTURE");
       const arr = v.movements.find((m) => m.direction === "ARRIVAL");
       const isCancelled = (dep?.flightCategory || arr?.flightCategory) === "CANCELLED";
-      if (isCancelled) continue; // already cancelled — skip
+      if (isCancelled) continue;
+
+      const reg = v.aircraft?.registration?.toUpperCase().trim() || "";
+      const isOrphan = v.movements.length === 0;
+      if (isOrphan && seenRegs.has(reg)) continue; // will be adopted
 
       const inProgress =
         (dep ? isMovementInProgress(dep as unknown as Parameters<typeof isMovementInProgress>[0]) : false) ||
@@ -201,7 +245,7 @@ export async function POST(req: NextRequest) {
       diff.toCancel.push({
         visitId: v.id,
         registration: v.aircraft?.registration || "",
-        callsign: (dep?.callsign as string) || (arr?.callsign as string) || "",
+        callsign: (arr?.callsign as string) || (dep?.callsign as string) || "",
         source: v.source || "MANUAL",
         hasServices: v.services.length > 0,
         hasPassengers: paxCount > 0,
@@ -341,6 +385,7 @@ export async function PUT(req: NextRequest) {
       palmaDay: arrDate,
       operatorId,
       source: "PDF",
+      legCallsign: callsign,
     });
 
     const isUpdate = visit.createdAt.getTime() !== visit.updatedAt.getTime();

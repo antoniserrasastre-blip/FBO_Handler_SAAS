@@ -57,10 +57,19 @@ export async function upsertOperator(icaoCode: string, name: string) {
 }
 
 /**
- * Find or create a Visit for a given aircraft on a given Palma operating day.
- * Multiple legs in the same day end up as separate Visits — callers should
- * key by callsign+date if disambiguation is needed (current import flows
- * treat one aircraft/day as one visit, mirroring the old Flight semantics).
+ * Find or create a Visit for an aircraft on a given Palma operating day.
+ *
+ * `legCallsign` discriminates between multiple visits of the same aircraft
+ * on the same day (e.g. two turnarounds back-to-back). The match cascade is:
+ *
+ *   1. Visit whose Movements include the callsign — same operational leg.
+ *   2. Orphan Visit (no Movements yet) — typically an EXTRAS-only Visit
+ *      created from the Excel before the PDF arrived. We adopt it so the
+ *      attached services stay linked to the now-confirmed PDF Visit.
+ *   3. Nothing found → create a brand-new Visit. This is the path that
+ *      makes two same-day visits coexist instead of collapsing.
+ *
+ * Without `legCallsign`, falls back to legacy first-match-or-create.
  */
 export async function upsertVisit(args: {
   aircraftId: string;
@@ -69,11 +78,37 @@ export async function upsertVisit(args: {
   // Provenance — preserved on update unless explicitly upgraded (MANUAL → PDF
   // when a manual entry is later confirmed by a PDF re-import).
   source?: "PDF" | "MANUAL" | "EXTRAS";
+  legCallsign?: string;
 }) {
   const palmaDay = args.palmaDay instanceof Date ? args.palmaDay : palmaDayUtc(args.palmaDay);
-  const existing = await prisma.visit.findFirst({
-    where: { aircraftId: args.aircraftId, palmaDay },
-  });
+  const cs = args.legCallsign?.toUpperCase().trim();
+
+  let existing: Awaited<ReturnType<typeof prisma.visit.findFirst>> = null;
+
+  if (cs) {
+    existing = await prisma.visit.findFirst({
+      where: {
+        aircraftId: args.aircraftId,
+        palmaDay,
+        movements: { some: { callsign: cs } },
+      },
+    });
+    if (!existing) {
+      // Adopt an orphan Visit (no Movements yet) — keeps services attached.
+      existing = await prisma.visit.findFirst({
+        where: {
+          aircraftId: args.aircraftId,
+          palmaDay,
+          movements: { none: {} },
+        },
+      });
+    }
+  } else {
+    existing = await prisma.visit.findFirst({
+      where: { aircraftId: args.aircraftId, palmaDay },
+    });
+  }
+
   if (existing) {
     const patch: Record<string, unknown> = {};
     if (!existing.operatorId && args.operatorId) patch.operatorId = args.operatorId;
