@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, userEvent, within } from "@/test/rtl";
 import { VisitCard } from "./VisitCard";
 import { makeFlight, makeService } from "@/test/factories";
@@ -306,6 +306,65 @@ describe("VisitCard signal pills + indicators", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+// ─── Mobile responsive ─────────────────────────────────────────────────────
+
+function installMatchMedia(isMobile: boolean) {
+  const mql = {
+    matches: isMobile,
+    media: "(max-width: 640px)",
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+    onchange: null,
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+  };
+  Object.defineProperty(window, "matchMedia", {
+    value: vi.fn().mockReturnValue(mql),
+    configurable: true,
+    writable: true,
+  });
+}
+
+describe("VisitCard mobile layout", () => {
+  afterEach(() => {
+    delete (window as unknown as { matchMedia?: unknown }).matchMedia;
+  });
+
+  it("hides the Editar button on mobile (no editing affordance in the hero)", () => {
+    installMatchMedia(true);
+    render(<VisitCard flight={makeFlight()} onOpenDetail={() => undefined} />);
+    expect(screen.queryByRole("button", { name: /editar/i })).toBeNull();
+  });
+
+  it("keeps the Editar button on desktop", () => {
+    installMatchMedia(false);
+    render(<VisitCard flight={makeFlight()} onOpenDetail={() => undefined} />);
+    expect(screen.getByRole("button", { name: /editar/i })).toBeTruthy();
+  });
+
+  it("hides the OperatorBadge on mobile (decorative chrome)", () => {
+    installMatchMedia(true);
+    // NJE callsign would render the NetJets OperatorBadge text in desktop.
+    const { container } = render(<VisitCard flight={makeFlight({ callsign: "NJE721CK" })} />);
+    expect(container.querySelector(".hx-pill-operator")).toBeNull();
+  });
+
+  it("hides the paxSource pill on mobile", () => {
+    installMatchMedia(true);
+    const { container } = render(
+      <VisitCard flight={makeFlight()} paxSource="NETJETS" />
+    );
+    expect(container.querySelector(".hx-pill-source-netjets")).toBeNull();
+  });
+
+  it("keeps the OperatorBadge on desktop", () => {
+    installMatchMedia(false);
+    const { container } = render(<VisitCard flight={makeFlight({ callsign: "NJE721CK" })} />);
+    expect(container.querySelector(".hx-pill-operator")).not.toBeNull();
   });
 });
 

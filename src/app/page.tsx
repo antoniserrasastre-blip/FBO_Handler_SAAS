@@ -10,16 +10,15 @@ import { TurnaroundAlerts } from "@/components/TurnaroundAlert";
 import { ToastContainer, ToastMessage } from "@/components/Toast";
 import { useEventStream } from "@/hooks/useEventStream";
 import { FlightEvent } from "@/lib/events";
-import { ChevronDown } from "@/components/Icons";
 import { SearchBar } from "@/components/SearchBar";
 import { ShortcutsHelp } from "@/components/ShortcutsHelp";
 import { PendingServicesPanel } from "@/components/PendingServicesPanel";
 import { QuickAddFlight } from "@/components/QuickAddFlight";
 import { PassengerCrewModal } from "@/components/PassengerCrewModal";
 import { useOverdueAlert } from "@/hooks/useOverdueAlert";
-import { Volume2, VolumeX, FileCheck2, Printer } from "lucide-react";
 import { ShiftHandover } from "@/components/ShiftHandover";
 import { detectParkingConflicts } from "@/lib/parkingConflicts";
+import { HomeActionBar } from "@/components/HomeActionBar";
 import { HelixButton, Stat, StatBand, useDate } from "@/components/helix";
 
 import { dateToSqlString } from "@/lib/time";
@@ -493,47 +492,19 @@ function HomePageInner() {
           />
         )}
 
-        {/* Action bar — secondary actions are ghost (visually subordinate); only
-            "Nuevo vuelo" is the primary CTA. */}
-        <div className="mb-3 flex flex-wrap items-center justify-end gap-1.5 sm:mb-4 sm:gap-2">
-          {overdueCount > 0 && (
-            <span className="hx-pill hx-pill-danger overdue-pulse mr-auto">
-              ⚠ {overdueCount} retrasado{overdueCount !== 1 ? "s" : ""}
-            </span>
-          )}
-          {flights.length > 0 && (
-            <HelixButton variant="ghost" size="sm" onClick={() => window.print()} title="Imprimir hoja del día">
-              <Printer size={14} /> Imprimir
-            </HelixButton>
-          )}
-          {flights.length > 0 && (
-            <HelixButton
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowHandover(true)}
-              title="Resumen para pasar turno"
-            >
-              <FileCheck2 size={14} /> Traspaso
-            </HelixButton>
-          )}
-          <HelixButton
-            variant="ghost"
-            size="icon"
-            onClick={() => setSoundEnabled(!soundEnabled)}
-            title={soundEnabled ? "Desactivar sonido" : "Activar sonido de alertas"}
-          >
-            {soundEnabled ? <Volume2 size={14} /> : <VolumeX size={14} />}
-          </HelixButton>
-          {flights.length > 0 && (
-            <ExportMenu date={date} onExport={handleExport} />
-          )}
-          <HelixButton variant="secondary" size="sm" onClick={() => router.push("/import")}>
-            Importar PDF
-          </HelixButton>
-          <HelixButton variant="primary" size="sm" onClick={() => setShowQuickAdd(true)}>
-            + Nuevo vuelo
-          </HelixButton>
-        </div>
+        {/* Action bar — secondary actions colapsan a un kebab en móvil. */}
+        <HomeActionBar
+          hasFlights={flights.length > 0}
+          overdueCount={overdueCount}
+          soundEnabled={soundEnabled}
+          date={date}
+          onPrint={() => window.print()}
+          onHandover={() => setShowHandover(true)}
+          onToggleSound={() => setSoundEnabled(!soundEnabled)}
+          onExport={handleExport}
+          onImport={() => router.push("/import")}
+          onNewFlight={() => setShowQuickAdd(true)}
+        />
 
         {/* Quick add form */}
         {showQuickAdd && (
@@ -620,84 +591,6 @@ function HomePageInner() {
         })()
       ) : null}
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
-    </div>
-  );
-}
-
-function ExportMenu({
-  date,
-  onExport,
-}: {
-  date: Date;
-  onExport: (type: "flights" | "services") => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    function onDoc(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false);
-    }
-    document.addEventListener("mousedown", onDoc);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDoc);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
-
-  const ymd = date.toISOString().slice(0, 10);
-  const item =
-    "block w-full px-4 py-2 text-left text-sm text-ink-2 hover:bg-bg-muted";
-
-  return (
-    <div className="relative" ref={ref}>
-      <HelixButton
-        variant="ghost"
-        size="sm"
-        onClick={() => setOpen((o) => !o)}
-        aria-haspopup="menu"
-        aria-expanded={open}
-      >
-        Exportar <ChevronDown size={14} />
-      </HelixButton>
-      {open && (
-        <div
-          role="menu"
-          className="absolute right-0 top-full z-20 mt-1 min-w-[180px] rounded-hx-md border border-line bg-bg py-1 shadow-hx-lg"
-        >
-          <button onClick={() => { onExport("flights"); setOpen(false); }} className={item}>
-            Vuelos (CSV)
-          </button>
-          <button onClick={() => { onExport("services"); setOpen(false); }} className={item}>
-            Servicios (CSV)
-          </button>
-          <div className="mx-2 my-1 border-t border-line-subtle" />
-          <button
-            onClick={() => { window.open(`/api/export/daily/pdf?date=${ymd}`, "_blank"); setOpen(false); }}
-            className={item}
-          >
-            PDF Diario (AENA)
-          </button>
-          <button
-            onClick={() => { window.open(`/api/export/daily/excel?date=${ymd}`, "_blank"); setOpen(false); }}
-            className={item}
-          >
-            Excel Diario
-          </button>
-          <div className="mx-2 my-1 border-t border-line-subtle" />
-          <button
-            onClick={() => { window.open("/api/export/blank-declaration", "_blank"); setOpen(false); }}
-            className={item}
-          >
-            Declaración en blanco
-          </button>
-        </div>
-      )}
     </div>
   );
 }

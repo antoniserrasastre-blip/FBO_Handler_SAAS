@@ -8,6 +8,7 @@ import { isFarFromGA } from "@/lib/parkingStands";
 import { FLIGHT_STATE_CONFIG, FlightState } from "@/types";
 import { CloseIcon } from "./Icons";
 import { Search } from "lucide-react";
+import { useIsMobile } from "@/hooks/useMediaQuery";
 
 type FlightWithRelations = Flight & {
   services: Service[];
@@ -166,6 +167,7 @@ interface SearchBarProps {
 }
 
 export function SearchBar({ flights, onFilteredFlights, resultCount, totalCount, inputRef, query, onQueryChange }: SearchBarProps) {
+  const isMobile = useIsMobile();
   const handleQueryChange = useCallback((newQuery: string) => {
     onQueryChange(newQuery);
     if (!newQuery.trim()) {
@@ -188,7 +190,7 @@ export function SearchBar({ flights, onFilteredFlights, resultCount, totalCount,
   const isFiltered = query.trim().length > 0;
 
   return (
-    <div className="mb-3 sm:mb-4">
+    <div className={`mb-3 sm:mb-4 ${isMobile ? "sticky top-0 z-10 -mx-3 bg-bg px-3 pt-2 shadow-hx-sm" : ""}`}>
       <div className="relative">
         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted" />
         <input

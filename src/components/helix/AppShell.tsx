@@ -5,7 +5,9 @@ import { ReactNode, Suspense } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { HelixHeader, HeaderTab } from "./AppHeader";
 import { HelixFooter } from "./AppFooter";
+import { BottomTabBar } from "./BottomTabBar";
 import { useDate } from "./useDate";
+import { useIsMobile } from "@/hooks/useMediaQuery";
 
 const TABS: Array<{ href: string; label: string; icon?: ReactNode }> = [
   { href: "/", label: "Lista", icon: "▤" },
@@ -40,6 +42,7 @@ function AppShellInner({ children }: { children: ReactNode }) {
   const params = useSearchParams();
   const { data: session } = useSession();
   const { date, isToday, shift, goToday } = useDate();
+  const isMobile = useIsMobile();
 
   if (CHROMELESS_PREFIXES.some((p) => pathname.startsWith(p))) {
     return <>{children}</>;
@@ -84,11 +87,14 @@ function AppShellInner({ children }: { children: ReactNode }) {
             : undefined
         }
       />
-      <main className="flex-1">{children}</main>
-      <HelixFooter
-        shortcuts={<span className="mono">←→ fecha · T hoy · / buscar · ? ayuda</span>}
-        version="Helix v1.0 · Mallorcair LEPA"
-      />
+      <main className={`flex-1 ${isMobile ? "pb-16" : ""}`}>{children}</main>
+      {!isMobile ? (
+        <HelixFooter
+          shortcuts={<span className="mono">←→ fecha · T hoy · / buscar · ? ayuda</span>}
+          version="Helix v1.0 · Mallorcair LEPA"
+        />
+      ) : null}
+      {isMobile ? <BottomTabBar tabs={tabs} /> : null}
     </div>
   );
 }

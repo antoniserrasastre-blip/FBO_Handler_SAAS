@@ -829,6 +829,46 @@
 }
 
 /* ═══════════════════════════════════════════════════════════
+   Mobile responsive (≤640px) — VisitCard como consola táctil
+   ═══════════════════════════════════════════════════════════ */
+@media (max-width: 640px) {
+  /* Header más compacto: brand sin tag, sin clocks ya gestionado en JSX */
+  .hx-header {
+    gap: var(--s-2);
+    padding: 8px var(--s-3);
+  }
+
+  /* Bottom nav con safe-area para iOS */
+  .hx-bottom-nav {
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+
+  /* VisitCard: paddings más estrechos */
+  .hx-visit-card .hero {
+    padding: var(--s-2) var(--s-3);
+    gap: var(--s-2);
+  }
+  .hx-visit-card .services-strip,
+  .hx-visit-card .people-strip {
+    padding: var(--s-2) var(--s-3);
+  }
+  .hx-visit-card .edit-strip {
+    padding: var(--s-2) var(--s-3);
+    gap: var(--s-2);
+  }
+
+  /* Movement row más compacto y con leg-time más pequeño */
+  .hx-movement-row {
+    grid-template-columns: 48px 1fr auto;
+    padding: var(--s-2) var(--s-3);
+    gap: var(--s-2);
+  }
+  .hx-movement-row .leg-time {
+    font-size: var(--t-lg);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
    Print styles (preserved from previous design)
    ═══════════════════════════════════════════════════════════ */
 @media print {

@@ -41,6 +41,7 @@ import { ServiceChipRow } from "@/components/ServiceChipRow";
 import { InlineNumber } from "@/components/InlineNumber";
 import { InlineSelect } from "@/components/InlineSelect";
 import { InlineTextEdit } from "@/components/InlineTextEdit";
+import { useIsMobile } from "@/hooks/useMediaQuery";
 import {
   FLIGHT_STATES,
   FLIGHT_STATE_CONFIG,
@@ -148,6 +149,7 @@ export const VisitCard = memo(function VisitCard({
   const [newLostDesc, setNewLostDesc] = useState("");
   const [newLostLoc, setNewLostLoc] = useState<LostItemLocation>("AIRCRAFT");
   const lostItems = flight.lostItems || [];
+  const isMobile = useIsMobile();
 
   const isCancelled = flight.flightCategory === "CANCELLED";
   const services = flight.services || [];
@@ -211,7 +213,9 @@ export const VisitCard = memo(function VisitCard({
           aircraftType={flight.aircraftType}
           onSelectRegistration={(reg) => navigator.clipboard?.writeText(reg)}
         />
-        <OperatorBadge callsign={flight.callsign} onSelect={onBadgeClick} />
+        {!isMobile ? (
+          <OperatorBadge callsign={flight.callsign} onSelect={onBadgeClick} />
+        ) : null}
 
         <div className="badges">
           <CategoryPill
@@ -222,7 +226,7 @@ export const VisitCard = memo(function VisitCard({
             <HelixPill className="hx-pill-overnight">Pernocta</HelixPill>
           ) : null}
           <PetCount count={flight.petCount || 0} />
-          {paxSource && paxSource !== "MANUAL" ? (
+          {!isMobile && paxSource && paxSource !== "MANUAL" ? (
             <span className={`hx-pill hx-pill-source-${paxSource.toLowerCase()}`} title={`Datos de ${paxSource}`}>
               {paxSource}
             </span>
@@ -254,7 +258,7 @@ export const VisitCard = memo(function VisitCard({
           {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
           {departurePax.length + arrivalPaxDep.length} pax · {departureCrew.length + arrivalCrew.length} crew
         </button>
-        {!readOnly && onOpenDetail ? (
+        {!readOnly && onOpenDetail && !isMobile ? (
           <button
             type="button"
             className="hx-btn hx-btn-secondary hx-btn-sm"
