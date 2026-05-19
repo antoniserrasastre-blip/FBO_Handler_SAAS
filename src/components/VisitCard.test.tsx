@@ -368,6 +368,27 @@ describe("VisitCard mobile layout", () => {
   });
 });
 
+describe("VisitCard state stepper", () => {
+  it("renders the flight-state stepper inline on the card", () => {
+    const { container } = render(<VisitCard flight={makeFlight({ state: "PARKED" })} onUpdate={() => undefined} />);
+    expect(container.querySelector(".state-stepper")).not.toBeNull();
+  });
+
+  it("fires onUpdate with the new state when the user taps a future chip", async () => {
+    const onUpdate = vi.fn();
+    const { userEvent: ue } = await import("@/test/rtl");
+    const user = ue.setup();
+    render(<VisitCard flight={makeFlight({ id: "v-42", state: "ON_BLOCKS" })} onUpdate={onUpdate} />);
+    await user.click(screen.getByRole("radio", { name: /plataforma/i }));
+    expect(onUpdate).toHaveBeenCalledWith("v-42", { state: "PARKED" });
+  });
+
+  it("does not render the stepper in read-only mode", () => {
+    const { container } = render(<VisitCard flight={makeFlight()} readOnly />);
+    expect(container.querySelector(".state-stepper")).toBeNull();
+  });
+});
+
 describe("VisitCard urgency + audit", () => {
   it("shows a TurnaroundCountdown when there is a valid ETD and the flight is on the ground", () => {
     // ETD 10 minutes from now: should render the countdown.

@@ -38,6 +38,7 @@ import { TurnaroundCountdown } from "@/components/TurnaroundCountdown";
 import { LastModifiedBadge } from "@/components/LastModifiedBadge";
 import { OpsToggleStrip } from "@/components/OpsToggleStrip";
 import { ServiceChipRow } from "@/components/ServiceChipRow";
+import { StateStepper } from "@/components/StateStepper";
 import { InlineNumber } from "@/components/InlineNumber";
 import { InlineSelect } from "@/components/InlineSelect";
 import { InlineTextEdit } from "@/components/InlineTextEdit";
@@ -311,6 +312,14 @@ export const VisitCard = memo(function VisitCard({
           onTimeSave={onUpdate && !readOnly ? (v) => onUpdate(flight.id, { etd: v }) : undefined}
         />
       </div>
+
+      {/* ─── State stepper — control principal del ciclo del vuelo ──── */}
+      {onUpdate && !readOnly ? (
+        <StateStepper
+          value={flight.state}
+          onChange={(next) => onUpdate(flight.id, { state: next })}
+        />
+      ) : null}
 
       {/* ─── Services strip (chips touch-friendly) ───────────────────── */}
       <ServiceChipRow
