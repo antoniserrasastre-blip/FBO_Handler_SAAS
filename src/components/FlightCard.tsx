@@ -48,7 +48,7 @@ import { ServiceIcon, ArrivedIcon, DeliveredIcon, ChevronUp, ChevronDown, CloseI
 import { ArrowRight, Trash2, Users, StickyNote } from "lucide-react";
 import { ServiceBadges } from "./ServiceCheckbox";
 import { PassengerCrewModal } from "./PassengerCrewModal";
-import { getOperatorName, findOperator } from "@/lib/operators";
+import { findOperator } from "@/lib/operators";
 import { getTemplatesForOperator } from "@/lib/serviceTemplates";
 import { isServiceOverdue } from "@/lib/overdue";
 import { TurnaroundCountdown } from "./TurnaroundCountdown";
@@ -125,9 +125,9 @@ export const FlightCard = memo(function FlightCard({
               {stateConfig.label}
             </span>
             <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                 <span
-                  className="cursor-pointer text-base font-bold text-ink-1 hover:bg-warning-bg hover:text-info-strong sm:text-lg"
+                  className="cursor-pointer rounded-md bg-ink-1 px-2 py-0.5 font-mono text-base font-bold tracking-wider text-white shadow-sm ring-1 ring-ink-1 hover:bg-info-strong hover:ring-info-strong sm:px-2.5 sm:py-1 sm:text-lg"
                   onClick={(e) => {
                     e.stopPropagation();
                     navigator.clipboard?.writeText(flight.registration);
@@ -136,9 +136,34 @@ export const FlightCard = memo(function FlightCard({
                 >
                   {flight.registration}
                 </span>
+                {(() => {
+                  const op = findOperator(flight.callsign);
+                  const prefixMatch = flight.callsign.replace(/[*\s]/g, "").match(/^([A-Z]+)/i);
+                  const prefix = prefixMatch ? prefixMatch[1].toUpperCase() : "";
+                  if (op) {
+                    return (
+                      <span
+                        className="cursor-pointer rounded bg-brand-tint px-1.5 py-0.5 text-[11px] font-semibold text-brand-active hover:brightness-95 sm:text-xs"
+                        onClick={(e) => { e.stopPropagation(); onBadgeClick?.(op.name.toLowerCase()); }}
+                        title={`Filtrar por ${op.name}${op.country ? " · " + op.country : ""}`}
+                      >
+                        {op.name}
+                      </span>
+                    );
+                  }
+                  return (
+                    <span
+                      className="cursor-pointer rounded border border-dashed border-line bg-bg-subtle px-1.5 py-0.5 text-[11px] font-medium text-ink-muted hover:bg-bg-muted hover:text-ink-3 sm:text-xs"
+                      onClick={(e) => { e.stopPropagation(); if (prefix) onBadgeClick?.(prefix.toLowerCase()); }}
+                      title={prefix ? `Operador desconocido (${prefix}) — privado o sin catalogar` : "Operador desconocido"}
+                    >
+                      Privado{prefix && ` · ${prefix}`}
+                    </span>
+                  );
+                })()}
                 <span className="text-xs text-ink-3 sm:text-sm">{flight.aircraftType}</span>
                 <span
-                  className="cursor-pointer text-xs text-ink-muted hover:text-info-strong sm:text-sm"
+                  className="cursor-pointer font-mono text-xs text-ink-muted hover:text-info-strong sm:text-sm"
                   onClick={(e) => {
                     e.stopPropagation();
                     navigator.clipboard?.writeText(flight.callsign);
@@ -147,15 +172,6 @@ export const FlightCard = memo(function FlightCard({
                 >
                   {flight.callsign}
                 </span>
-                {(() => { const opName = getOperatorName(flight.callsign); return opName !== "Privado" ? (
-                  <span
-                    className="cursor-pointer rounded bg-brand-tint px-1 py-0.5 text-[10px] font-medium text-brand-active hover:bg-brand-tint sm:px-1.5 sm:text-xs"
-                    onClick={(e) => { e.stopPropagation(); onBadgeClick?.(opName.toLowerCase()); }}
-                    title={`Filtrar por ${opName}`}
-                  >
-                    {opName}
-                  </span>
-                ) : null; })()}
                 {flight.parking && (() => {
                   const compat = checkCompatibility(flight.aircraftType, flight.parking);
                   const farFromGA = isFarFromGA(flight.parking);
