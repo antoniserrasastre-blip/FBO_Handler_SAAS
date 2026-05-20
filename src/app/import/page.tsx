@@ -9,10 +9,21 @@ import { HelixButton, SegmentedControl } from "@/components/helix";
 
 type Tab = "pdf" | "extras";
 
+interface ToCancelEntry {
+  visitId: string;
+  registration: string;
+  callsign: string;
+  eta: string | null;
+  etd: string | null;
+  origin: string | null;
+  destination: string | null;
+}
+
 interface ParseResult {
   date: string;
   flights: ParsedFlight[];
   errors: string[];
+  toCancel?: ToCancelEntry[];
 }
 
 interface ParsedService {
@@ -75,9 +86,10 @@ function PdfImportTab() {
   const [parsing, setParsing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<ParseResult | null>(null);
-  const [saveResult, setSaveResult] = useState<{ created: number; updated: number } | null>(null);
+  const [saveResult, setSaveResult] = useState<{ created: number; updated: number; cancelled?: number } | null>(null);
   const [error, setError] = useState("");
   const [selectedFlights, setSelectedFlights] = useState<Set<number>>(new Set());
+  const [selectedCancel, setSelectedCancel] = useState<Set<string>>(new Set());
 
   async function handleFileUpload(files: File[]) {
     setError(""); setResult(null); setSaveResult(null); setParsing(true);
@@ -89,6 +101,7 @@ function PdfImportTab() {
       const data: ParseResult = await res.json();
       setResult(data);
       setSelectedFlights(new Set(data.flights.map((_, i) => i)));
+      setSelectedCancel(new Set((data.toCancel || []).map((c) => c.visitId)));
     } catch { setError("Error de conexion"); } finally { setParsing(false); }
   }
 
@@ -99,11 +112,23 @@ function PdfImportTab() {
       const res = await fetch("/api/import", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date: result.date, flights: result.flights.filter((_, i) => selectedFlights.has(i)) }),
+        body: JSON.stringify({
+          date: result.date,
+          flights: result.flights.filter((_, i) => selectedFlights.has(i)),
+          cancelIds: Array.from(selectedCancel),
+        }),
       });
       if (!res.ok) { setError((await res.json()).error || "Error"); return; }
       setSaveResult(await res.json());
     } catch { setError("Error de conexion"); } finally { setSaving(false); }
+  }
+
+  function toggleCancel(id: string) {
+    setSelectedCancel((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  }
+  function toggleAllCancel() {
+    if (!result?.toCancel) return;
+    setSelectedCancel((prev) => prev.size === result.toCancel!.length ? new Set() : new Set(result.toCancel!.map((c) => c.visitId)));
   }
 
   function toggleFlight(i: number) {
@@ -190,12 +215,63 @@ function PdfImportTab() {
               </tbody>
             </table>
           </div>
+          {result.toCancel && result.toCancel.length > 0 && (
+            <div className="mt-6">
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-warning-strong">
+                  <span className="font-mono [font-variant-numeric:tabular-nums]">{result.toCancel.length}</span>{" "}
+                  vuelo{result.toCancel.length !== 1 ? "s" : ""} ausente{result.toCancel.length !== 1 ? "s" : ""} en el nuevo PDF — se marcar{result.toCancel.length !== 1 ? "án" : "á"} como cancelado{result.toCancel.length !== 1 ? "s" : ""}
+                </h2>
+                <button
+                  onClick={toggleAllCancel}
+                  className="font-mono text-xs font-semibold text-brand-active hover:text-brand-hover"
+                >
+                  {selectedCancel.size === result.toCancel.length ? "Deseleccionar" : "Seleccionar"} todo
+                </button>
+              </div>
+              <div className="overflow-x-auto rounded-hx-md border border-warning bg-warning-bg/30">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-warning-bg/60">
+                    <tr className="font-mono text-[10px] uppercase tracking-wider text-warning-strong">
+                      <th className="border-b border-warning px-3 py-2"></th>
+                      <th className="border-b border-warning px-3 py-2">Matrícula</th>
+                      <th className="border-b border-warning px-3 py-2">Indicativo</th>
+                      <th className="border-b border-warning px-3 py-2">Origen</th>
+                      <th className="border-b border-warning px-3 py-2">ETA</th>
+                      <th className="border-b border-warning px-3 py-2">Destino</th>
+                      <th className="border-b border-warning px-3 py-2">ETD</th>
+                    </tr>
+                  </thead>
+                  <tbody className="font-mono [font-variant-numeric:tabular-nums]">
+                    {result.toCancel.map((c) => (
+                      <tr
+                        key={c.visitId}
+                        className={`cursor-pointer border-b border-warning/40 transition-colors hover:bg-warning-bg/60 ${
+                          selectedCancel.has(c.visitId) ? "" : "opacity-50"
+                        }`}
+                        onClick={() => toggleCancel(c.visitId)}
+                      >
+                        <td className="px-3 py-2"><input type="checkbox" checked={selectedCancel.has(c.visitId)} onChange={() => toggleCancel(c.visitId)} /></td>
+                        <td className="px-3 py-2 font-semibold text-ink-1">{c.registration}</td>
+                        <td className="px-3 py-2 text-ink-3">{c.callsign}</td>
+                        <td className="px-3 py-2 text-ink-2">{c.origin || "—"}</td>
+                        <td className="px-3 py-2 text-ink-2">{c.eta || "—"}</td>
+                        <td className="px-3 py-2 text-ink-2">{c.destination || "—"}</td>
+                        <td className="px-3 py-2 text-ink-2">{c.etd || "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
           <div className="mt-4 flex justify-end gap-2">
             <HelixButton variant="secondary" onClick={() => { setResult(null); setError(""); }}>
               Cancelar
             </HelixButton>
             <HelixButton variant="primary" onClick={handleConfirm} disabled={saving || !selectedFlights.size}>
-              {saving ? "Importando…" : `Importar ${selectedFlights.size} vuelo${selectedFlights.size !== 1 ? "s" : ""}`}
+              {saving ? "Importando…" : `Importar ${selectedFlights.size}${selectedCancel.size > 0 ? ` · cancelar ${selectedCancel.size}` : ""}`}
             </HelixButton>
           </div>
         </div>
@@ -206,6 +282,7 @@ function PdfImportTab() {
           lines={[
             saveResult.created > 0 ? `${saveResult.created} vuelos creados` : null,
             saveResult.updated > 0 ? `${saveResult.updated} vuelos actualizados` : null,
+            saveResult.cancelled && saveResult.cancelled > 0 ? `${saveResult.cancelled} vuelos cancelados` : null,
           ]}
           onReset={() => { setResult(null); setSaveResult(null); setError(""); }}
           resetLabel="Importar otro archivo"

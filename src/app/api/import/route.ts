@@ -51,7 +51,45 @@ export async function POST(req: NextRequest) {
   if (!allFlights.length && allErrors.length) {
     return NextResponse.json({ error: allErrors.join("; "), flights: [], errors: allErrors }, { status: 500 });
   }
-  return NextResponse.json({ date, flights: allFlights, errors: allErrors });
+
+  // Reconciliación: vuelos en DB con movimientos en el día del PDF que ya no
+  // aparecen en el nuevo PDF (candidatos a cancelar). Se calcula en preview
+  // para que el usuario confirme antes de aplicar.
+  let toCancel: Array<{
+    visitId: string;
+    registration: string;
+    callsign: string;
+    eta: string | null;
+    etd: string | null;
+    origin: string | null;
+    destination: string | null;
+  }> = [];
+  if (date && allFlights.length) {
+    const targetDate = parseDate(date);
+    const existing = await prisma.visit.findMany({
+      where: { movements: { some: { scheduledDate: targetDate } } },
+      include: { aircraft: true, movements: true },
+    });
+    const parsedRegs = new Set(allFlights.map((f) => f.registration.toUpperCase()));
+    toCancel = existing
+      .filter((v) => !parsedRegs.has(v.aircraft.registration.toUpperCase()))
+      .filter((v) => v.movements.some((m) => m.flightCategory !== "CANCELLED"))
+      .map((v) => {
+        const arr = v.movements.find((m) => m.direction === "ARRIVAL");
+        const dep = v.movements.find((m) => m.direction === "DEPARTURE");
+        return {
+          visitId: v.id,
+          registration: v.aircraft.registration,
+          callsign: dep?.callsign || arr?.callsign || "",
+          eta: arr?.eta || null,
+          etd: dep?.etd || null,
+          origin: arr?.origin || null,
+          destination: dep?.destination || null,
+        };
+      });
+  }
+
+  return NextResponse.json({ date, flights: allFlights, errors: allErrors, toCancel });
 }
 
 // PUT — persist
@@ -60,7 +98,11 @@ export async function PUT(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
-  const { date, flights } = body;
+  const { date, flights, cancelIds } = body as {
+    date: string;
+    flights: unknown[];
+    cancelIds?: string[];
+  };
   if (!date || !flights || !Array.isArray(flights)) {
     return NextResponse.json({ error: "Datos invalidos" }, { status: 400 });
   }
@@ -69,6 +111,7 @@ export async function PUT(req: NextRequest) {
 
   let created = 0;
   let updated = 0;
+  let cancelled = 0;
 
   for (const f of flights) {
     const callsign: string = f.callsign;
@@ -160,9 +203,33 @@ export async function PUT(req: NextRequest) {
     else created++;
   }
 
+  // Cancelar visits que el usuario confirmó en el preview (no aparecen en el
+  // nuevo PDF). Soft-cancel: marcamos todos sus movements como CANCELLED y
+  // dejamos registro en eventLog. Servicios, lost items, pax y crew se
+  // preservan por si se recuperan.
+  if (Array.isArray(cancelIds) && cancelIds.length > 0) {
+    for (const id of cancelIds) {
+      const res = await prisma.movement.updateMany({
+        where: { visitId: id },
+        data: { flightCategory: "CANCELLED" },
+      });
+      if (res.count > 0) {
+        await prisma.eventLog.create({
+          data: {
+            visitId: id,
+            userId: session.user.id,
+            action: "Cancelado: ausente en nuevo PDF",
+          },
+        });
+        cancelled++;
+      }
+    }
+  }
+
   const parts = [];
   if (created > 0) parts.push(`${created} nuevos`);
   if (updated > 0) parts.push(`${updated} actualizados`);
+  if (cancelled > 0) parts.push(`${cancelled} cancelados`);
 
   eventBus.emit({
     type: "flight_created",
@@ -176,6 +243,7 @@ export async function PUT(req: NextRequest) {
   return NextResponse.json({
     created,
     updated,
+    cancelled,
     linked: 0,
     total: flights.length,
   });
