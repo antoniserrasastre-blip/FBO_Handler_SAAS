@@ -196,8 +196,14 @@ export const VisitCard = memo(function VisitCard({
       {/* ─── Hero ──────────────────────────────────────────────────── */}
       <div className="hero">
         <StatePill state={primaryFboState} />
+        <AircraftBadge
+          registration={flight.registration}
+          aircraftType={flight.aircraftType}
+          onSelectRegistration={(reg) => navigator.clipboard?.writeText(reg)}
+        />
+        <OperatorBadge callsign={flight.callsign} onSelect={onBadgeClick} />
         <span
-          style={{ fontFamily: "var(--font-mono)", fontWeight: 600, fontSize: "1.05em", cursor: flight.callsign ? "copy" : "default" }}
+          style={{ fontFamily: "var(--font-mono)", fontWeight: 500, fontSize: "0.9em", color: "var(--c-text-3)", cursor: flight.callsign ? "copy" : "default" }}
           onClick={(e) => {
             if (!flight.callsign) return;
             e.stopPropagation();
@@ -209,14 +215,6 @@ export const VisitCard = memo(function VisitCard({
         </span>
         <RqstChip rqstNumber={flight.rqstNumber} />
         <TurnaroundCountdown eta={flight.eta} etd={flight.etd} flightState={flight.state} />
-        <AircraftBadge
-          registration={flight.registration}
-          aircraftType={flight.aircraftType}
-          onSelectRegistration={(reg) => navigator.clipboard?.writeText(reg)}
-        />
-        {!isMobile ? (
-          <OperatorBadge callsign={flight.callsign} onSelect={onBadgeClick} />
-        ) : null}
 
         <div className="badges">
           <CategoryPill

@@ -15,19 +15,32 @@ export function OperatorBadge({ callsign, icaoCode, onSelect }: OperatorBadgePro
   // No callsign and no ICAO → nothing useful to show. Don't pollute the
   // hero with an empty "Privado" badge.
   if (!icao) return null;
-  const name = op?.name || icao;
+  const known = !!op;
+  const name = op?.name;
+  const title = known
+    ? `Filtrar por ${name}`
+    : `Operador desconocido (${icao}) — privado o sin catalogar`;
   const content = (
-    <span className="hx-pill hx-pill-operator">
-      {icao ? <span style={{ fontFamily: "var(--font-mono)", fontWeight: 600 }}>{icao}</span> : null}
-      <span style={{ color: "var(--c-text-2)" }}>{name}</span>
+    <span className={`hx-pill hx-pill-operator${known ? "" : " hx-pill-operator--unknown"}`}>
+      {known ? (
+        <>
+          <span style={{ fontFamily: "var(--font-mono)", fontWeight: 600 }}>{icao}</span>
+          <span style={{ color: "var(--c-text-2)" }}>{name}</span>
+        </>
+      ) : (
+        <>
+          <span>Privado</span>
+          <span style={{ fontFamily: "var(--font-mono)", opacity: 0.8 }}>· {icao}</span>
+        </>
+      )}
     </span>
   );
-  if (!onSelect || !icao) return content;
+  if (!onSelect) return content;
   return (
     <button
       type="button"
       onClick={(e) => { e.stopPropagation(); onSelect(icao); }}
-      title={`Filtrar por ${name}`}
+      title={title}
       style={{ background: "transparent", border: 0, padding: 0, cursor: "pointer" }}
     >
       {content}

@@ -298,8 +298,9 @@
 .hx-pill-source-vistajet { background: oklch(0.93 0.06 290); color: oklch(0.4 0.16 290); }
 .hx-pill-source-manual   { background: var(--c-bg-muted); color: var(--c-text-3); }
 .hx-pill-source-paste    { background: oklch(0.94 0.04 195); color: oklch(0.4 0.13 195); }
-.hx-pill-aircraft        { background: var(--c-bg-muted); color: var(--c-text-2); font-family: var(--font-mono); letter-spacing: 0.02em; }
-.hx-pill-operator        { background: oklch(0.96 0.02 250); color: var(--c-text-2); border: 1px solid var(--c-border-subtle); }
+.hx-pill-aircraft        { background: var(--c-text-1); color: #fff; font-family: var(--font-mono); font-weight: 700; letter-spacing: 0.05em; font-size: 13px; padding: 3px 8px; border-radius: 5px; box-shadow: 0 1px 0 rgba(0,0,0,0.08); }
+.hx-pill-operator        { background: var(--c-brand-tint); color: var(--c-brand-active); border: 1px solid var(--c-border-subtle); font-weight: 500; }
+.hx-pill-operator--unknown { background: transparent; color: var(--c-text-3); border: 1px dashed var(--c-border); font-style: normal; }
 .hx-pill-rqst            { background: var(--c-bg-sunken); color: var(--c-text-3); font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.04em; padding: 1px 6px; border-radius: 4px; }
 .hx-pill-lock            { background: var(--c-dark-bg-3); color: var(--c-dark-text-2); font-family: var(--font-mono); }
 .hx-pill-unmatched       { background: oklch(0.94 0.06 25); color: oklch(0.4 0.2 25); border: 1px dashed currentColor; }
