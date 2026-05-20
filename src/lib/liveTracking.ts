@@ -1,16 +1,23 @@
 // Live ADS-B tracking via OpenSky.
 //
-// v2 stub: the live tracking columns (liveLatitude, liveLongitude, livePhase…)
-// were attached to the deprecated Flight model and have not been ported to
-// the v2 Movement schema yet. The pure helpers (`computePhase`,
-// `indexByCallsign`, `normaliseCallsign`) remain because they are framework-
-// independent and used by tests. DB-touching paths are TODOs.
+// pollOnce() is the entrypoint driven by liveTrackingWorker.ts. It loads the
+// active Movements (visits in [ayer, hoy, mañana], state ≠ OFF_BLOCKS), pulls
+// the current state vectors from OpenSky around LEPA, matches them to
+// Movements (by cached icao24 → callsign → registration), and upserts the
+// live snapshot on each match.
+//
+// On phase transitions we also seed Movement.ata / Movement.atd if still
+// empty, and emit an EventLog row so the audit trail shows which transitions
+// came from ADS-B vs. a handler override.
 
-import type { OpenSkyState } from "./opensky";
+import { prisma } from "./db";
+import { fetchStates, type OpenSkyState } from "./opensky";
+import { palmaDayUtc } from "./time";
 
 export type LivePhase = "APPROACHING" | "LANDED" | "ON_BLOCKS" | "DEPARTED";
 
 const VELOCITY_TAXI_THRESHOLD_MS = 2;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 export function normaliseCallsign(raw: string | null | undefined): string {
   if (!raw) return "";
@@ -37,16 +44,6 @@ export function indexByCallsign(states: OpenSkyState[]): Map<string, OpenSkyStat
   }
   return out;
 }
-
-// TODO(v2): re-implement DB ingestion of OpenSky states against Movement.
-// Decide whether the live columns live directly on Movement or in a
-// LiveSnapshot side-table. Until then, the cron / live route below are no-ops.
-export async function ingestLiveStates(): Promise<{ matched: number }> {
-  return { matched: 0 };
-}
-
-// Stubs preserved so existing imports compile. They return empty results
-// instead of querying the deprecated Flight table.
 
 interface FlightForMatchStub {
   id: string;
@@ -80,6 +77,100 @@ export function matchFlights(flights: FlightForMatchStub[], states: OpenSkyState
   return results;
 }
 
+function toZuluHHMM(d: Date): string {
+  const hh = String(d.getUTCHours()).padStart(2, "0");
+  const mm = String(d.getUTCMinutes()).padStart(2, "0");
+  return `${hh}:${mm}`;
+}
+
 export async function pollOnce(): Promise<{ fetched: number; matched: number; transitions: number }> {
-  return { fetched: 0, matched: 0, transitions: 0 };
+  // Window: palmaDay ∈ [ayer, hoy, mañana]. We look forward so an approaching
+  // flight that crosses midnight gets matched before it lands.
+  const today = palmaDayUtc();
+  const yesterday = new Date(today.getTime() - DAY_MS);
+  const tomorrow = new Date(today.getTime() + DAY_MS);
+
+  const movements = await prisma.movement.findMany({
+    where: {
+      state: { not: "OFF_BLOCKS" },
+      visit: { palmaDay: { in: [yesterday, today, tomorrow] } },
+    },
+    include: { visit: { include: { aircraft: true } } },
+  });
+
+  if (movements.length === 0) return { fetched: 0, matched: 0, transitions: 0 };
+
+  const states = await fetchStates();
+
+  // Build two indexes: by icao24 (cached from prior polls, cheap to hit) and
+  // by normalised callsign (fallback + first-time match).
+  const stateByIcao = new Map<string, OpenSkyState>();
+  for (const s of states) stateByIcao.set(s.icao24, s);
+  const stateByCallsign = indexByCallsign(states);
+
+  let matched = 0;
+  let transitions = 0;
+
+  for (const m of movements) {
+    let state: OpenSkyState | undefined;
+
+    if (m.liveIcao24) state = stateByIcao.get(m.liveIcao24);
+    if (!state) state = stateByCallsign.get(normaliseCallsign(m.callsign));
+    if (!state) state = stateByCallsign.get(normaliseCallsign(m.visit.aircraft.registration));
+    if (!state) continue;
+
+    matched++;
+
+    const phase = computePhase(state);
+    const phaseChanged = m.livePhase !== phase;
+    const seenAt = new Date(state.lastContact * 1000);
+
+    // Build the patch incrementally so we don't overwrite ata/atd that a
+    // handler typed in manually.
+    const data: Record<string, unknown> = {
+      liveIcao24: state.icao24,
+      livePhase: phase,
+      liveLastSeenAt: seenAt,
+      liveOnGround: state.onGround,
+      liveAltitudeM: state.baroAltitudeM,
+      liveVelocityMs: state.velocityMs,
+    };
+
+    if (phaseChanged) {
+      if (phase === "ON_BLOCKS" && m.direction === "ARRIVAL" && !m.ata) {
+        data.ata = toZuluHHMM(seenAt);
+      }
+      if (phase === "DEPARTED" && m.direction === "DEPARTURE" && !m.atd) {
+        data.atd = toZuluHHMM(seenAt);
+      }
+    }
+
+    await prisma.movement.update({ where: { id: m.id }, data });
+
+    if (phaseChanged) {
+      transitions++;
+      await prisma.eventLog.create({
+        data: {
+          movementId: m.id,
+          visitId: m.visitId,
+          action: `live → ${phase}`,
+          details: JSON.stringify({
+            icao24: state.icao24,
+            callsign: state.callsign,
+            onGround: state.onGround,
+            altitudeM: state.baroAltitudeM,
+            velocityMs: state.velocityMs,
+          }),
+        },
+      });
+    }
+  }
+
+  return { fetched: states.length, matched, transitions };
+}
+
+// Compat shim — pre-v2 callers imported this name. New code uses pollOnce().
+export async function ingestLiveStates(): Promise<{ matched: number }> {
+  const result = await pollOnce();
+  return { matched: result.matched };
 }
