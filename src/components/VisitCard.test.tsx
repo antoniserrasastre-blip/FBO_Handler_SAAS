@@ -346,11 +346,12 @@ describe("VisitCard mobile layout", () => {
     expect(screen.getByRole("button", { name: /editar/i })).toBeTruthy();
   });
 
-  it("hides the OperatorBadge on mobile (decorative chrome)", () => {
+  it("shows the OperatorBadge on mobile too (handler needs to see the company)", () => {
     installMatchMedia(true);
-    // NJE callsign would render the NetJets OperatorBadge text in desktop.
+    // NJE callsign should still render the NetJets OperatorBadge on mobile —
+    // identifying the operator is core info, not decorative chrome.
     const { container } = render(<VisitCard flight={makeFlight({ callsign: "NJE721CK" })} />);
-    expect(container.querySelector(".hx-pill-operator")).toBeNull();
+    expect(container.querySelector(".hx-pill-operator")).not.toBeNull();
   });
 
   it("hides the paxSource pill on mobile", () => {
