@@ -29,7 +29,12 @@ export async function GET(req: NextRequest) {
   const palmaDay = dateParam ? palmaDayUtc(dateParam) : getSpainToday();
 
   const visits = await prisma.visit.findMany({
-    where: { palmaDay },
+    where: {
+      OR: [
+        { palmaDay },
+        { movements: { some: { scheduledDate: palmaDay } } },
+      ],
+    },
     include: {
       aircraft: true,
       movements: includePeople
