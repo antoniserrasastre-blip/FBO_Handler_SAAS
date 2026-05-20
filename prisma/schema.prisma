@@ -156,12 +156,21 @@ model Movement {
   crewAssignments  CrewAssignment[]
   eventLogs        EventLog[]
 
+  // OpenSky live-tracking snapshot (last seen). Nullable until first match.
+  liveIcao24       String?
+  livePhase        String?    // APPROACHING | LANDED | ON_BLOCKS | DEPARTED
+  liveLastSeenAt   DateTime?
+  liveOnGround     Boolean?
+  liveAltitudeM    Float?
+  liveVelocityMs   Float?
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   @@unique([visitId, direction])  // 1 ARRIVAL + 1 DEPARTURE max per visit
   @@index([rqstNumber])
   @@index([scheduledDate])
+  @@index([liveIcao24])
 }
 
 // ============================================================================
