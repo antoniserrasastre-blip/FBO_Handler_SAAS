@@ -90,11 +90,16 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // Sort chronologically: pernoctas (arrived earlier) by ETD; same-day by ETA→ETD
-  const iso = palmaDay.toISOString().slice(2, 10).split("-").reverse().join("/");
+  // Sort chronologically: pernoctas (arrived earlier) by ETD; same-day by ETA→ETD.
+  // FlightView emits arrivalDate as "DD/MM" (no year), so compare against the
+  // sheet day in the same format. Previously this compared against "DD/MM/YY"
+  // and every flight was wrongly treated as a pernocta → sorted by ETD.
+  const dd = String(palmaDay.getUTCDate()).padStart(2, "0");
+  const mm = String(palmaDay.getUTCMonth() + 1).padStart(2, "0");
+  const sheetDdMm = `${dd}/${mm}`;
   flights.sort((a, b) => {
-    const arrivedBeforeA = !!a.arrivalDate && a.arrivalDate !== iso;
-    const arrivedBeforeB = !!b.arrivalDate && b.arrivalDate !== iso;
+    const arrivedBeforeA = !!a.arrivalDate && a.arrivalDate !== sheetDdMm;
+    const arrivedBeforeB = !!b.arrivalDate && b.arrivalDate !== sheetDdMm;
     const ta = arrivedBeforeA ? (a.etd || "99:99") : (a.eta || a.etd || "99:99");
     const tb = arrivedBeforeB ? (b.etd || "99:99") : (b.eta || b.etd || "99:99");
     return ta.localeCompare(tb);
