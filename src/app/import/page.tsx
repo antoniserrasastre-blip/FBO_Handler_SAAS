@@ -81,7 +81,6 @@ export default function ImportPage() {
 
 // ======= PDF Import Tab =======
 function PdfImportTab() {
-  const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [parsing, setParsing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -124,7 +123,11 @@ function PdfImportTab() {
   }
 
   function toggleCancel(id: string) {
-    setSelectedCancel((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+    setSelectedCancel((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id); else n.add(id);
+      return n;
+    });
   }
   function toggleAllCancel() {
     if (!result?.toCancel) return;
@@ -132,7 +135,11 @@ function PdfImportTab() {
   }
 
   function toggleFlight(i: number) {
-    setSelectedFlights(prev => { const n = new Set(prev); n.has(i) ? n.delete(i) : n.add(i); return n; });
+    setSelectedFlights((prev) => {
+      const n = new Set(prev);
+      if (n.has(i)) n.delete(i); else n.add(i);
+      return n;
+    });
   }
   function toggleAll() {
     if (!result) return;
@@ -294,7 +301,6 @@ function PdfImportTab() {
 
 // ======= Extras (Excel) Import Tab =======
 function ExtrasImportTab() {
-  const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [parsing, setParsing] = useState(false);
   const [saving, setSaving] = useState(false);

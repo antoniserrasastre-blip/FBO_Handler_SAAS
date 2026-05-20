@@ -243,12 +243,6 @@ export function parseExtrasExcel(buffer: Buffer): ExcelParseResult {
               : regTypeMatch[2]?.toUpperCase() === "P" ? "PAX"
               : undefined;
 
-            let timeStr = "";
-            if (njeTimeRaw) {
-              const tm = String(njeTimeRaw).replace(/[^0-9]/g, "").padStart(4, "0");
-              timeStr = tm.slice(0, 2) + ":" + tm.slice(2);
-            }
-
             const label = target
               ? `NJE ${target} #${ref}`
               : `NJE #${ref}`;
@@ -294,8 +288,6 @@ export function parseExtrasExcel(buffer: Buffer): ExcelParseResult {
     const filtered = hasDetailedCatering
       ? mainServices.filter(s => s.type !== "CATERING")
       : mainServices;
-
-    const allServices = [...filtered, ...specialServices];
 
     // Deduplicate only generic main-section entries that appear more than once
     // (e.g., "CATERING" listed twice because the aircraft has two legs)

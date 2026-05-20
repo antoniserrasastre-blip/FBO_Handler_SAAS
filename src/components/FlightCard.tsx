@@ -4,15 +4,12 @@ import { useState, memo } from "react";
 import { Flight, Service, EventLog, LostItem } from "@/types/compat";
 import {
   FLIGHT_STATE_CONFIG,
-  FlightState,
   normalizeFlightState,
   FUEL_LABELS,
   FuelState,
   TOILET_STATES,
   TOILET_LABELS,
-  ToiletState,
   TRANSPORT_LABELS,
-  TransportType,
   TRANSPORT_STATE_LABELS,
   CREW_ARR_LOCATION_LABELS,
   CREW_DEP_LOCATION_LABELS,
@@ -21,16 +18,12 @@ import {
   TRANSPORT_TYPES,
   PAX_ARR_STATES,
   PAX_ARR_STATE_LABELS,
-  PaxArrState,
   BAGS_ARR_STATES,
   BAGS_ARR_STATE_LABELS,
-  BagsArrState,
   PAX_DEP_STATES,
   PAX_DEP_STATE_LABELS,
-  PaxDepState,
   BAGS_DEP_STATES,
   BAGS_DEP_STATE_LABELS,
-  BagsDepState,
   SERVICE_TYPES,
   SERVICE_LABELS,
   ServiceType,
@@ -1172,7 +1165,7 @@ function AddLostItemRow({
 
 function AddServiceRow({
   flightId,
-  existingTypes,
+  existingTypes: _existingTypes,
   onAdd,
 }: {
   flightId: string;

@@ -170,9 +170,10 @@ export async function parseCybermaxPdf(buffer: Buffer | Uint8Array): Promise<Par
   for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
     const page = await pdf.getPage(pageNum);
     const tc = await page.getTextContent();
-    const items: PdfItem[] = (tc.items as any[])
-      .filter((it: any) => it.str && it.str.trim())
-      .map((it: any) => ({
+    type RawTextItem = { str: string; transform: number[] };
+    const items: PdfItem[] = (tc.items as RawTextItem[])
+      .filter((it) => it.str && it.str.trim())
+      .map((it) => ({
         text: it.str.trim(),
         x: it.transform[4],
         y: it.transform[5],

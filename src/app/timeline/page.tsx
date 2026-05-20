@@ -104,6 +104,9 @@ function TimelinePageInner() {
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
+    // shift/goToday come from useDate(); re-binding the listener on every
+    // render is more expensive than keeping the closure capture stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedFlightId, date]);
 
   const range: TimelineRange = useMemo(() => zoomedRange(zoom, now), [zoom, now]);

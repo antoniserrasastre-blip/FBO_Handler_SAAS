@@ -10,7 +10,6 @@ import {
   PassengerStatus,
   CREW_ROLES,
   CREW_ROLE_LABELS,
-  CrewRole,
   DIRECTION_LABELS,
   Direction,
 } from "@/types";

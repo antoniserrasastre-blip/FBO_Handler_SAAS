@@ -17,7 +17,6 @@ import { QuickAddFlight } from "@/components/QuickAddFlight";
 import { PassengerCrewModal } from "@/components/PassengerCrewModal";
 import { useOverdueAlert } from "@/hooks/useOverdueAlert";
 import { ShiftHandover } from "@/components/ShiftHandover";
-import { detectParkingConflicts } from "@/lib/parkingConflicts";
 import { HomeActionBar } from "@/components/HomeActionBar";
 import { HelixButton, Stat, StatBand, useDate } from "@/components/helix";
 
@@ -84,7 +83,6 @@ function HomePageInner() {
 
   const allServices = useMemo(() => flights.flatMap((f) => f.services || []), [flights]);
   const overdueCount = useOverdueAlert(allServices, soundEnabled && isToday);
-  const parkingConflicts = useMemo(() => detectParkingConflicts(flights), [flights]);
 
   const fetchFlights = useCallback(async () => {
     try {
@@ -144,7 +142,7 @@ function HomePageInner() {
     [fetchFlights, addToast, session?.user?.id, isToday]
   );
 
-  const { connected } = useEventStream({
+  useEventStream({
     onEvent: handleEvent,
     enabled: status === "authenticated",
   });
@@ -410,7 +408,6 @@ function HomePageInner() {
 
   // --- Movement counts for the selected day ---
   const movementStats = useMemo(() => {
-    const dateStr = date.toISOString().slice(0, 10);
     const day = date.getUTCDate();
     const month = date.getUTCMonth() + 1;
     const shortDate = `${String(day).padStart(2, "0")}/${String(month).padStart(2, "0")}`;

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { ROLE_LABELS, Role, ROLES } from "@/types";
+import { ROLE_LABELS, ROLES } from "@/types";
 import { palmaDayUtc } from "@/lib/time";
 
 interface User {

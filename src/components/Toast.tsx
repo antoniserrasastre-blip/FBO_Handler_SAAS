@@ -38,7 +38,7 @@ function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: 
       setTimeout(() => onDismiss(toast.id), 300);
     }, delay);
     return () => clearTimeout(timer);
-  }, [toast.id, onDismiss]);
+  }, [toast.id, toast.onRetry, onDismiss]);
 
   // Helix toasts: dark base with a 3px coloured left border per type
   // (matches the design-system "toast" pattern). High contrast, low chrome.

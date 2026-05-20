@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useCallback, useEffect } from "react";
 import { Flight, Service, LostItem, EventLog } from "@/types/compat";
 import { findOperator } from "@/lib/operators";
 import { getRequiredAuthorities } from "@/lib/countries";
