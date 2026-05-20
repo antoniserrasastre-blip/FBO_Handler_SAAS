@@ -179,7 +179,7 @@ export async function PUT(req: NextRequest) {
     await upsertMovement({
       visitId: visit.id,
       direction: "DEPARTURE",
-      callsign,
+      callsign: f.departureCallsign || callsign,
       scheduledDate: depDate,
       data: {
         destination: f.destination || null,
