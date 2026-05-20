@@ -202,17 +202,6 @@ export const VisitCard = memo(function VisitCard({
           onSelectRegistration={(reg) => navigator.clipboard?.writeText(reg)}
         />
         <OperatorBadge callsign={flight.callsign} onSelect={onBadgeClick} />
-        <span
-          style={{ fontFamily: "var(--font-mono)", fontWeight: 500, fontSize: "0.9em", color: "var(--c-text-3)", cursor: flight.callsign ? "copy" : "default" }}
-          onClick={(e) => {
-            if (!flight.callsign) return;
-            e.stopPropagation();
-            navigator.clipboard?.writeText(flight.callsign);
-          }}
-          title={flight.callsign ? "Click para copiar indicativo" : undefined}
-        >
-          {flight.callsign || "—"}
-        </span>
         <RqstChip rqstNumber={flight.rqstNumber} />
         <TurnaroundCountdown eta={flight.eta} etd={flight.etd} flightState={flight.state} />
 
@@ -285,6 +274,7 @@ export const VisitCard = memo(function VisitCard({
           direction="ARRIVAL"
           time={flight.eta}
           airport={flight.origin}
+          callsign={flight.arrivalCallsign || flight.callsign}
           state={arrState}
           paxCount={flight.paxArrival}
           crewCount={flight.crewArrival}
@@ -299,6 +289,7 @@ export const VisitCard = memo(function VisitCard({
           direction="DEPARTURE"
           time={flight.etd}
           airport={flight.destination}
+          callsign={flight.departureCallsign || flight.callsign}
           state={depState}
           paxCount={flight.paxDeparture}
           crewCount={flight.crewDeparture}

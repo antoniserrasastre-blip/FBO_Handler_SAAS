@@ -5,15 +5,18 @@
 import type { FlightView, FlightViewService } from "@/types/v2";
 
 export function makeFlight(overrides: Partial<FlightView> = {}): FlightView {
+  const callsign = overrides.callsign ?? "NJE123CK";
   return {
     id: "v-1",
     visitId: "v-1",
     arrivalMovementId: "m-arr-1",
     departureMovementId: "m-dep-1",
     daySheetId: "2025-01-01",
-    callsign: "NJE123CK",
-    arrivalCallsign: "NJE123CK",
-    departureCallsign: "NJE123CK",
+    callsign,
+    // Default arrival/departure callsigns to the primary so existing tests
+    // that only pass `callsign` keep working.
+    arrivalCallsign: overrides.arrivalCallsign ?? callsign,
+    departureCallsign: overrides.departureCallsign ?? callsign,
     registration: "CS-DXX",
     aircraftType: "GLEX",
     origin: "LFPB",

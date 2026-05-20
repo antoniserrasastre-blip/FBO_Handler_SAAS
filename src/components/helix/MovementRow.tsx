@@ -27,6 +27,8 @@ export interface MovementRowProps {
   sheetDate?: string | null;
   /** Aircraft type — enables parking compatibility check (warning/error class). */
   aircraftType?: string | null;
+  /** Callsign for this specific leg. Rendered as a compact pill next to the airport. */
+  callsign?: string | null;
 }
 
 const DIR_LABEL: Record<MovementRowProps["direction"], string> = {
@@ -49,6 +51,7 @@ export function MovementRow({
   date,
   sheetDate,
   aircraftType,
+  callsign,
 }: MovementRowProps) {
   const showDate = date && date !== sheetDate;
 
@@ -78,7 +81,21 @@ export function MovementRow({
       </div>
 
       <div className="leg-route">
-        <div className="airport">{airport || "—"}</div>
+        <div className="airport">
+          {airport || "—"}
+          {callsign ? (
+            <span
+              className="ml-1.5 inline-flex cursor-copy items-center rounded bg-bg-subtle px-1.5 py-px align-middle font-mono text-[11px] font-medium text-ink-2"
+              onClick={(e) => {
+                e.stopPropagation();
+                navigator.clipboard?.writeText(callsign);
+              }}
+              title="Click para copiar indicativo"
+            >
+              {callsign}
+            </span>
+          ) : null}
+        </div>
         <div className="label">{DIR_LABEL[direction]}</div>
       </div>
 

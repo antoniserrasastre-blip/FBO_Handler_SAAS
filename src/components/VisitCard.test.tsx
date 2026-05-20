@@ -7,9 +7,11 @@ import { makeFlight, makeService } from "@/test/factories";
 import type { LostItem } from "@/types/compat";
 
 describe("VisitCard hero", () => {
-  it("shows the callsign and registration on the hero", () => {
+  it("shows the callsign per leg and the registration on the hero", () => {
     render(<VisitCard flight={makeFlight({ callsign: "NJE721CK", registration: "CS-DXX" })} />);
-    expect(screen.getByText("NJE721CK")).toBeTruthy();
+    // The callsign now lives next to each MovementRow's airport, so it should
+    // appear at least twice (one per leg) when arrival and departure agree.
+    expect(screen.getAllByText("NJE721CK").length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText("CS-DXX")).toBeTruthy();
   });
 
@@ -116,12 +118,14 @@ describe("VisitCard clipboard", () => {
     }
   });
 
-  it("copies the callsign to the clipboard when the callsign is clicked", async () => {
+  it("copies the leg callsign to the clipboard when the callsign pill is clicked", async () => {
     const { writeText, restore } = withMockClipboard();
     try {
-      render(<VisitCard flight={makeFlight({ callsign: "NJE721CK" })} />);
-      await userEvent.click(screen.getByText("NJE721CK"));
-      expect(writeText).toHaveBeenCalledWith("NJE721CK");
+      render(<VisitCard flight={makeFlight({ arrivalCallsign: "NJE721CK", departureCallsign: "NJE722AB" })} />);
+      // Two distinct pills now. Click the departure one and check the value
+      // copied matches that specific leg.
+      await userEvent.click(screen.getByText("NJE722AB"));
+      expect(writeText).toHaveBeenCalledWith("NJE722AB");
     } finally {
       restore();
     }
