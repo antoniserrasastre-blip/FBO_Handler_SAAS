@@ -99,14 +99,15 @@ export interface FlightView {
   modifiedFlag: boolean;
   petCount: number;
 
-  // Optional live-tracking fields (deprecated in v2 — always null until
-  // the ingestion pipeline is ported to Movement). Surfaced as nullable so
-  // legacy UI references compile without runtime crashes.
+  // Live ADS-B snapshot from OpenSky. Sourced from whichever Movement leg
+  // (ARRIVAL or DEPARTURE) has the most recent liveLastSeenAt.
   ata?: string | null;                 // actual time of arrival
   atd?: string | null;                 // actual time of departure
   livePhase?: string | null;
   liveLastSeenAt?: Date | string | null;
   liveOnGround?: boolean | null;
+  liveAltitudeM?: number | null;
+  liveVelocityMs?: number | null;
 
   services?: FlightViewService[];
   lostItems?: FlightViewLostItem[];

@@ -52,6 +52,18 @@ export function toFlightView(visit: VisitWithMovements): FlightView {
   const primary = dep || arr;
   const isOvernight = visit.type === "OVERNIGHT";
 
+  // Pick the freshest live snapshot across both legs.
+  const liveSource = (() => {
+    const arrSeen = (arr?.liveLastSeenAt as Date | string | null | undefined) ?? null;
+    const depSeen = (dep?.liveLastSeenAt as Date | string | null | undefined) ?? null;
+    if (!arrSeen && !depSeen) return null;
+    if (!arrSeen) return dep;
+    if (!depSeen) return arr;
+    const arrT = new Date(arrSeen).getTime();
+    const depT = new Date(depSeen).getTime();
+    return depT >= arrT ? dep : arr;
+  })();
+
   return {
     id: visit.id,
     visitId: visit.id,
@@ -122,9 +134,11 @@ export function toFlightView(visit: VisitWithMovements): FlightView {
     lostItems: visit.lostItems as FlightViewLostItem[] | undefined,
     ata: (arr?.ata as string | null) ?? null,
     atd: (dep?.atd as string | null) ?? null,
-    livePhase: null,
-    liveLastSeenAt: null,
-    liveOnGround: null,
+    livePhase: (liveSource?.livePhase as string | null) ?? null,
+    liveLastSeenAt: (liveSource?.liveLastSeenAt as Date | string | null) ?? null,
+    liveOnGround: (liveSource?.liveOnGround as boolean | null) ?? null,
+    liveAltitudeM: (liveSource?.liveAltitudeM as number | null) ?? null,
+    liveVelocityMs: (liveSource?.liveVelocityMs as number | null) ?? null,
 
     createdAt: visit.createdAt,
     updatedAt: visit.updatedAt,
