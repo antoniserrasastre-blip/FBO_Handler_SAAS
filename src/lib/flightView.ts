@@ -73,6 +73,8 @@ export function toFlightView(visit: VisitWithMovements): FlightView {
     daySheetId: visit.palmaDay.toISOString(),
 
     callsign: (primary?.callsign as string) || "",
+    arrivalCallsign: (arr?.callsign as string | null) ?? null,
+    departureCallsign: (dep?.callsign as string | null) ?? null,
     registration: visit.aircraft?.registration || "",
     aircraftType: visit.aircraft?.aircraftType || "",
 

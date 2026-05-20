@@ -183,16 +183,37 @@ export const FlightCard = memo(function FlightCard({
                   );
                 })()}
                 <span className="text-xs text-ink-3 sm:text-sm">{flight.aircraftType}</span>
-                <span
-                  className="cursor-pointer font-mono text-xs text-ink-muted hover:text-info-strong sm:text-sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    navigator.clipboard?.writeText(flight.callsign);
-                  }}
-                  title="Click para copiar indicativo"
-                >
-                  {flight.callsign}
-                </span>
+                {(() => {
+                  const arrCs = flight.arrivalCallsign;
+                  const depCs = flight.departureCallsign;
+                  const distinct = arrCs && depCs && arrCs !== depCs;
+                  // Antes de aterrizar el callsign relevante es el de llegada
+                  // (ATC, ADS-B). Una vez en tierra pasa a serlo el de salida.
+                  const onGround = Boolean(flight.ata);
+                  const label = distinct
+                    ? (onGround ? depCs : arrCs)!
+                    : flight.callsign;
+                  const tip = distinct
+                    ? `Llegada: ${arrCs} · Salida: ${depCs}`
+                    : "Click para copiar indicativo";
+                  return (
+                    <span
+                      className="cursor-pointer font-mono text-xs text-ink-muted hover:text-info-strong sm:text-sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigator.clipboard?.writeText(label);
+                      }}
+                      title={tip}
+                    >
+                      {label}
+                      {distinct && (
+                        <span className="ml-1 text-[10px] text-ink-muted/70">
+                          (·{onGround ? arrCs : depCs})
+                        </span>
+                      )}
+                    </span>
+                  );
+                })()}
                 {flight.parking && (() => {
                   const compat = checkCompatibility(flight.aircraftType, flight.parking);
                   const farFromGA = isFarFromGA(flight.parking);

@@ -12,6 +12,8 @@ export function makeFlight(overrides: Partial<FlightView> = {}): FlightView {
     departureMovementId: "m-dep-1",
     daySheetId: "2025-01-01",
     callsign: "NJE123CK",
+    arrivalCallsign: "NJE123CK",
+    departureCallsign: "NJE123CK",
     registration: "CS-DXX",
     aircraftType: "GLEX",
     origin: "LFPB",
