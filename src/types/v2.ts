@@ -45,6 +45,8 @@ export interface FlightView {
 
   daySheetId: string;                  // = visit.palmaDay ISO (derived)
   callsign: string;                    // from DEPARTURE if exists else ARRIVAL
+  arrivalCallsign: string;             // empty string if no ARRIVAL leg
+  departureCallsign: string;           // empty string if no DEPARTURE leg
   registration: string;
   aircraftType: string;
   origin: string | null;

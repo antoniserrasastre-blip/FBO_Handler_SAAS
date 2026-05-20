@@ -290,7 +290,7 @@ function DiaPageInner() {
                 <th className="border-b border-line px-1 py-1.5 text-center font-semibold" style={{ width: 36 }} title="Catering">C</th>
                 <th className="border-b border-line px-1 py-1.5 text-center font-semibold" style={{ width: 36 }} title="Lavatory">T</th>
                 {/* SALIDA */}
-                <th className="border-b border-l border-line px-2 py-1.5 text-center font-semibold" style={{ width: 64 }} title="Target Off-Block Time">TOBT</th>
+                <th className="border-b border-l border-line px-2 py-1.5 text-left font-semibold" style={{ width: 96 }}>Vuelo salida</th>
                 <th className="border-b border-line px-2 py-1.5 text-center font-semibold" style={{ width: 56 }}>Destino</th>
                 <th className="border-b border-line px-2 py-1.5 text-center font-semibold" style={{ width: 48 }}>Día</th>
                 <th className="border-b border-line px-2 py-1.5 text-center font-semibold" style={{ width: 56 }}>ETD Z</th>
@@ -337,7 +337,7 @@ function DiaPageInner() {
                     {/* LLEGADA */}
                     <td className={`border-b border-l border-line-subtle px-2 py-1.5 font-semibold ${arrCellCls || "text-ink-1"}`}>
                       <span className="inline-flex items-center gap-1.5">
-                        {f.callsign}
+                        {f.arrivalCallsign || f.callsign}
                         <RqstChip rqstNumber={f.rqstNumber} />
                         <CategoryPill
                           category={(f.flightCategory || "COMMERCIAL") as FlightCategory}
@@ -426,12 +426,9 @@ function DiaPageInner() {
                       onCycle={(ev) => { ev.stopPropagation(); cycleToilet(f); }}
                     />
 
-                    {/* SALIDA — TOBT (target off-block) reemplaza el callsign duplicado */}
-                    <td className={`border-b border-l border-line-subtle px-2 py-1.5 text-center ${depCellCls || (f.tobt ? "text-ink-1" : "text-ink-disabled")}`}>
-                      <QuickTimeEdit
-                        value={f.tobt}
-                        onSave={(v) => patchFlight(f.id, { tobt: v })}
-                      />
+                    {/* SALIDA — callsign del leg de departure (puede diferir de la llegada) */}
+                    <td className={`border-b border-l border-line-subtle px-2 py-1.5 font-semibold ${depCellCls || (f.departureCallsign ? "text-ink-1" : "text-ink-disabled")}`}>
+                      {f.departureCallsign || "—"}
                     </td>
                     <td className={`border-b border-line-subtle px-2 py-1.5 text-center ${depCellCls || "text-ink-2"}`}>
                       {f.destination}
