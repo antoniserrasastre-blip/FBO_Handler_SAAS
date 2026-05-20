@@ -97,10 +97,11 @@ export async function PUT(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  type ParsedFlightInput = Awaited<ReturnType<typeof parseCybermaxPdf>>["flights"][number];
   const body = await req.json();
   const { date, flights, cancelIds } = body as {
     date: string;
-    flights: unknown[];
+    flights: ParsedFlightInput[];
     cancelIds?: string[];
   };
   if (!date || !flights || !Array.isArray(flights)) {
