@@ -280,7 +280,7 @@ function DiaPageInner() {
                 <th className="border-b border-line px-2 py-1.5 text-center font-semibold" style={{ width: 56 }}>Origen</th>
                 <th className="border-b border-line px-2 py-1.5 text-center font-semibold" style={{ width: 48 }}>Día</th>
                 <th className="border-b border-line px-2 py-1.5 text-center font-semibold" style={{ width: 56 }}>ETA Z</th>
-                <th className="border-b border-line px-2 py-1.5 text-center font-semibold" style={{ width: 56 }}>ATA Z</th>
+                <th className="border-b border-line px-1 py-1.5 text-center font-semibold" style={{ width: 56 }}>ATA Z</th>
                 {/* AVIÓN */}
                 <th className="border-b border-l border-line px-2 py-1.5 text-center font-semibold whitespace-nowrap" style={{ width: 116 }}>Matrícula</th>
                 <th className="border-b border-line px-2 py-1.5 text-center font-semibold" style={{ width: 56 }}>Tipo</th>
@@ -294,7 +294,7 @@ function DiaPageInner() {
                 <th className="border-b border-line px-2 py-1.5 text-center font-semibold" style={{ width: 56 }}>Destino</th>
                 <th className="border-b border-line px-2 py-1.5 text-center font-semibold" style={{ width: 48 }}>Día</th>
                 <th className="border-b border-line px-2 py-1.5 text-center font-semibold" style={{ width: 56 }}>ETD Z</th>
-                <th className="border-b border-line px-2 py-1.5 text-center font-semibold" style={{ width: 56 }}>ATD Z</th>
+                <th className="border-b border-line px-1 py-1.5 text-center font-semibold" style={{ width: 56 }}>ATD Z</th>
                 {/* PAX */}
                 <th className="border-b border-l border-line px-2 py-1.5 text-center font-semibold">P · C</th>
               </tr>
@@ -371,7 +371,7 @@ function DiaPageInner() {
                         onSave={(v) => patchFlight(f.id, { eta: v })}
                       />
                     </td>
-                    <td className={`border-b border-line-subtle px-2 py-1.5 text-center ${arrCellCls || (ata ? "text-ink-1" : "text-ink-disabled")}`}>
+                    <td className={`border-b border-line-subtle px-1 py-1.5 text-center ${arrCellCls || (ata ? "text-ink-1" : "text-ink-disabled")}`}>
                       <QuickTimeEdit
                         value={ata}
                         onSave={(v) => patchFlight(f.id, { ata: v })}
@@ -445,7 +445,7 @@ function DiaPageInner() {
                         onSave={(v) => patchFlight(f.id, { etd: v })}
                       />
                     </td>
-                    <td className={`border-b border-line-subtle px-2 py-1.5 text-center ${depCellCls || (atd ? "text-ink-1" : "text-ink-disabled")}`}>
+                    <td className={`border-b border-line-subtle px-1 py-1.5 text-center ${depCellCls || (atd ? "text-ink-1" : "text-ink-disabled")}`}>
                       <QuickTimeEdit
                         value={atd}
                         onSave={(v) => patchFlight(f.id, { atd: v })}
