@@ -79,6 +79,25 @@ interface FlightCardProps {
   readOnly?: boolean;
 }
 
+// Card background driven by the live ADS-B phase. Stale snapshots
+// (>10min without a position fix) fall back to plain white so the card
+// doesn't lie about real-time state.
+const LIVE_STALE_MS = 10 * 60 * 1000;
+function liveBgClass(
+  phase: string | null | undefined,
+  lastSeenAt: Date | string | null | undefined,
+): string {
+  if (!phase || !lastSeenAt) return "bg-white";
+  if (Date.now() - new Date(lastSeenAt).getTime() > LIVE_STALE_MS) return "bg-white";
+  switch (phase) {
+    case "APPROACHING": return "bg-sky-50";
+    case "LANDED":      return "bg-amber-50";
+    case "ON_BLOCKS":   return "bg-emerald-50";
+    case "DEPARTED":    return "bg-gray-50";
+    default:            return "bg-white";
+  }
+}
+
 export const FlightCard = memo(function FlightCard({
   flight,
   onUpdate,
@@ -106,9 +125,11 @@ export const FlightCard = memo(function FlightCard({
     flight.isOvernight ||
     Boolean(flight.arrivalDate && flight.departureDate && flight.arrivalDate !== flight.departureDate);
 
+  const liveBg = liveBgClass(flight.livePhase, flight.liveLastSeenAt);
+
   return (
     <div
-      className={`overflow-hidden rounded-lg border-l-4 bg-white shadow-sm transition-shadow hover:shadow-md ${isSelected ? "ring-2 ring-info ring-offset-1" : ""}`}
+      className={`overflow-hidden rounded-lg border-l-4 ${liveBg} shadow-sm transition-shadow transition-colors duration-500 hover:shadow-md ${isSelected ? "ring-2 ring-info ring-offset-1" : ""}`}
       style={{ borderLeftColor: stateConfig.color }}
       onClick={() => onSelect?.(flight.id)}
     >
