@@ -839,8 +839,12 @@
     padding: 8px var(--s-3);
   }
 
-  /* Bottom nav con safe-area para iOS */
   .hx-bottom-nav {
+    /* Promote to its own GPU layer so iOS Safari keeps it anchored to the
+       visual viewport while the URL bar collapses/expands during scroll. */
+    transform: translateZ(0);
+    will-change: transform;
+    /* Safe-area for devices with a home indicator. */
     padding-bottom: env(safe-area-inset-bottom, 0);
   }
 

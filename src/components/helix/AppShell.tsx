@@ -87,7 +87,12 @@ function AppShellInner({ children }: { children: ReactNode }) {
             : undefined
         }
       />
-      <main className={`flex-1 ${isMobile ? "pb-16" : ""}`}>{children}</main>
+      <main
+        className="flex-1"
+        style={isMobile ? { paddingBottom: "calc(4rem + env(safe-area-inset-bottom, 0px))" } : undefined}
+      >
+        {children}
+      </main>
       {!isMobile ? (
         <HelixFooter
           shortcuts={<span className="mono">←→ fecha · T hoy · / buscar · ? ayuda</span>}
