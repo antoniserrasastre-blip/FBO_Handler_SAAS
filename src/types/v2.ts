@@ -55,6 +55,17 @@ export interface FlightView {
   destination: string | null;
   etd: string | null;
   departureDate: string | null;        // "DD/MM"
+  /**
+   * Combined UTC instant of the arrival (scheduledDate of ARRIVAL Movement
+   * + eta HH:MM Zulu). Null when either piece is missing. Used by the
+   * "Próximas 8 horas" filter and any other window-based logic. Display
+   * code should keep using `arrivalDate` / `eta`.
+   */
+  arrivalInstant: Date | string | null;
+  /**
+   * Same for the departure leg (scheduledDate of DEPARTURE Movement + etd).
+   */
+  departureInstant: Date | string | null;
   parking: string | null;
   tobt: string | null;
   state: string;

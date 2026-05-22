@@ -25,6 +25,8 @@ export function makeFlight(overrides: Partial<FlightView> = {}): FlightView {
     destination: "EGGW",
     etd: "10:30",
     departureDate: null,
+    arrivalInstant: null,
+    departureInstant: null,
     parking: "P-12",
     tobt: null,
     state: "PARKED",

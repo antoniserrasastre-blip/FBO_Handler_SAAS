@@ -42,6 +42,17 @@ function dateToDdMm(d: Date | string | null): string | null {
   return `${dd}/${mm}`;
 }
 
+function combineInstant(date: Date | string | null | undefined, hhmm: string | null | undefined): Date | null {
+  if (!date || !hhmm) return null;
+  const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm);
+  if (!m) return null;
+  const base = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(base.getTime())) return null;
+  const out = new Date(base.getTime());
+  out.setUTCHours(parseInt(m[1], 10), parseInt(m[2], 10), 0, 0);
+  return out;
+}
+
 export function toFlightView(visit: VisitWithMovements): FlightView {
   const arr = pick(visit.movements as AnyRecord[], "ARRIVAL");
   const dep = pick(visit.movements as AnyRecord[], "DEPARTURE");
@@ -85,6 +96,14 @@ export function toFlightView(visit: VisitWithMovements): FlightView {
     destination: (dep?.destination as string | null) ?? null,
     etd: (dep?.etd as string | null) ?? null,
     departureDate: dateToDdMm((visit.departureDate ?? (dep?.scheduledDate as Date | null)) || null),
+    arrivalInstant: combineInstant(
+      (visit.arrivalDate ?? (arr?.scheduledDate as Date | null)) || null,
+      (arr?.eta as string | null) ?? null
+    ),
+    departureInstant: combineInstant(
+      (visit.departureDate ?? (dep?.scheduledDate as Date | null)) || null,
+      (dep?.etd as string | null) ?? null
+    ),
 
     parking: (primary?.parking as string | null) ?? null,
     tobt: (dep?.tobt as string | null) ?? null,
