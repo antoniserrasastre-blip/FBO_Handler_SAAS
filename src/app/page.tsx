@@ -11,6 +11,7 @@ import { ToastContainer, ToastMessage } from "@/components/Toast";
 import { useEventStream } from "@/hooks/useEventStream";
 import { FlightEvent } from "@/lib/events";
 import { SearchBar } from "@/components/SearchBar";
+import { FilterToggleStrip } from "@/components/FilterToggleStrip";
 import { ShortcutsHelp } from "@/components/ShortcutsHelp";
 import { PendingServicesPanel } from "@/components/PendingServicesPanel";
 import { QuickAddFlight } from "@/components/QuickAddFlight";
@@ -22,6 +23,11 @@ import { HelixButton, Stat, StatBand, useDate } from "@/components/helix";
 
 import { dateToSqlString } from "@/lib/time";
 import { shortDate } from "@/app/dia/diaHelpers";
+import { isFlightPending } from "@/lib/pendingFilter";
+import { flightWithinHours } from "@/lib/timeWindow";
+
+const PENDING_ONLY_KEY = "fbo:filters:pendingOnly";
+const NEXT_8H_KEY = "fbo:filters:next8h";
 
 export const dynamic = "force-dynamic";
 
@@ -67,6 +73,15 @@ function HomePageInner() {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const toastIdRef = useRef(0);
 
+  // "Solo pendientes" + "Próximas 8h" — toggles que se aplican EN CIMA del
+  // filtro de SearchBar (AND con la query). Se persisten en localStorage para
+  // sobrevivir al refresco.
+  const [pendingOnly, setPendingOnly] = useState<boolean>(false);
+  const [next8h, setNext8h] = useState<boolean>(false);
+  // Tick que se incrementa cada minuto cuando "Próximas 8h" está activo y es
+  // hoy, para que un vuelo entre/salga de la ventana sin refresco manual.
+  const [nowTick, setNowTick] = useState(0);
+
   // Operations date is owned by the global Helix header via the URL (?d=).
   const { date, isToday, setDate } = useDate();
 
@@ -80,6 +95,35 @@ function HomePageInner() {
     sessionStorage.removeItem("viewDate");
     setDate(new Date(viewDate));
   }, [setDate]);
+
+  // Rehidrata los toggles de filtro desde localStorage al montar.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      if (window.localStorage.getItem(PENDING_ONLY_KEY) === "1") setPendingOnly(true);
+      if (window.localStorage.getItem(NEXT_8H_KEY) === "1") setNext8h(true);
+    } catch {
+      // localStorage no disponible (modo privado, sandbox, etc.) — sin coste.
+    }
+  }, []);
+
+  // Persiste los toggles cuando cambian.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(PENDING_ONLY_KEY, pendingOnly ? "1" : "0");
+    } catch {
+      // ignore
+    }
+  }, [pendingOnly]);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(NEXT_8H_KEY, next8h ? "1" : "0");
+    } catch {
+      // ignore
+    }
+  }, [next8h]);
 
   const allServices = useMemo(() => flights.flatMap((f) => f.services || []), [flights]);
   const overdueCount = useOverdueAlert(allServices, soundEnabled && isToday);
@@ -169,6 +213,14 @@ function HomePageInner() {
     }, 60000);
     return () => clearInterval(interval);
   }, [isToday]);
+
+  // Re-evalúa "Próximas 8h" cada minuto cuando el filtro está activo y es hoy,
+  // para que un vuelo entre/salga de la ventana ±8h sin refresco manual.
+  useEffect(() => {
+    if (!isToday || !next8h) return;
+    const interval = setInterval(() => setNowTick((t) => t + 1), 60000);
+    return () => clearInterval(interval);
+  }, [isToday, next8h]);
 
   // Clear list + show loading on date change so we don't display stale rows.
   useEffect(() => {
@@ -314,6 +366,18 @@ function HomePageInner() {
     }
   };
 
+  // Vista final: filteredFlights (SearchBar) ∩ pendingOnly ∩ next8h (si hoy).
+  // Definida antes del handler de teclado para que `list = visibleFlights`
+  // en las flechas arriba/abajo recorra exactamente lo que se está pintando.
+  const visibleFlights = useMemo(() => {
+    let xs = filteredFlights;
+    if (pendingOnly) xs = xs.filter(isFlightPending);
+    if (next8h && isToday) xs = xs.filter((f) => flightWithinHours(f, 8));
+    return xs;
+    // `nowTick` fuerza recálculo cada minuto cuando el filtro está activo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredFlights, pendingOnly, next8h, isToday, nowTick]);
+
   // Keyboard shortcuts (after handlers are defined)
   useEffect(() => {
     const FUEL_CYCLE: Record<string, string> = { NOT_REQUESTED: "REQUESTED", REQUESTED: "SERVED", SERVED: "NOT_REQUESTED" };
@@ -324,7 +388,7 @@ function HomePageInner() {
       const tag = (e.target as HTMLElement).tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
 
-      const list = filteredFlights;
+      const list = visibleFlights;
       const idx = list.findIndex((f) => f.id === selectedFlightId);
       const selected = idx >= 0 ? list[idx] : null;
 
@@ -399,7 +463,7 @@ function HomePageInner() {
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filteredFlights, selectedFlightId]);
+  }, [visibleFlights, selectedFlightId]);
 
   const handleExport = (type: "flights" | "services") => {
     const dateStr = date.toISOString().slice(0, 10);
@@ -431,6 +495,21 @@ function HomePageInner() {
     return { arrivals, departures };
   }, [flights, date]);
 
+  // Counts sobre la lista COMPLETA (pre-búsqueda) para los badges del strip.
+  // Así el usuario sabe qué hay aunque tenga la búsqueda activa.
+  const pendingCount = useMemo(
+    () => flights.filter(isFlightPending).length,
+    [flights],
+  );
+  const next8hCount = useMemo(
+    () => flights.filter((f) => flightWithinHours(f, 8)).length,
+    // `nowTick` fuerza recálculo cada minuto cuando el filtro está activo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [flights, nowTick],
+  );
+
+  const togglesActive = pendingOnly || (next8h && isToday);
+
   if (status === "loading" || loading) {
     return (
       <div className="flex min-h-[calc(100vh-96px)] items-center justify-center text-ink-3">
@@ -449,11 +528,11 @@ function HomePageInner() {
           <Stat
             label="Vuelos"
             value={
-              filteredFlights.length === flights.length
+              visibleFlights.length === flights.length
                 ? flights.length
-                : `${filteredFlights.length} / ${flights.length}`
+                : `${visibleFlights.length} / ${flights.length}`
             }
-            sub={filteredFlights.length === flights.length ? "del día" : "filtrados"}
+            sub={visibleFlights.length === flights.length ? "del día" : "filtrados"}
           />
           <Stat label="Llegadas" value={movementStats.arrivals} />
           <Stat label="Salidas" value={movementStats.departures} />
@@ -476,12 +555,27 @@ function HomePageInner() {
         <div className="print-header">
           MALLORCAIR FBO — Orden del dia {date.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
         </div>
+        {/* Filter toggles — pendingOnly + next8h, capa AND sobre SearchBar. */}
+        {flights.length > 0 && (
+          <FilterToggleStrip
+            pendingOnly={pendingOnly}
+            next8h={next8h}
+            showNext8h={isToday}
+            pendingCount={pendingCount}
+            next8hCount={next8hCount}
+            onChange={({ pendingOnly: nextPending, next8h: nextWindow }) => {
+              setPendingOnly(nextPending);
+              setNext8h(nextWindow);
+            }}
+          />
+        )}
+
         {/* Search bar */}
         {flights.length > 0 && (
           <SearchBar
             flights={flights}
             onFilteredFlights={setFilteredFlights}
-            resultCount={filteredFlights.length}
+            resultCount={visibleFlights.length}
             totalCount={flights.length}
             inputRef={searchInputRef}
             query={searchQuery}
@@ -530,13 +624,19 @@ function HomePageInner() {
               </HelixButton>
             )}
           </div>
-        ) : filteredFlights.length === 0 ? (
+        ) : visibleFlights.length === 0 ? (
           <div className="rounded-hx-md border border-dashed border-line p-8 text-center">
-            <p className="text-sm italic text-ink-muted">Ningún vuelo coincide con la búsqueda.</p>
+            <p className="text-sm italic text-ink-muted">
+              {filteredFlights.length === 0
+                ? "Ningún vuelo coincide con la búsqueda."
+                : togglesActive
+                ? "Ningún vuelo coincide con los filtros activos."
+                : "Ningún vuelo coincide con la búsqueda."}
+            </p>
           </div>
         ) : (
           <div className="space-y-3">
-            {filteredFlights.map((flight) => {
+            {visibleFlights.map((flight) => {
               const ppl = people[flight.id];
               return (
                 <div key={flight.id} id={`flight-${flight.id}`}>
