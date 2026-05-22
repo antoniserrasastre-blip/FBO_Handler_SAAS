@@ -16,7 +16,13 @@ export function useServicePresets() {
     setLoading(true);
     try {
       const res = await fetch("/api/service-presets");
-      if (res.ok) setPresets((await res.json()).presets);
+      if (res.ok) {
+        setPresets((await res.json()).presets);
+      } else {
+        console.error("useServicePresets: GET failed", res.status, await res.text().catch(() => ""));
+      }
+    } catch (err) {
+      console.error("useServicePresets: GET threw", err);
     } finally {
       setLoading(false);
     }
@@ -30,7 +36,10 @@ export function useServicePresets() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: name.trim(), defaultTarget: defaultTarget ?? null }),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.error("useServicePresets: POST failed", res.status, await res.text().catch(() => ""));
+      return null;
+    }
     const preset = (await res.json()) as CustomServicePreset;
     setPresets((prev) => {
       const exists = prev.some((p) => p.id === preset.id);

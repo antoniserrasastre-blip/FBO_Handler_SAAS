@@ -225,6 +225,17 @@ const V2_TABLES = [
   `CREATE INDEX IF NOT EXISTS "EventLog_visitId_idx" ON "EventLog"("visitId")`,
   `CREATE INDEX IF NOT EXISTS "EventLog_movementId_idx" ON "EventLog"("movementId")`,
   `CREATE INDEX IF NOT EXISTS "EventLog_userId_idx" ON "EventLog"("userId")`,
+
+  `CREATE TABLE IF NOT EXISTS "CustomServicePreset" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "name" TEXT NOT NULL,
+    "defaultTarget" TEXT,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "createdById" TEXT,
+    CONSTRAINT "CustomServicePreset_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User" ("id") ON DELETE SET NULL ON UPDATE CASCADE
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "CustomServicePreset_name_key" ON "CustomServicePreset"("name")`,
+  `CREATE INDEX IF NOT EXISTS "CustomServicePreset_createdById_idx" ON "CustomServicePreset"("createdById")`,
 ];
 
 async function main() {
