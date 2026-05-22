@@ -4,11 +4,14 @@ import {
   computeBarBounds,
   flightPips,
   nowPctInRange,
-  zoomedRange,
+  rangeFromCenter,
   isCommercialCallsign,
   barSegments,
-  OPS_RANGE,
-  minToPct,
+  msToPct,
+  rulerTicks,
+  palmaDaysInRange,
+  HOUR_MS,
+  DAY_MS,
 } from "./timelineHelpers";
 
 describe("parseHHMM", () => {
@@ -24,121 +27,186 @@ describe("parseHHMM", () => {
   });
 });
 
-describe("minToPct (06-24 default range)", () => {
-  it("06:00 → 0%", () => expect(minToPct(360)).toBe(0));
-  it("24:00 → 100%", () => expect(minToPct(1440)).toBe(100));
-  it("15:00 (mediodía+3h) → 50%", () => expect(minToPct(15 * 60)).toBe(50));
+describe("rangeFromCenter", () => {
+  it("centra y reparte la ventana", () => {
+    const centerMs = Date.UTC(2026, 4, 12, 12, 0);
+    const r = rangeFromCenter(centerMs, 24 * HOUR_MS);
+    expect(r.startMs).toBe(centerMs - 12 * HOUR_MS);
+    expect(r.endMs).toBe(centerMs + 12 * HOUR_MS);
+  });
+});
+
+describe("msToPct", () => {
+  it("startMs → 0%, endMs → 100%, midpoint → 50%", () => {
+    const range = { startMs: 1000, endMs: 2000 };
+    expect(msToPct(1000, range)).toBe(0);
+    expect(msToPct(2000, range)).toBe(100);
+    expect(msToPct(1500, range)).toBe(50);
+  });
 });
 
 describe("nowPctInRange", () => {
-  it("12:00 UTC → ~33.3% en rango 06-24", () => {
-    expect(nowPctInRange(new Date(Date.UTC(2026, 4, 12, 12, 0)))).toBeCloseTo(33.33, 1);
+  it("now en el centro → ~50%", () => {
+    const center = Date.UTC(2026, 4, 12, 12, 0);
+    const range = rangeFromCenter(center, 24 * HOUR_MS);
+    expect(nowPctInRange(new Date(center), range)).toBeCloseTo(50, 1);
   });
 });
 
-describe("zoomedRange", () => {
-  it("24h devuelve OPS_RANGE", () => {
-    expect(zoomedRange(24)).toEqual(OPS_RANGE);
-  });
-  it("12h centra en NOW", () => {
-    const r = zoomedRange(12, new Date(Date.UTC(2026, 4, 12, 14, 0)));
-    expect(r.startMin).toBe(8 * 60);
-    expect(r.endMin).toBe(20 * 60);
-  });
-  it("clampea a 0..1440 cuando NOW esta cerca de los bordes", () => {
-    const r = zoomedRange(12, new Date(Date.UTC(2026, 4, 12, 2, 0)));
-    expect(r.startMin).toBe(0);
-    expect(r.endMin).toBe(12 * 60);
-  });
-});
+describe("computeBarBounds (eje absoluto)", () => {
+  const center = Date.UTC(2026, 4, 12, 12, 0); // 12:00 UTC 12/05/2026
+  const range = rangeFromCenter(center, 24 * HOUR_MS); // [00:00, 24:00] del dia 12/05
 
-describe("computeBarBounds (rango 06-24)", () => {
-  const today = "12/05";
-
-  it("vuelo de turnaround (eta+etd hoy en rango)", () => {
-    const r = computeBarBounds(
-      { eta: "08:00", etd: "12:00", arrivalDate: "12/05/26", departureDate: "12/05/26" },
-      today,
-    );
+  it("turnaround con arrival e departure dentro del rango", () => {
+    const arr = new Date(Date.UTC(2026, 4, 12, 8, 0));
+    const dep = new Date(Date.UTC(2026, 4, 12, 14, 0));
+    const r = computeBarBounds({ arrivalInstant: arr, departureInstant: dep }, range);
     expect(r?.kind).toBe("stay");
-    expect(r?.startPct).toBeCloseTo((2 / 18) * 100); // 08-06 = 2h
-    expect(r?.endPct).toBeCloseTo((6 / 18) * 100);   // 12-06 = 6h
+    expect(r?.startPct).toBeCloseTo(((8 - 0) / 24) * 100);
+    expect(r?.endPct).toBeCloseTo(((14 - 0) / 24) * 100);
   });
 
-  it("vuelo overnight que llega ayer y sale hoy: bar desde el inicio del rango", () => {
-    const r = computeBarBounds(
-      { eta: "20:00", etd: "08:30", arrivalDate: "11/05/26", departureDate: "12/05/26" },
-      today,
-    );
-    expect(r?.startPct).toBe(0);
-    expect(r?.endPct).toBeCloseTo((2.5 / 18) * 100); // 8:30 → 2.5h después de 06:00
+  it("vuelo overnight cruza medianoche en una ventana suficientemente ancha", () => {
+    const arr = new Date(Date.UTC(2026, 4, 12, 22, 0));
+    const dep = new Date(Date.UTC(2026, 4, 13, 8, 30));
+    // Ventana de 48h centrada en 12:00 del 12/05 → [12/05 12:00, 13/05 12:00 +12h]
+    const wide = rangeFromCenter(center, 48 * HOUR_MS);
+    const r = computeBarBounds({ arrivalInstant: arr, departureInstant: dep }, wide);
+    expect(r).not.toBeNull();
+    // Bar entero dentro del rango — startPct < endPct, ambos en (0, 100)
+    expect(r!.startPct).toBeGreaterThan(0);
+    expect(r!.endPct).toBeLessThan(100);
+    expect(r!.startPct).toBeLessThan(r!.endPct);
   });
 
-  it("vuelo que llega antes del rango se filtra (eta 04:00)", () => {
-    const r = computeBarBounds(
-      { eta: "04:00", etd: "05:00", arrivalDate: "12/05/26", departureDate: "12/05/26" },
-      today,
-    );
+  it("vuelo fuera del rango devuelve null", () => {
+    const arr = new Date(Date.UTC(2026, 4, 10, 8, 0));
+    const dep = new Date(Date.UTC(2026, 4, 10, 14, 0));
+    const r = computeBarBounds({ arrivalInstant: arr, departureInstant: dep }, range);
     expect(r).toBeNull();
   });
 
-  it("arrival-only crea bar corto desde ETA", () => {
-    const r = computeBarBounds(
-      { eta: "10:00", etd: null, arrivalDate: "12/05/26", departureDate: null },
-      today,
-    );
+  it("arrival-only crea bar de 90 min desde ETA", () => {
+    const arr = new Date(Date.UTC(2026, 4, 12, 10, 0));
+    const r = computeBarBounds({ arrivalInstant: arr, departureInstant: null }, range);
     expect(r?.kind).toBe("arrival-only");
-    expect(r?.startPct).toBeCloseTo((4 / 18) * 100);
+    expect(r?.endMs).toBe(arr.getTime() + 90 * 60 * 1000);
   });
 
-  it("overnight que llega hoy y sale mañana: termina al borde del rango", () => {
-    const r = computeBarBounds(
-      { eta: "22:00", etd: "06:00", arrivalDate: "12/05/26", departureDate: "13/05/26" },
-      today,
-    );
-    expect(r?.startPct).toBeCloseTo((16 / 18) * 100); // 22-06=16h
-    expect(r?.endPct).toBe(100);
+  it("departure-only crea bar de 90 min hasta ETD", () => {
+    const dep = new Date(Date.UTC(2026, 4, 12, 16, 0));
+    const r = computeBarBounds({ arrivalInstant: null, departureInstant: dep }, range);
+    expect(r?.kind).toBe("departure-only");
+    expect(r?.startMs).toBe(dep.getTime() - 90 * 60 * 1000);
   });
 });
 
 describe("flightPips", () => {
-  const bar = { startPct: 20, endPct: 60, kind: "stay" as const };
+  const center = Date.UTC(2026, 4, 12, 12, 0);
+  const range = rangeFromCenter(center, 24 * HOUR_MS);
+  const arrivalInstant = new Date(Date.UTC(2026, 4, 12, 8, 0));
+  const departureInstant = new Date(Date.UTC(2026, 4, 12, 14, 0));
+  const bar = {
+    startPct: (8 / 24) * 100,
+    endPct: (14 / 24) * 100,
+    startMs: arrivalInstant.getTime(),
+    endMs: departureInstant.getTime(),
+    kind: "stay" as const,
+  };
 
-  it("genera pip de fuel cuando esta REQUESTED, con timestamp", () => {
+  it("ancla pip de fuel HH:MM al dia del vuelo", () => {
     const pips = flightPips(
-      { fuelState: "REQUESTED", fuelRequestedAt: "10:00", fuelServedAt: null,
-        toiletState: "NOT_REQUESTED", toiletRequestedAt: null, toiletCompletedAt: null },
+      {
+        fuelState: "REQUESTED",
+        fuelRequestedAt: "10:00",
+        fuelServedAt: null,
+        toiletState: "NOT_REQUESTED",
+        toiletRequestedAt: null,
+        toiletCompletedAt: null,
+        arrivalInstant,
+        departureInstant,
+      },
       [],
       bar,
+      range,
     );
     expect(pips).toHaveLength(1);
     expect(pips[0].letter).toBe("F");
     expect(pips[0].state).toBe("req");
-    expect(pips[0].pct).toBeCloseTo((4 / 18) * 100); // 10:00 → 4h despues de 06:00
+    expect(pips[0].pct).toBeCloseTo((10 / 24) * 100);
   });
 
-  it("no genera pip cuando fuel/toilet NOT_REQUESTED y sin servicios", () => {
+  it("no genera pip cuando todo es NOT_REQUESTED", () => {
     const pips = flightPips(
-      { fuelState: "NOT_REQUESTED", fuelRequestedAt: null, fuelServedAt: null,
-        toiletState: "NOT_REQUESTED", toiletRequestedAt: null, toiletCompletedAt: null },
+      {
+        fuelState: "NOT_REQUESTED",
+        fuelRequestedAt: null,
+        fuelServedAt: null,
+        toiletState: "NOT_REQUESTED",
+        toiletRequestedAt: null,
+        toiletCompletedAt: null,
+        arrivalInstant,
+        departureInstant,
+      },
       [],
       bar,
+      range,
     );
     expect(pips).toHaveLength(0);
   });
 
   it("clasifica catering como C y otros servicios como S", () => {
     const pips = flightPips(
-      { fuelState: "NOT_REQUESTED", fuelRequestedAt: null, fuelServedAt: null,
-        toiletState: "NOT_REQUESTED", toiletRequestedAt: null, toiletCompletedAt: null },
+      {
+        fuelState: "NOT_REQUESTED",
+        fuelRequestedAt: null,
+        fuelServedAt: null,
+        toiletState: "NOT_REQUESTED",
+        toiletRequestedAt: null,
+        toiletCompletedAt: null,
+        arrivalInstant,
+        departureInstant,
+      },
       [
         { type: "CATERING", state: "DELIVERED", arrivedAt: null, deliveredAt: "11:30" },
         { type: "GPU", state: "PENDING", arrivedAt: null, deliveredAt: null },
       ],
       bar,
+      range,
     );
     expect(pips.find((p) => p.letter === "C")?.state).toBe("ok");
     expect(pips.find((p) => p.letter === "S")?.state).toBe("no");
+  });
+});
+
+describe("rulerTicks", () => {
+  it("genera 1 tick por hora dentro de la ventana", () => {
+    const start = Date.UTC(2026, 4, 12, 10, 0);
+    const ticks = rulerTicks({ startMs: start, endMs: start + 3 * HOUR_MS }, 1);
+    expect(ticks.map((t) => t.hour)).toEqual([10, 11, 12, 13]);
+  });
+
+  it("marca isMidnight para 00:00 UTC", () => {
+    const start = Date.UTC(2026, 4, 12, 22, 0);
+    const ticks = rulerTicks({ startMs: start, endMs: start + 4 * HOUR_MS }, 1);
+    expect(ticks.find((t) => t.hour === 0)?.isMidnight).toBe(true);
+  });
+});
+
+describe("palmaDaysInRange", () => {
+  it("incluye los dias cubiertos con un margen de ±1 dia", () => {
+    const center = Date.UTC(2026, 4, 12, 12, 0);
+    const days = palmaDaysInRange(rangeFromCenter(center, 12 * HOUR_MS));
+    // Centro 12/05, ventana ±6h, margen ±1d → debe incluir 11, 12 y 13.
+    expect(days).toContain("2026-05-11");
+    expect(days).toContain("2026-05-12");
+    expect(days).toContain("2026-05-13");
+  });
+
+  it("ventana ancha cubre mas dias", () => {
+    const center = Date.UTC(2026, 4, 12, 12, 0);
+    const days = palmaDaysInRange(rangeFromCenter(center, 48 * HOUR_MS));
+    expect(days.length).toBeGreaterThanOrEqual(4);
   });
 });
 
@@ -164,5 +232,11 @@ describe("barSegments (5-state)", () => {
   });
   it("DEPARTING con paxBoarded → svc + board", () => {
     expect(barSegments("DEPARTING", true)).toEqual(["turn-svc", "turn-board"]);
+  });
+});
+
+describe("DAY_MS constant", () => {
+  it("es 24h en ms", () => {
+    expect(DAY_MS).toBe(24 * HOUR_MS);
   });
 });

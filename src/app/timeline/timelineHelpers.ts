@@ -1,24 +1,32 @@
-// Helpers para la vista /timeline (eje horizontal con rango configurable).
-// Por defecto operamos en la ventana 06:00 - 24:00 (jornada operativa LEPA).
-// Lógica pura, fácil de testear.
+// Helpers para la vista /timeline (eje horizontal deslizante).
+// Modelo de coordenadas: timestamps absolutos en ms (epoch). El eje se centra
+// alrededor de un instante configurable (por defecto NOW Zulu) con una ventana
+// de N horas — el usuario puede desplazarse en el tiempo con la rueda del
+// raton.
 
 import type { Flight, Service } from "@/types/compat";
 
-export type TimelineRange = { startMin: number; endMin: number };
+export type TimelineRange = { startMs: number; endMs: number };
 
-/** Rango por defecto: 06:00 → 24:00 Zulu. */
-export const OPS_RANGE: TimelineRange = { startMin: 6 * 60, endMin: 24 * 60 };
+export const HOUR_MS = 60 * 60 * 1000;
+export const DAY_MS = 24 * HOUR_MS;
 
-/** Variantes de zoom — la ventana se centra alrededor del NOW Zulu. */
-export function zoomedRange(zoom: 6 | 12 | 24, now: Date = new Date()): TimelineRange {
-  if (zoom === 24) return OPS_RANGE;
-  const nowMin = now.getUTCHours() * 60 + now.getUTCMinutes();
-  const half = (zoom * 60) / 2;
-  let start = nowMin - half;
-  let end = nowMin + half;
-  if (start < 0) { end -= start; start = 0; }
-  if (end > 24 * 60) { start -= end - 24 * 60; end = 24 * 60; }
-  return { startMin: Math.max(0, start), endMin: Math.min(24 * 60, end) };
+/** Construye un rango [center - window/2, center + window/2]. */
+export function rangeFromCenter(centerMs: number, windowMs: number): TimelineRange {
+  const half = windowMs / 2;
+  return { startMs: centerMs - half, endMs: centerMs + half };
+}
+
+/** Convierte ms absolutos a porcentaje 0..100 dentro de la ventana visible. */
+export function msToPct(ms: number, range: TimelineRange): number {
+  const total = range.endMs - range.startMs;
+  if (total <= 0) return 0;
+  return ((ms - range.startMs) / total) * 100;
+}
+
+/** Posicion NOW como porcentaje del rango. */
+export function nowPctInRange(now: Date, range: TimelineRange): number {
+  return msToPct(now.getTime(), range);
 }
 
 /** Parsea HH:MM Zulu a minutos desde 00:00. Devuelve null si invalido. */
@@ -32,80 +40,82 @@ export function parseHHMM(hhmm: string | null | undefined): number | null {
   return hh * 60 + mm;
 }
 
-/** Convierte minutos-del-dia a porcentaje 0..100 dentro de la ventana visible. */
-export function minToPct(min: number, range: TimelineRange = OPS_RANGE): number {
-  const total = range.endMin - range.startMin;
-  return ((min - range.startMin) / total) * 100;
+function toMs(instant: Date | string | null | undefined): number | null {
+  if (instant === null || instant === undefined) return null;
+  const d = instant instanceof Date ? instant : new Date(instant);
+  const t = d.getTime();
+  return Number.isNaN(t) ? null : t;
 }
 
-/** Posicion NOW (Zulu) como porcentaje del rango. */
-export function nowPctInRange(now: Date = new Date(), range: TimelineRange = OPS_RANGE): number {
-  const m = now.getUTCHours() * 60 + now.getUTCMinutes();
-  return minToPct(m, range);
+/**
+ * Resuelve un HH:MM Zulu sobre la fecha (UTC) de `baseInstant` y devuelve los
+ * ms absolutos. Sirve para situar pips de servicio en el eje cuando el campo
+ * de la BD es solo HH:MM y necesitamos anclarlo a un dia concreto.
+ */
+export function resolveHhmmMs(
+  hhmm: string | null | undefined,
+  baseInstant: Date | string | null | undefined,
+): number | null {
+  const m = parseHHMM(hhmm);
+  if (m === null) return null;
+  const baseMs = toMs(baseInstant);
+  if (baseMs === null) return null;
+  const d = new Date(baseMs);
+  d.setUTCHours(Math.floor(m / 60), m % 60, 0, 0);
+  return d.getTime();
 }
 
 export type BarBounds = {
   startPct: number;
   endPct: number;
+  startMs: number;
+  endMs: number;
   kind: "stay" | "arrival-only" | "departure-only";
 };
 
-const ARRIVAL_ONLY_BAR_MINUTES = 90;
-const DEPARTURE_ONLY_BAR_MINUTES = 90;
-const MIN_BAR_PCT = 0.5;
+const ARRIVAL_ONLY_BAR_MS = 90 * 60 * 1000;
+const DEPARTURE_ONLY_BAR_MS = 90 * 60 * 1000;
+const MIN_BAR_PCT = 0.4;
 
 /**
- * Bar para un vuelo. Maneja overnight (desde ayer / hasta mañana).
- * Devuelve null si ni eta ni etd estan presentes (o el bar caeria fuera del rango).
+ * Bar para un vuelo usando timestamps absolutos. Si solo hay llegada o salida,
+ * pinta una barra corta de 90 min anclada al evento. Devuelve null si la barra
+ * no intersecta el rango visible.
  */
 export function computeBarBounds(
-  flight: Pick<Flight, "eta" | "etd" | "arrivalDate" | "departureDate">,
-  viewDayShort: string, // "DD/MM"
-  range: TimelineRange = OPS_RANGE,
+  flight: { arrivalInstant: Date | string | null; departureInstant: Date | string | null },
+  range: TimelineRange,
 ): BarBounds | null {
-  const etaMin = parseHHMM(flight.eta);
-  const etdMin = parseHHMM(flight.etd);
-  if (etaMin === null && etdMin === null) return null;
+  const arrMs = toMs(flight.arrivalInstant);
+  const depMs = toMs(flight.departureInstant);
+  if (arrMs === null && depMs === null) return null;
 
-  const arrToday = !flight.arrivalDate || flight.arrivalDate.slice(0, 5) === viewDayShort;
-  const depToday = !flight.departureDate || flight.departureDate.slice(0, 5) === viewDayShort;
-
-  let startMinAbs: number | null = null;
-  let endMinAbs: number | null = null;
+  let startMs: number;
+  let endMs: number;
   let kind: BarBounds["kind"] = "stay";
 
-  if (etaMin !== null && etdMin !== null && arrToday && depToday) {
-    startMinAbs = etaMin;
-    endMinAbs = etdMin;
-    if (endMinAbs < startMinAbs) endMinAbs = range.endMin; // proteccion
-  } else if (!arrToday && depToday && etdMin !== null) {
-    startMinAbs = range.startMin;
-    endMinAbs = etdMin;
-  } else if (arrToday && !depToday && etaMin !== null) {
-    startMinAbs = etaMin;
-    endMinAbs = range.endMin;
-  } else if (arrToday && etaMin !== null) {
-    startMinAbs = etaMin;
-    endMinAbs = etaMin + ARRIVAL_ONLY_BAR_MINUTES;
+  if (arrMs !== null && depMs !== null) {
+    startMs = arrMs;
+    endMs = depMs < arrMs ? arrMs + HOUR_MS : depMs;
+  } else if (arrMs !== null) {
+    startMs = arrMs;
+    endMs = arrMs + ARRIVAL_ONLY_BAR_MS;
     kind = "arrival-only";
-  } else if (depToday && etdMin !== null) {
-    startMinAbs = etdMin - DEPARTURE_ONLY_BAR_MINUTES;
-    endMinAbs = etdMin;
-    kind = "departure-only";
   } else {
-    return null;
+    startMs = depMs! - DEPARTURE_ONLY_BAR_MS;
+    endMs = depMs!;
+    kind = "departure-only";
   }
 
-  // Clip al rango visible
-  const clippedStart = Math.max(startMinAbs, range.startMin);
-  const clippedEnd = Math.min(endMinAbs, range.endMin);
-  if (clippedEnd <= clippedStart + 1) return null; // fuera de rango
+  const clippedStart = Math.max(startMs, range.startMs);
+  const clippedEnd = Math.min(endMs, range.endMs);
+  if (clippedEnd <= clippedStart) return null;
 
-  const startPct = minToPct(clippedStart, range);
-  let endPct = minToPct(clippedEnd, range);
+  const startPct = msToPct(clippedStart, range);
+  let endPct = msToPct(clippedEnd, range);
   if (endPct - startPct < MIN_BAR_PCT) endPct = startPct + MIN_BAR_PCT;
 
-  return { startPct, endPct, kind };
+  return { startPct, endPct, startMs, endMs, kind };
 }
 
 export type Pip = {
@@ -116,32 +126,47 @@ export type Pip = {
 };
 
 /**
- * Pips para fuel (F), toilet (T) y servicios (C catering, S extras).
- * Posiciones derivadas de los timestamps cuando estan; si no, distribuidos
- * uniformemente sobre el bar. Filtra los que caigan fuera del rango.
+ * Pips para fuel (F), toilet (T) y servicios (C/S). Los HH:MM se anclan al
+ * dia de `arrivalInstant` / `departureInstant`; si no hay timestamp se reparten
+ * uniformemente a lo largo del bar.
  */
 export function flightPips(
-  flight: Pick<Flight, "fuelState" | "fuelRequestedAt" | "fuelServedAt" | "toiletState" | "toiletRequestedAt" | "toiletCompletedAt">,
+  flight: Pick<
+    Flight,
+    | "fuelState"
+    | "fuelRequestedAt"
+    | "fuelServedAt"
+    | "toiletState"
+    | "toiletRequestedAt"
+    | "toiletCompletedAt"
+    | "arrivalInstant"
+    | "departureInstant"
+  >,
   services: Pick<Service, "type" | "state" | "arrivedAt" | "deliveredAt">[],
   bar: BarBounds,
-  range: TimelineRange = OPS_RANGE,
+  range: TimelineRange,
 ): Pip[] {
   const pips: Pip[] = [];
+  const anchor = flight.arrivalInstant ?? flight.departureInstant ?? null;
 
-  // Helper to bucket timestamps into a single pip per service kind
-  const addTimePip = (raw: string | null, fallbackPct: number, letter: Pip["letter"], state: Pip["state"], label: string) => {
-    const m = parseHHMM(raw);
-    const pct = m !== null ? minToPct(m, range) : fallbackPct;
-    if (pct < 0 || pct > 100) return;
-    pips.push({ pct, letter, state, label });
-  };
-
-  // Distribute fallback positions uniformly across the bar
   const buckets = countActiveServices(flight, services);
   let bucketIdx = 0;
   const nextFallback = () => {
     bucketIdx++;
     return bar.startPct + (bar.endPct - bar.startPct) * (bucketIdx / (buckets + 1));
+  };
+
+  const addTimePip = (
+    raw: string | null,
+    fallbackPct: number,
+    letter: Pip["letter"],
+    state: Pip["state"],
+    label: string,
+  ) => {
+    const ms = resolveHhmmMs(raw, anchor);
+    const pct = ms !== null ? msToPct(ms, range) : fallbackPct;
+    if (pct < 0 || pct > 100) return;
+    pips.push({ pct, letter, state, label });
   };
 
   // FUEL
@@ -178,6 +203,46 @@ function countActiveServices(
   if (flight.toiletState !== "NOT_REQUESTED") n++;
   n += services.length;
   return n;
+}
+
+/**
+ * Genera ticks horarios para una ventana. Cada tick corresponde a una hora
+ * Zulu redonda dentro del rango. Marca `isMidnight` para que el caller pueda
+ * dibujar separadores y etiquetas de dia.
+ */
+export type RulerTick = { ms: number; hour: number; isMidnight: boolean };
+
+export function rulerTicks(range: TimelineRange, stepHours = 1): RulerTick[] {
+  const out: RulerTick[] = [];
+  const start = new Date(range.startMs);
+  start.setUTCMinutes(0, 0, 0);
+  // Alinea al multiplo de stepHours en UTC
+  start.setUTCHours(Math.ceil(start.getUTCHours() / stepHours) * stepHours);
+  if (start.getTime() < range.startMs) start.setTime(start.getTime() + stepHours * HOUR_MS);
+  for (let t = start.getTime(); t <= range.endMs; t += stepHours * HOUR_MS) {
+    const d = new Date(t);
+    out.push({ ms: t, hour: d.getUTCHours(), isMidnight: d.getUTCHours() === 0 });
+  }
+  return out;
+}
+
+/**
+ * Devuelve los palmaDay (medianoche UTC alineada a la fecha local de Palma)
+ * que la ventana cubre. Se usa para saber que dias hay que descargar.
+ */
+export function palmaDaysInRange(range: TimelineRange): string[] {
+  const out: string[] = [];
+  // Conservador: anadimos 1 dia de margen a cada lado para cubrir vuelos
+  // overnight cuyo palmaDay puede estar fuera de la ventana pero su instant
+  // dentro.
+  const from = new Date(range.startMs - DAY_MS);
+  const to = new Date(range.endMs + DAY_MS);
+  for (let t = from.getTime(); t <= to.getTime(); t += DAY_MS) {
+    const d = new Date(t);
+    const iso = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+    if (!out.includes(iso)) out.push(iso);
+  }
+  return out;
 }
 
 /** Detecta si el callsign es comercial (codigos ICAO de aerolinea conocidos)
