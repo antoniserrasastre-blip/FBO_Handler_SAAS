@@ -5,33 +5,33 @@ import { render, screen, fireEvent } from "@/test/rtl";
 import { FilterToggleStrip } from "./FilterToggleStrip";
 
 describe("FilterToggleStrip", () => {
-  it("renders all three chips when showNext8h is true", () => {
+  it("renders all three chips when showNextHours is true", () => {
     render(
       <FilterToggleStrip
         pendingOnly={false}
-        next8h={false}
+        nextHours={0}
         hideCancelled={false}
-        showNext8h={true}
+        showNextHours={true}
         onChange={() => undefined}
       />,
     );
     expect(screen.getByRole("button", { name: /Solo pendientes/ })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Próximas 8h/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Filtrar a próximas/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Ocultar cancelados/ })).toBeTruthy();
   });
 
-  it("hides the next-8h chip when showNext8h is false but keeps the others", () => {
+  it("hides the next-hours chip when showNextHours is false but keeps the others", () => {
     render(
       <FilterToggleStrip
         pendingOnly={false}
-        next8h={false}
+        nextHours={0}
         hideCancelled={false}
-        showNext8h={false}
+        showNextHours={false}
         onChange={() => undefined}
       />,
     );
     expect(screen.getByRole("button", { name: /Solo pendientes/ })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /Próximas 8h/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Filtrar a próximas/ })).toBeNull();
     expect(screen.getByRole("button", { name: /Ocultar cancelados/ })).toBeTruthy();
   });
 
@@ -40,35 +40,81 @@ describe("FilterToggleStrip", () => {
     render(
       <FilterToggleStrip
         pendingOnly={false}
-        next8h={false}
+        nextHours={0}
         hideCancelled={false}
-        showNext8h={true}
+        showNextHours={true}
         onChange={onChange}
       />,
     );
     fireEvent.click(screen.getByRole("button", { name: /Solo pendientes/ }));
     expect(onChange).toHaveBeenCalledWith({
       pendingOnly: true,
-      next8h: false,
+      nextHours: 0,
       hideCancelled: false,
     });
   });
 
-  it("clicking 'Próximas 8h' flips its value", () => {
+  it("clicking the time-window chip from OFF advances to 4h", () => {
     const onChange = vi.fn();
     render(
       <FilterToggleStrip
         pendingOnly={true}
-        next8h={false}
+        nextHours={0}
         hideCancelled={false}
-        showNext8h={true}
+        showNextHours={true}
         onChange={onChange}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: /Próximas 8h/ }));
+    // OFF state shows the default "Próximas 8h" label.
+    expect(
+      screen.getByRole("button", { name: /Filtrar a próximas/ }).textContent,
+    ).toMatch(/Próximas 8h/);
+    fireEvent.click(screen.getByRole("button", { name: /Filtrar a próximas/ }));
     expect(onChange).toHaveBeenCalledWith({
       pendingOnly: true,
-      next8h: true,
+      nextHours: 4,
+      hideCancelled: false,
+    });
+  });
+
+  it("clicking the time-window chip from 4h advances to 8h", () => {
+    const onChange = vi.fn();
+    render(
+      <FilterToggleStrip
+        pendingOnly={false}
+        nextHours={4}
+        hideCancelled={false}
+        showNextHours={true}
+        onChange={onChange}
+      />,
+    );
+    const chip = screen.getByRole("button", { name: /Filtrar a próximas 4/ });
+    expect(chip.textContent).toMatch(/Próximas 4h/);
+    fireEvent.click(chip);
+    expect(onChange).toHaveBeenCalledWith({
+      pendingOnly: false,
+      nextHours: 8,
+      hideCancelled: false,
+    });
+  });
+
+  it("clicking the time-window chip from 8h cycles back to OFF", () => {
+    const onChange = vi.fn();
+    render(
+      <FilterToggleStrip
+        pendingOnly={false}
+        nextHours={8}
+        hideCancelled={false}
+        showNextHours={true}
+        onChange={onChange}
+      />,
+    );
+    const chip = screen.getByRole("button", { name: /Filtrar a próximas 8/ });
+    expect(chip.textContent).toMatch(/Próximas 8h/);
+    fireEvent.click(chip);
+    expect(onChange).toHaveBeenCalledWith({
+      pendingOnly: false,
+      nextHours: 0,
       hideCancelled: false,
     });
   });
@@ -78,16 +124,16 @@ describe("FilterToggleStrip", () => {
     render(
       <FilterToggleStrip
         pendingOnly={true}
-        next8h={true}
+        nextHours={4}
         hideCancelled={false}
-        showNext8h={true}
+        showNextHours={true}
         onChange={onChange}
       />,
     );
     fireEvent.click(screen.getByRole("button", { name: /Ocultar cancelados/ }));
     expect(onChange).toHaveBeenCalledWith({
       pendingOnly: true,
-      next8h: true,
+      nextHours: 4,
       hideCancelled: true,
     });
   });
@@ -96,9 +142,9 @@ describe("FilterToggleStrip", () => {
     render(
       <FilterToggleStrip
         pendingOnly={false}
-        next8h={false}
+        nextHours={0}
         hideCancelled={false}
-        showNext8h={true}
+        showNextHours={true}
         pendingCount={4}
         onChange={() => undefined}
       />,
@@ -110,9 +156,9 @@ describe("FilterToggleStrip", () => {
     render(
       <FilterToggleStrip
         pendingOnly={false}
-        next8h={false}
+        nextHours={0}
         hideCancelled={false}
-        showNext8h={true}
+        showNextHours={true}
         hideCancelledCount={2}
         onChange={() => undefined}
       />,
@@ -124,9 +170,9 @@ describe("FilterToggleStrip", () => {
     render(
       <FilterToggleStrip
         pendingOnly={false}
-        next8h={false}
+        nextHours={0}
         hideCancelled={false}
-        showNext8h={true}
+        showNextHours={true}
         hideCancelledCount={0}
         onChange={() => undefined}
       />,
@@ -140,9 +186,9 @@ describe("FilterToggleStrip", () => {
     render(
       <FilterToggleStrip
         pendingOnly={true}
-        next8h={false}
+        nextHours={0}
         hideCancelled={true}
-        showNext8h={true}
+        showNextHours={true}
         onChange={() => undefined}
       />,
     );
@@ -150,10 +196,25 @@ describe("FilterToggleStrip", () => {
       screen.getByRole("button", { name: /Solo pendientes/ }).getAttribute("aria-pressed"),
     ).toBe("true");
     expect(
-      screen.getByRole("button", { name: /Próximas 8h/ }).getAttribute("aria-pressed"),
+      screen.getByRole("button", { name: /Filtrar a próximas/ }).getAttribute("aria-pressed"),
     ).toBe("false");
     expect(
       screen.getByRole("button", { name: /Ocultar cancelados/ }).getAttribute("aria-pressed"),
+    ).toBe("true");
+  });
+
+  it("aria-pressed is true when nextHours > 0", () => {
+    render(
+      <FilterToggleStrip
+        pendingOnly={false}
+        nextHours={4}
+        hideCancelled={false}
+        showNextHours={true}
+        onChange={() => undefined}
+      />,
+    );
+    expect(
+      screen.getByRole("button", { name: /Filtrar a próximas 4/ }).getAttribute("aria-pressed"),
     ).toBe("true");
   });
 });

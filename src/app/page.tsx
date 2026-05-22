@@ -28,8 +28,14 @@ import { flightWithinHours } from "@/lib/timeWindow";
 import { isServiceOverdue } from "@/lib/overdue";
 
 const PENDING_ONLY_KEY = "fbo:filters:pendingOnly";
-const NEXT_8H_KEY = "fbo:filters:next8h";
+// `NEXT_HOURS_KEY` reemplaza la antigua `NEXT_8H_KEY` ("1"/"0"). El chip ahora
+// cicla entre 0 / 4 / 8 horas, así que persistimos el número en vez de un flag.
+// Migración silenciosa desde la clave vieja en el efecto de rehidratación.
+const NEXT_HOURS_KEY = "fbo:filters:nextHours";
+const LEGACY_NEXT_8H_KEY = "fbo:filters:next8h";
 const HIDE_CANCELLED_KEY = "fbo:filters:hideCancelled";
+
+type NextHoursWindow = 0 | 4 | 8;
 
 export const dynamic = "force-dynamic";
 
@@ -79,9 +85,9 @@ function HomePageInner() {
   // aplican EN CIMA del filtro de SearchBar (AND con la query). Se persisten en
   // localStorage para sobrevivir al refresco.
   const [pendingOnly, setPendingOnly] = useState<boolean>(false);
-  const [next8h, setNext8h] = useState<boolean>(false);
+  const [nextHours, setNextHours] = useState<NextHoursWindow>(0);
   const [hideCancelled, setHideCancelled] = useState<boolean>(false);
-  // Tick que se incrementa cada minuto cuando "Próximas 8h" está activo y es
+  // Tick que se incrementa cada minuto cuando "Próximas Xh" está activo y es
   // hoy, para que un vuelo entre/salga de la ventana sin refresco manual.
   const [nowTick, setNowTick] = useState(0);
 
@@ -104,7 +110,19 @@ function HomePageInner() {
     if (typeof window === "undefined") return;
     try {
       if (window.localStorage.getItem(PENDING_ONLY_KEY) === "1") setPendingOnly(true);
-      if (window.localStorage.getItem(NEXT_8H_KEY) === "1") setNext8h(true);
+      // Ventana temporal: lee la clave nueva; si no existe, migra desde la
+      // antigua `fbo:filters:next8h` ("1" → 8) y la borra para limpiar.
+      const rawNextHours = window.localStorage.getItem(NEXT_HOURS_KEY);
+      if (rawNextHours === "4" || rawNextHours === "8") {
+        setNextHours(Number(rawNextHours) as NextHoursWindow);
+      } else if (rawNextHours === null) {
+        const legacy = window.localStorage.getItem(LEGACY_NEXT_8H_KEY);
+        if (legacy === "1") {
+          setNextHours(8);
+          window.localStorage.setItem(NEXT_HOURS_KEY, "8");
+        }
+        if (legacy !== null) window.localStorage.removeItem(LEGACY_NEXT_8H_KEY);
+      }
       if (window.localStorage.getItem(HIDE_CANCELLED_KEY) === "1") setHideCancelled(true);
     } catch {
       // localStorage no disponible (modo privado, sandbox, etc.) — sin coste.
@@ -123,11 +141,11 @@ function HomePageInner() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
-      window.localStorage.setItem(NEXT_8H_KEY, next8h ? "1" : "0");
+      window.localStorage.setItem(NEXT_HOURS_KEY, String(nextHours));
     } catch {
       // ignore
     }
-  }, [next8h]);
+  }, [nextHours]);
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
@@ -226,13 +244,13 @@ function HomePageInner() {
     return () => clearInterval(interval);
   }, [isToday]);
 
-  // Re-evalúa "Próximas 8h" cada minuto cuando el filtro está activo y es hoy,
-  // para que un vuelo entre/salga de la ventana ±8h sin refresco manual.
+  // Re-evalúa "Próximas Xh" cada minuto cuando el filtro está activo y es hoy,
+  // para que un vuelo entre/salga de la ventana ±Xh sin refresco manual.
   useEffect(() => {
-    if (!isToday || !next8h) return;
+    if (!isToday || nextHours === 0) return;
     const interval = setInterval(() => setNowTick((t) => t + 1), 60000);
     return () => clearInterval(interval);
-  }, [isToday, next8h]);
+  }, [isToday, nextHours]);
 
   // Clear list + show loading on date change so we don't display stale rows.
   useEffect(() => {
@@ -378,19 +396,19 @@ function HomePageInner() {
     }
   };
 
-  // Vista final: filteredFlights (SearchBar) ∩ pendingOnly ∩ next8h (si hoy)
+  // Vista final: filteredFlights (SearchBar) ∩ pendingOnly ∩ nextHours (si hoy)
   // ∩ hideCancelled. Definida antes del handler de teclado para que
   // `list = visibleFlights` en las flechas arriba/abajo recorra exactamente lo
   // que se está pintando.
   const visibleFlights = useMemo(() => {
     let xs = filteredFlights;
     if (pendingOnly) xs = xs.filter(isFlightPending);
-    if (next8h && isToday) xs = xs.filter((f) => flightWithinHours(f, 8));
+    if (nextHours > 0 && isToday) xs = xs.filter((f) => flightWithinHours(f, nextHours));
     if (hideCancelled) xs = xs.filter((f) => f.flightCategory !== "CANCELLED");
     return xs;
     // `nowTick` fuerza recálculo cada minuto cuando el filtro está activo.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filteredFlights, pendingOnly, next8h, hideCancelled, isToday, nowTick]);
+  }, [filteredFlights, pendingOnly, nextHours, hideCancelled, isToday, nowTick]);
 
   // Seleccionar y enfocar el card de un vuelo desde alertas/stats. Si el vuelo
   // no está en `visibleFlights` por culpa de los filtros activos, los limpiamos
@@ -408,7 +426,7 @@ function HomePageInner() {
       }
       if (searchQuery) setSearchQuery("");
       if (pendingOnly) setPendingOnly(false);
-      if (next8h) setNext8h(false);
+      if (nextHours > 0) setNextHours(0);
       if (hideCancelled) setHideCancelled(false);
       addToast("Filtros desactivados para mostrar el vuelo", undefined, "info");
     }
@@ -417,7 +435,7 @@ function HomePageInner() {
       const el = document.getElementById(`flight-${flightId}`);
       if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
     });
-  }, [visibleFlights, flights, searchQuery, pendingOnly, next8h, hideCancelled, addToast, router]);
+  }, [visibleFlights, flights, searchQuery, pendingOnly, nextHours, hideCancelled, addToast, router]);
 
   // Keyboard shortcuts (after handlers are defined)
   useEffect(() => {
@@ -542,14 +560,17 @@ function HomePageInner() {
     () => flights.filter(isFlightPending).length,
     [flights],
   );
-  const next8hCount = useMemo(
-    () => flights.filter((f) => flightWithinHours(f, 8)).length,
+  // Count for the time-window chip. Cuando el chip está apagado (`nextHours===0`)
+  // mostramos el conteo que tendría con 8h, así el usuario ve "qué pasaría si
+  // lo enciendo" antes de hacer clic. Cuando está activo, refleja la ventana real.
+  const nextHoursCount = useMemo(
+    () => flights.filter((f) => flightWithinHours(f, nextHours === 0 ? 8 : nextHours)).length,
     // `nowTick` fuerza recálculo cada minuto cuando el filtro está activo.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [flights, nowTick],
+    [flights, nextHours, nowTick],
   );
 
-  const togglesActive = pendingOnly || (next8h && isToday);
+  const togglesActive = pendingOnly || (nextHours > 0 && isToday);
 
   if (status === "loading" || loading) {
     return (
@@ -602,19 +623,19 @@ function HomePageInner() {
         <div className="print-header">
           MALLORCAIR FBO — Orden del dia {date.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
         </div>
-        {/* Filter toggles — pendingOnly + next8h + hideCancelled, capa AND sobre SearchBar. */}
+        {/* Filter toggles — pendingOnly + nextHours + hideCancelled, capa AND sobre SearchBar. */}
         {flights.length > 0 && (
           <FilterToggleStrip
             pendingOnly={pendingOnly}
-            next8h={next8h}
+            nextHours={nextHours}
             hideCancelled={hideCancelled}
-            showNext8h={isToday}
+            showNextHours={isToday}
             pendingCount={pendingCount}
-            next8hCount={next8hCount}
+            nextHoursCount={nextHoursCount}
             hideCancelledCount={flights.filter((f) => f.flightCategory === "CANCELLED").length}
-            onChange={({ pendingOnly: nextPending, next8h: nextWindow, hideCancelled: nextHideCancelled }) => {
+            onChange={({ pendingOnly: nextPending, nextHours: nextWindow, hideCancelled: nextHideCancelled }) => {
               setPendingOnly(nextPending);
-              setNext8h(nextWindow);
+              setNextHours(nextWindow);
               setHideCancelled(nextHideCancelled);
             }}
           />
