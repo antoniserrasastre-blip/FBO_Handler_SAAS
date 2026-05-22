@@ -38,6 +38,7 @@ import { TurnaroundCountdown } from "@/components/TurnaroundCountdown";
 import { LastModifiedBadge } from "@/components/LastModifiedBadge";
 import { OpsToggleStrip } from "@/components/OpsToggleStrip";
 import { ServiceChipRow } from "@/components/ServiceChipRow";
+import { AddServicePicker } from "@/components/AddServicePicker";
 import { StateStepper } from "@/components/StateStepper";
 import { InlineNumber } from "@/components/InlineNumber";
 import { InlineSelect } from "@/components/InlineSelect";
@@ -50,7 +51,6 @@ import {
   FUEL_LABELS,
   TOILET_STATES,
   TOILET_LABELS,
-  SERVICE_TYPES,
   SERVICE_LABELS,
   type ServiceType,
   LOST_ITEM_STATES,
@@ -111,7 +111,7 @@ export interface VisitCardProps {
   onBadgeClick?: (term: string) => void;
   /** Inline-edit handler. Partial update against the FlightView shape. */
   onUpdate?: (id: string, data: Partial<Flight>) => void;
-  onAddService?: (flightId: string, type: ServiceType, customName?: string) => void;
+  onAddService?: (flightId: string, type: ServiceType | string, customName?: string, reference?: string, target?: string) => void;
   onDeleteService?: (serviceId: string) => void;
   onAddLostItem?: (flightId: string, description: string, location: string) => void;
   onLostItemToggle?: (itemId: string, newState: string) => void;
@@ -466,21 +466,11 @@ export const VisitCard = memo(function VisitCard({
                   <Plus size={12} /> Añadir servicio
                 </button>
                 {showServicePicker ? (
-                  <div className="edit-service-picker">
-                    {SERVICE_TYPES.filter((t) => t !== "CUSTOM").map((t) => (
-                      <button
-                        key={t}
-                        type="button"
-                        className="hx-btn hx-btn-ghost hx-btn-sm"
-                        onClick={() => {
-                          onAddService(flight.id, t);
-                          setShowServicePicker(false);
-                        }}
-                      >
-                        {SERVICE_LABELS[t]}
-                      </button>
-                    ))}
-                  </div>
+                  <AddServicePicker
+                    flightId={flight.id}
+                    onAddService={onAddService}
+                    onClose={() => setShowServicePicker(false)}
+                  />
                 ) : null}
               </div>
             ) : null}

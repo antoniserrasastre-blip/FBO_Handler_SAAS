@@ -648,6 +648,11 @@ describe("VisitCard inline edits — counts", () => {
   });
 
   it("allows adding a service from the edit strip", async () => {
+    // El picker monta useServicePresets, que hace GET inicial al backend.
+    // Mockeamos fetch para no dejar promesas colgando que ensucien otros runs.
+    const fetchSpy = vi.spyOn(window, "fetch").mockImplementation(
+      (async () => new Response(JSON.stringify({ presets: [] }), { status: 200 })) as typeof window.fetch
+    );
     const onAddService = vi.fn();
     render(
       <VisitCard
@@ -661,6 +666,7 @@ describe("VisitCard inline edits — counts", () => {
     // Choose CATERING from the picker
     await userEvent.click(screen.getByRole("button", { name: /^catering$/i }));
     expect(onAddService).toHaveBeenCalledWith("v-1", "CATERING");
+    fetchSpy.mockRestore();
   });
 
   it("allows deleting a service from the edit strip", async () => {

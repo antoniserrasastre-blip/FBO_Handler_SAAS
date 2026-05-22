@@ -21,6 +21,7 @@ model User {
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
   eventLogs EventLog[]
+  servicePresets CustomServicePreset[]
 }
 
 // ============================================================================
@@ -282,6 +283,17 @@ model CrewAssignment {
 // ============================================================================
 // Misc
 // ============================================================================
+
+model CustomServicePreset {
+  id            String   @id @default(cuid())
+  name          String   @unique
+  defaultTarget String?              // CREW | PAX | null
+  createdAt     DateTime @default(now())
+  createdById   String?
+  createdBy     User?    @relation(fields: [createdById], references: [id])
+
+  @@index([createdById])
+}
 
 model LostItem {
   id          String   @id @default(cuid())
