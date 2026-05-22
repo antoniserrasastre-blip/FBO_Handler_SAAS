@@ -71,7 +71,7 @@ export function isArrivalComplete(
     const p = servicePhase(s);
     return p === "ARRIVAL" || p === "BOTH";
   });
-  return arrivalServices.every((s) => s.state === "DELIVERED");
+  return arrivalServices.every((s) => s.state === "DELIVERED" || s.state === "CANCELLED");
 }
 
 /**
@@ -83,7 +83,7 @@ export function isDepartureReady(services: ServiceLike[]): boolean {
     return p === "DEPARTURE" || p === "BOTH";
   });
   if (dep.length === 0) return true;
-  return dep.every((s) => s.state === "DELIVERED");
+  return dep.every((s) => s.state === "DELIVERED" || s.state === "CANCELLED");
 }
 
 /**

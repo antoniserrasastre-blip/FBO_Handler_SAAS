@@ -59,6 +59,10 @@ export async function PATCH(
     data.arrivedAt = null;
     data.deliveredAt = null;
   }
+  if (body.state === "CANCELLED") {
+    data.arrivedAt = null;
+    data.deliveredAt = null;
+  }
 
   const service = await prisma.service.update({
     where: { id },
@@ -67,7 +71,7 @@ export async function PATCH(
 
   const newState = typeof body.state === "string" ? body.state : null;
   if (newState && newState !== existing.state) {
-    const stateLabel: Record<string, string> = { PENDING: "pendiente", ARRIVED: "llegado", DELIVERED: "entregado" };
+    const stateLabel: Record<string, string> = { PENDING: "pendiente", ARRIVED: "llegado", DELIVERED: "entregado", CANCELLED: "cancelado" };
     const actionDesc = `Servicio ${existing.type}: ${stateLabel[newState] || newState}`;
     await prisma.eventLog.create({
       data: { visitId: existing.visitId, userId: session.user.id, action: actionDesc },

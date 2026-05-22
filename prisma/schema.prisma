@@ -190,7 +190,7 @@ model Service {
   origin          String?              // NETJETS | CATERING_AIRE | MCR | OTHER
   quantity        Int      @default(1)
   rawDescription  String?              // raw text from Excel — auditing
-  state           String   @default("PENDING") // PENDING | ARRIVED | DELIVERED
+  state           String   @default("PENDING") // PENDING | ARRIVED | DELIVERED | CANCELLED
   arrivedAt       String?
   deliveredAt     String?
 
