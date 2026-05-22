@@ -124,10 +124,11 @@ function matchesSingleToken(flight: FlightWithRelations, token: string): boolean
   if (token === "toilet" && flight.toiletState !== "COMPLETED" && flight.toiletState !== "NOT_REQUESTED") return true;
 
   // --- Services ---
-  if (token === "catering" && flight.services.some((s) => s.type === "CATERING" && s.state !== "DELIVERED")) return true;
-  if (token === "prensa" && flight.services.some((s) => s.type === "NEWSPAPERS" && s.state !== "DELIVERED")) return true;
-  if (token === "extras" && flight.services.some((s) => s.state !== "DELIVERED")) return true;
+  if (token === "catering" && flight.services.some((s) => s.type === "CATERING" && s.state !== "DELIVERED" && s.state !== "CANCELLED")) return true;
+  if (token === "prensa" && flight.services.some((s) => s.type === "NEWSPAPERS" && s.state !== "DELIVERED" && s.state !== "CANCELLED")) return true;
+  if (token === "extras" && flight.services.some((s) => s.state !== "DELIVERED" && s.state !== "CANCELLED")) return true;
   if (token === "pendiente" && flight.services.some((s) => s.state === "PENDING")) return true;
+  if (token === "cancelado" && flight.services.some((s) => s.state === "CANCELLED")) return true;
 
   // --- Operator ---
   const op = findOperator(flight.callsign);

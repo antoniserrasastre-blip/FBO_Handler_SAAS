@@ -27,12 +27,13 @@ export function PendingServicesPanel({ flights, onQuickFilter }: PendingServices
   const counts = {
     fuelPending: activeFuelo.filter((f) => f.fuelState !== "SERVED" && f.fuelState !== "NOT_REQUESTED").length,
     fuelNotRequested: activeFuelo.filter((f) => f.fuelState === "NOT_REQUESTED" && f.state === "ON_GROUND").length,
-    cateringPending: activeFuelo.filter((f) => (f.services || []).some((s) => s.type === "CATERING" && s.state !== "DELIVERED")).length,
+    cateringPending: activeFuelo.filter((f) => (f.services || []).some((s) => s.type === "CATERING" && s.state !== "DELIVERED" && s.state !== "CANCELLED")).length,
     toiletPending: activeFuelo.filter((f) => f.toiletState === "REQUESTED").length,
     transportPending: activeFuelo.filter((f) => f.paxArrTransportState === "PENDING" && f.paxArrTransportType !== "UNDEFINED" || f.paxDepTransportState === "PENDING" && f.paxDepTransportType !== "UNDEFINED").length,
     policia: flights.filter((f) => f.state !== "DISPATCHED" && getRequiredAuthorities(f.origin).policia).length,
     guardaCivil: flights.filter((f) => f.state !== "DISPATCHED" && getRequiredAuthorities(f.origin).guardaCivil).length,
-    overdue: flights.reduce((count, f) => count + (f.services || []).filter((s) => isServiceOverdue(s)).length, 0),
+    overdue: flights.reduce((count, f) => count + (f.services || []).filter((s) => s.state !== "CANCELLED" && isServiceOverdue(s)).length, 0),
+    // PENDING is by definition not CANCELLED — the predicate already excludes them, no extra guard needed.
     extrasPending: activeFuelo.filter((f) => (f.services || []).some((s) => s.state === "PENDING")).length,
     farFromGA: activeFuelo.filter((f) => isFarFromGA(f.parking)).length,
   };
