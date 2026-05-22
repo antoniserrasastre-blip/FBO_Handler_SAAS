@@ -1,11 +1,13 @@
 "use client";
 
-// Two combinable filter chips that sit above the dashboard SearchBar.
+// Three combinable filter chips that sit above the dashboard SearchBar.
 //
-// - "Solo pendientes" — `isFlightPending(flight)` is true
-// - "Próximas 8h"     — arrival or departure within ±8h of now (only shown
-//                       when the operations date is today; pointless on
-//                       past/future days where wall-clock has no meaning)
+// - "Solo pendientes"   — `isFlightPending(flight)` is true
+// - "Próximas 8h"       — arrival or departure within ±8h of now (only shown
+//                         when the operations date is today; pointless on
+//                         past/future days where wall-clock has no meaning)
+// - "Ocultar cancelados"— flights whose `flightCategory === "CANCELLED"` are
+//                         dropped from the list. Time-independent.
 //
 // Style mirrors the QUICK_FILTERS chips in SearchBar so the strip reads as
 // part of the same filter family. State is owned by the parent (page.tsx)
@@ -14,13 +16,20 @@
 export interface FilterToggleStripProps {
   pendingOnly: boolean;
   next8h: boolean;
+  hideCancelled: boolean;
   /** When false, the "Próximas 8h" chip is hidden (e.g. !isToday). */
   showNext8h: boolean;
   /** Count over the full flights list (pre-search) for the pending chip. */
   pendingCount?: number;
   /** Count over the full flights list (pre-search) for the next-8h chip. */
   next8hCount?: number;
-  onChange: (next: { pendingOnly: boolean; next8h: boolean }) => void;
+  /** Count over the full flights list (pre-search) for the cancelled chip. */
+  hideCancelledCount?: number;
+  onChange: (next: {
+    pendingOnly: boolean;
+    next8h: boolean;
+    hideCancelled: boolean;
+  }) => void;
 }
 
 const CHIP_CLASSES =
@@ -31,9 +40,11 @@ const INACTIVE_CLASSES = "bg-bg-muted text-ink-3 hover:bg-bg-sunken hover:text-i
 export function FilterToggleStrip({
   pendingOnly,
   next8h,
+  hideCancelled,
   showNext8h,
   pendingCount,
   next8hCount,
+  hideCancelledCount,
   onChange,
 }: FilterToggleStripProps) {
   return (
@@ -41,7 +52,9 @@ export function FilterToggleStrip({
       <button
         type="button"
         aria-pressed={pendingOnly}
-        onClick={() => onChange({ pendingOnly: !pendingOnly, next8h })}
+        onClick={() =>
+          onChange({ pendingOnly: !pendingOnly, next8h, hideCancelled })
+        }
         className={`${CHIP_CLASSES} ${pendingOnly ? ACTIVE_CLASSES : INACTIVE_CLASSES}`}
       >
         Solo pendientes
@@ -54,7 +67,9 @@ export function FilterToggleStrip({
         <button
           type="button"
           aria-pressed={next8h}
-          onClick={() => onChange({ pendingOnly, next8h: !next8h })}
+          onClick={() =>
+            onChange({ pendingOnly, next8h: !next8h, hideCancelled })
+          }
           className={`${CHIP_CLASSES} ${next8h ? ACTIVE_CLASSES : INACTIVE_CLASSES}`}
         >
           Próximas 8h
@@ -63,6 +78,20 @@ export function FilterToggleStrip({
           ) : null}
         </button>
       ) : null}
+
+      <button
+        type="button"
+        aria-pressed={hideCancelled}
+        onClick={() =>
+          onChange({ pendingOnly, next8h, hideCancelled: !hideCancelled })
+        }
+        className={`${CHIP_CLASSES} ${hideCancelled ? ACTIVE_CLASSES : INACTIVE_CLASSES}`}
+      >
+        Ocultar cancelados
+        {hideCancelledCount !== undefined && hideCancelledCount > 0 ? (
+          <span className="ml-1 opacity-70">· {hideCancelledCount}</span>
+        ) : null}
+      </button>
     </div>
   );
 }

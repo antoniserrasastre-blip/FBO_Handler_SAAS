@@ -29,6 +29,7 @@ import { isServiceOverdue } from "@/lib/overdue";
 
 const PENDING_ONLY_KEY = "fbo:filters:pendingOnly";
 const NEXT_8H_KEY = "fbo:filters:next8h";
+const HIDE_CANCELLED_KEY = "fbo:filters:hideCancelled";
 
 export const dynamic = "force-dynamic";
 
@@ -74,11 +75,12 @@ function HomePageInner() {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const toastIdRef = useRef(0);
 
-  // "Solo pendientes" + "Próximas 8h" — toggles que se aplican EN CIMA del
-  // filtro de SearchBar (AND con la query). Se persisten en localStorage para
-  // sobrevivir al refresco.
+  // "Solo pendientes" + "Próximas 8h" + "Ocultar cancelados" — toggles que se
+  // aplican EN CIMA del filtro de SearchBar (AND con la query). Se persisten en
+  // localStorage para sobrevivir al refresco.
   const [pendingOnly, setPendingOnly] = useState<boolean>(false);
   const [next8h, setNext8h] = useState<boolean>(false);
+  const [hideCancelled, setHideCancelled] = useState<boolean>(false);
   // Tick que se incrementa cada minuto cuando "Próximas 8h" está activo y es
   // hoy, para que un vuelo entre/salga de la ventana sin refresco manual.
   const [nowTick, setNowTick] = useState(0);
@@ -103,6 +105,7 @@ function HomePageInner() {
     try {
       if (window.localStorage.getItem(PENDING_ONLY_KEY) === "1") setPendingOnly(true);
       if (window.localStorage.getItem(NEXT_8H_KEY) === "1") setNext8h(true);
+      if (window.localStorage.getItem(HIDE_CANCELLED_KEY) === "1") setHideCancelled(true);
     } catch {
       // localStorage no disponible (modo privado, sandbox, etc.) — sin coste.
     }
@@ -125,6 +128,14 @@ function HomePageInner() {
       // ignore
     }
   }, [next8h]);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(HIDE_CANCELLED_KEY, hideCancelled ? "1" : "0");
+    } catch {
+      // ignore
+    }
+  }, [hideCancelled]);
 
   const allServices = useMemo(() => flights.flatMap((f) => f.services || []), [flights]);
   const overdueCount = useOverdueAlert(allServices, soundEnabled && isToday);
@@ -367,17 +378,19 @@ function HomePageInner() {
     }
   };
 
-  // Vista final: filteredFlights (SearchBar) ∩ pendingOnly ∩ next8h (si hoy).
-  // Definida antes del handler de teclado para que `list = visibleFlights`
-  // en las flechas arriba/abajo recorra exactamente lo que se está pintando.
+  // Vista final: filteredFlights (SearchBar) ∩ pendingOnly ∩ next8h (si hoy)
+  // ∩ hideCancelled. Definida antes del handler de teclado para que
+  // `list = visibleFlights` en las flechas arriba/abajo recorra exactamente lo
+  // que se está pintando.
   const visibleFlights = useMemo(() => {
     let xs = filteredFlights;
     if (pendingOnly) xs = xs.filter(isFlightPending);
     if (next8h && isToday) xs = xs.filter((f) => flightWithinHours(f, 8));
+    if (hideCancelled) xs = xs.filter((f) => f.flightCategory !== "CANCELLED");
     return xs;
     // `nowTick` fuerza recálculo cada minuto cuando el filtro está activo.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filteredFlights, pendingOnly, next8h, isToday, nowTick]);
+  }, [filteredFlights, pendingOnly, next8h, hideCancelled, isToday, nowTick]);
 
   // Seleccionar y enfocar el card de un vuelo desde alertas/stats. Si el vuelo
   // no está en `visibleFlights` por culpa de los filtros activos, los limpiamos
@@ -396,6 +409,7 @@ function HomePageInner() {
       if (searchQuery) setSearchQuery("");
       if (pendingOnly) setPendingOnly(false);
       if (next8h) setNext8h(false);
+      if (hideCancelled) setHideCancelled(false);
       addToast("Filtros desactivados para mostrar el vuelo", undefined, "info");
     }
     setSelectedFlightId(flightId);
@@ -403,7 +417,7 @@ function HomePageInner() {
       const el = document.getElementById(`flight-${flightId}`);
       if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
     });
-  }, [visibleFlights, flights, searchQuery, pendingOnly, next8h, addToast, router]);
+  }, [visibleFlights, flights, searchQuery, pendingOnly, next8h, hideCancelled, addToast, router]);
 
   // Keyboard shortcuts (after handlers are defined)
   useEffect(() => {
@@ -588,17 +602,20 @@ function HomePageInner() {
         <div className="print-header">
           MALLORCAIR FBO — Orden del dia {date.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
         </div>
-        {/* Filter toggles — pendingOnly + next8h, capa AND sobre SearchBar. */}
+        {/* Filter toggles — pendingOnly + next8h + hideCancelled, capa AND sobre SearchBar. */}
         {flights.length > 0 && (
           <FilterToggleStrip
             pendingOnly={pendingOnly}
             next8h={next8h}
+            hideCancelled={hideCancelled}
             showNext8h={isToday}
             pendingCount={pendingCount}
             next8hCount={next8hCount}
-            onChange={({ pendingOnly: nextPending, next8h: nextWindow }) => {
+            hideCancelledCount={flights.filter((f) => f.flightCategory === "CANCELLED").length}
+            onChange={({ pendingOnly: nextPending, next8h: nextWindow, hideCancelled: nextHideCancelled }) => {
               setPendingOnly(nextPending);
               setNext8h(nextWindow);
+              setHideCancelled(nextHideCancelled);
             }}
           />
         )}
