@@ -10,6 +10,8 @@ interface TurnaroundAlertsProps {
   flights: FlightWithServices[];
   /** Día operativo visualizado. Por defecto, hoy UTC. */
   referenceDate?: Date;
+  /** Si se provee, cada fila se vuelve clicable y dispara este callback. */
+  onSelectFlight?: (flightId: string) => void;
 }
 
 type AlertKind = "ARRIVAL" | "DEPARTURE";
@@ -102,10 +104,12 @@ export function getTurnaroundAlerts(
   return alerts.sort((a, b) => a.minutesLeft - b.minutesLeft);
 }
 
-export function TurnaroundAlerts({ flights, referenceDate }: TurnaroundAlertsProps) {
+export function TurnaroundAlerts({ flights, referenceDate, onSelectFlight }: TurnaroundAlertsProps) {
   const alerts = getTurnaroundAlerts(flights, referenceDate);
 
   if (alerts.length === 0) return null;
+
+  const clickable = Boolean(onSelectFlight);
 
   return (
     <div className="mx-auto max-w-7xl px-4 pt-3">
@@ -120,11 +124,17 @@ export function TurnaroundAlerts({ flights, referenceDate }: TurnaroundAlertsPro
           {alerts.map((alert) => {
             const verb = alert.kind === "ARRIVAL" ? "llega" : "sale";
             const isPast = alert.minutesLeft < 0;
-            return (
-              <div
-                key={alert.flightId + alert.kind}
-                className="flex items-center gap-3 text-danger-strong"
-              >
+            const verbLabel = isPast
+              ? `${verb} hace ${Math.abs(alert.minutesLeft)} min`
+              : `${verb} en ${alert.minutesLeft} min`;
+            const ariaLabel = `Ir al vuelo ${alert.callsign}, ${verbLabel}`;
+            const rowClass = `flex w-full items-center gap-3 rounded-hx-sm text-left text-danger-strong${
+              clickable
+                ? " cursor-pointer px-1 py-0.5 transition-colors hover:bg-danger-bg/60 focus:outline-none focus:ring-2 focus:ring-danger-strong/40"
+                : ""
+            }`;
+            const content = (
+              <>
                 <span
                   className={`rounded-hx-sm px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
                     alert.kind === "ARRIVAL"
@@ -156,6 +166,27 @@ export function TurnaroundAlerts({ flights, referenceDate }: TurnaroundAlertsPro
                     pendiente{alert.pendingServices !== 1 ? "s" : ""}
                   </span>
                 ) : null}
+              </>
+            );
+            if (clickable) {
+              return (
+                <button
+                  key={alert.flightId + alert.kind}
+                  type="button"
+                  onClick={() => onSelectFlight?.(alert.flightId)}
+                  aria-label={ariaLabel}
+                  className={rowClass}
+                >
+                  {content}
+                </button>
+              );
+            }
+            return (
+              <div
+                key={alert.flightId + alert.kind}
+                className={rowClass}
+              >
+                {content}
               </div>
             );
           })}

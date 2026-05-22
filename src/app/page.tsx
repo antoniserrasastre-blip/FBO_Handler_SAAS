@@ -25,6 +25,7 @@ import { dateToSqlString } from "@/lib/time";
 import { shortDate } from "@/app/dia/diaHelpers";
 import { isFlightPending } from "@/lib/pendingFilter";
 import { flightWithinHours } from "@/lib/timeWindow";
+import { isServiceOverdue } from "@/lib/overdue";
 
 const PENDING_ONLY_KEY = "fbo:filters:pendingOnly";
 const NEXT_8H_KEY = "fbo:filters:next8h";
@@ -378,6 +379,32 @@ function HomePageInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filteredFlights, pendingOnly, next8h, isToday, nowTick]);
 
+  // Seleccionar y enfocar el card de un vuelo desde alertas/stats. Si el vuelo
+  // no está en `visibleFlights` por culpa de los filtros activos, los limpiamos
+  // (con un toast informativo) y diferimos el scroll un frame para que React
+  // re-renderice la lista antes de buscar el elemento.
+  const focusFlight = useCallback((flightId: string) => {
+    const visible = visibleFlights.some((f) => f.id === flightId);
+    if (!visible) {
+      const inFlights = flights.some((f) => f.id === flightId);
+      if (!inFlights) {
+        // Defensa por si la alerta se computó sobre flights pero algo cambió:
+        // abrimos la vista de detalle como fallback.
+        router.push(`/dia?flight=${flightId}`);
+        return;
+      }
+      if (searchQuery) setSearchQuery("");
+      if (pendingOnly) setPendingOnly(false);
+      if (next8h) setNext8h(false);
+      addToast("Filtros desactivados para mostrar el vuelo", undefined, "info");
+    }
+    setSelectedFlightId(flightId);
+    requestAnimationFrame(() => {
+      const el = document.getElementById(`flight-${flightId}`);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  }, [visibleFlights, flights, searchQuery, pendingOnly, next8h, addToast, router]);
+
   // Keyboard shortcuts (after handlers are defined)
   useEffect(() => {
     const FUEL_CYCLE: Record<string, string> = { NOT_REQUESTED: "REQUESTED", REQUESTED: "SERVED", SERVED: "NOT_REQUESTED" };
@@ -542,12 +569,18 @@ function HomePageInner() {
               value={overdueCount}
               sub={overdueCount === 1 ? "vuelo" : "vuelos"}
               tone="alert"
+              onClick={() => {
+                const overdue = flights.find((f) =>
+                  (f.services || []).some(isServiceOverdue),
+                );
+                if (overdue) focusFlight(overdue.id);
+              }}
             />
           ) : null}
         </StatBand>
       )}
 
-      {isToday && <TurnaroundAlerts flights={flights} referenceDate={date} />}
+      {isToday && <TurnaroundAlerts flights={flights} referenceDate={date} onSelectFlight={focusFlight} />}
 
       <PendingServicesPanel flights={flights} onQuickFilter={setSearchQuery} />
 
