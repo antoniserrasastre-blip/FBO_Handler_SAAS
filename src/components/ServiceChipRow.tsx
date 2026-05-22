@@ -3,7 +3,14 @@
 // Sustituye el strip de pips chiquitos por chips ≥48px de alto con icono
 // reconocible, etiqueta del servicio (Catering / Vajillas / Agua…), target
 // (CREW/PAX) si aplica, y estado actual (Pendiente / Aquí / Entregado).
-// Un tap cicla PENDING → ARRIVED → DELIVERED → PENDING.
+//
+// Interacción:
+//   • Tap corto      → cicla PENDING → ARRIVED → DELIVERED → PENDING.
+//   • Pulsación larga (≥600ms) → cancela / restaura.
+//     - Cualquier estado activo → CANCELLED.
+//     - CANCELLED              → PENDING (restaurar).
+//   • Tap corto sobre CANCELLED → no-op (evitamos reactivar por accidente
+//     al cancelar varios chips seguidos).
 
 "use client";
 
@@ -13,22 +20,28 @@ import { nextServiceState, type ServiceCycleState } from "@/lib/serviceCycle";
 import { iconForServiceType } from "@/lib/serviceIconMap";
 import { ServiceIcons } from "@/components/helix/ServiceIcons";
 import { isServiceOverdue } from "@/lib/overdue";
+import { useLongPress } from "@/hooks/useLongPress";
 
-type Tone = "neutral" | "progress" | "done";
+export type ServiceChipState = ServiceCycleState | "CANCELLED";
+
+type Tone = "neutral" | "progress" | "done" | "cancelled";
 
 const TONE_CLASS: Record<Tone, string> = {
-  neutral:  "bg-bg-muted text-ink-2 border-line",
-  progress: "bg-warning-bg text-warning-strong border-warning-bg",
-  done:     "bg-success-bg text-success-strong border-success-bg",
+  neutral:   "bg-bg-muted text-ink-2 border-line",
+  progress:  "bg-warning-bg text-warning-strong border-warning-bg",
+  done:      "bg-success-bg text-success-strong border-success-bg",
+  cancelled: "bg-bg-muted text-ink-disabled border-line-subtle line-through opacity-60",
 };
 
 const STATE_LABEL: Record<string, string> = {
   PENDING: "Pendiente",
   ARRIVED: "Aquí",
   DELIVERED: "Entregado",
+  CANCELLED: "Cancelado",
 };
 
 function toneFor(state: string): Tone {
+  if (state === "CANCELLED") return "cancelled";
   if (state === "DELIVERED") return "done";
   if (state === "ARRIVED") return "progress";
   return "neutral";
@@ -41,11 +54,11 @@ const TARGET_LABEL: Record<string, string> = {
 
 interface ServiceChipProps {
   service: Service;
-  onClick: () => void;
+  onToggle: (newState: ServiceChipState) => void;
   disabled?: boolean;
 }
 
-function ServiceChip({ service, onClick, disabled }: ServiceChipProps) {
+function ServiceChip({ service, onToggle, disabled }: ServiceChipProps) {
   const Icon = ServiceIcons[iconForServiceType(service.type)];
   const baseLabel =
     service.customName ||
@@ -53,20 +66,41 @@ function ServiceChip({ service, onClick, disabled }: ServiceChipProps) {
     service.type;
   const targetSuffix = service.target ? ` · ${TARGET_LABEL[service.target] ?? service.target}` : "";
   const overdue = isServiceOverdue(service);
+  const isCancelled = service.state === "CANCELLED";
   const tone = toneFor(service.state);
   const stateText = STATE_LABEL[service.state] ?? service.state;
+
+  const { handlers, isPressing } = useLongPress({
+    onLongPress: () => {
+      if (disabled) return;
+      onToggle(isCancelled ? "PENDING" : "CANCELLED");
+    },
+    onClick: () => {
+      if (disabled) return;
+      // Tap corto sobre un chip cancelado es no-op: sólo long-press restaura.
+      if (isCancelled) return;
+      onToggle(nextServiceState(service.state));
+    },
+  });
+
+  const pressClass = isPressing && !disabled ? "scale-95 ring-2 ring-danger-strong/40" : "";
+  const overdueClass = overdue && !isCancelled ? "overdue ring-2 ring-danger-strong" : "";
+  const ariaHint = isCancelled
+    ? "Mantén pulsado para restaurar"
+    : "Mantén pulsado para cancelar";
 
   return (
     <button
       type="button"
       disabled={disabled}
-      onClick={(e) => {
-        e.stopPropagation();
-        if (!disabled) onClick();
-      }}
-      className={`flex min-h-[48px] min-w-[88px] flex-col items-start justify-center gap-0.5 rounded-hx-md border px-2 py-1 text-left transition active:scale-95 disabled:cursor-default disabled:opacity-50 ${TONE_CLASS[tone]} ${overdue ? "overdue ring-2 ring-danger-strong" : ""}`}
-      aria-label={`${baseLabel}${targetSuffix}: ${stateText}${overdue ? " (retrasado)" : ""}`}
+      // Bloqueamos la propagación al contenedor de la lista; el ciclo real
+      // lo dispara el hook (pointerup → onClick) o el long-press.
+      onClick={(e) => e.stopPropagation()}
+      {...handlers}
+      className={`flex min-h-[48px] min-w-[88px] flex-col items-start justify-center gap-0.5 rounded-hx-md border px-2 py-1 text-left transition disabled:cursor-default disabled:opacity-50 ${TONE_CLASS[tone]} ${overdueClass} ${pressClass}`}
+      aria-label={`${baseLabel}${targetSuffix}: ${stateText}${overdue && !isCancelled ? " (retrasado)" : ""}. ${ariaHint}.`}
       title={service.reference ? `#${service.reference}` : undefined}
+      style={{ touchAction: "manipulation" }}
     >
       <span className="flex items-center gap-1 text-[11px] font-semibold leading-none">
         <Icon width={14} height={14} />
@@ -74,7 +108,7 @@ function ServiceChip({ service, onClick, disabled }: ServiceChipProps) {
       </span>
       <span className="text-[11px] font-mono leading-tight">
         {stateText}
-        {overdue ? " ⚠" : ""}
+        {overdue && !isCancelled ? " ⚠" : ""}
       </span>
     </button>
   );
@@ -82,13 +116,14 @@ function ServiceChip({ service, onClick, disabled }: ServiceChipProps) {
 
 export interface ServiceChipRowProps {
   services: Service[];
-  onToggle?: (serviceId: string, newState: ServiceCycleState) => void;
+  onToggle?: (serviceId: string, newState: ServiceChipState) => void;
   readOnly?: boolean;
 }
 
 export function ServiceChipRow({ services, onToggle, readOnly = false }: ServiceChipRowProps) {
   if (services.length === 0) return null;
   const delivered = services.filter((s) => s.state === "DELIVERED").length;
+  const active = services.filter((s) => s.state !== "CANCELLED").length;
   const disabled = readOnly || !onToggle;
 
   return (
@@ -101,11 +136,11 @@ export function ServiceChipRow({ services, onToggle, readOnly = false }: Service
           key={s.id}
           service={s}
           disabled={disabled}
-          onClick={() => onToggle?.(s.id, nextServiceState(s.state))}
+          onToggle={(next) => onToggle?.(s.id, next)}
         />
       ))}
       <span className="ml-auto text-xs font-mono text-ink-muted">
-        {delivered}/{services.length} servidos
+        {delivered}/{active} servidos
       </span>
     </div>
   );
