@@ -1,9 +1,9 @@
 "use client";
 
-import { Suspense, useEffect, useState, useCallback, useMemo } from "react";
+import { Suspense, useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import { Flight, Service, EventLog, LostItem } from "@/types/compat";
-import { palmaDayUtc, dateToSqlString } from "@/lib/time";
+import { palmaDayUtc } from "@/lib/time";
 import { useEventStream } from "@/hooks/useEventStream";
 import { getOperatorName } from "@/lib/operators";
 import { FlightDetailPanel } from "@/app/dia/FlightDetailPanel";
@@ -13,16 +13,18 @@ import { CategoryPill } from "@/components/helix/CategoryPill";
 import { RqstChip } from "@/components/helix/RqstChip";
 import { PetCount } from "@/components/helix/PetCount";
 import type { FlightCategory } from "@/types/v2";
-import { computeHeaderStats, type FlightLite, shortDate } from "@/app/dia/diaHelpers";
+import { computeHeaderStats, type FlightLite } from "@/app/dia/diaHelpers";
 import {
   computeBarBounds,
   flightPips,
+  msToPct,
   nowPctInRange,
-  parseHHMM,
-  zoomedRange,
+  rangeFromCenter,
+  rulerTicks,
+  palmaDaysInRange,
   isCommercialCallsign,
   barSegments,
-  minToPct,
+  HOUR_MS,
   type TimelineRange,
 } from "./timelineHelpers";
 
@@ -34,16 +36,36 @@ type FlightWithRelations = Flight & {
 
 type FilterKind = "all" | "private" | "commercial" | "overnight" | "ferry" | "cancelled";
 type SortKind = "time" | "stand";
+type WindowHours = 6 | 12 | 24 | 48 | 72;
 
-const SHIFTS = [
-  { label: "Mañana", startMin: 6 * 60, endMin: 14 * 60 },
-  { label: "Tarde", startMin: 14 * 60, endMin: 22 * 60 },
-  { label: "Noche", startMin: 22 * 60, endMin: 24 * 60 },
-] as const;
-
+const ZOOM_STEPS: readonly WindowHours[] = [6, 12, 24, 48, 72] as const;
 const STANDS = 12;
 const ROW_H = 56;
 const BAR_H = 22;
+
+function stepHoursFor(window: WindowHours): number {
+  if (window <= 12) return 1;
+  if (window === 24) return 2;
+  if (window === 48) return 3;
+  return 6;
+}
+
+function toMs(instant: Date | string | null | undefined): number | null {
+  if (instant === null || instant === undefined) return null;
+  const d = instant instanceof Date ? instant : new Date(instant);
+  const t = d.getTime();
+  return Number.isNaN(t) ? null : t;
+}
+
+/** Devuelve el intervalo absoluto de presencia del vuelo en la base. */
+function flightInterval(f: { arrivalInstant: Date | string | null; departureInstant: Date | string | null }): { startMs: number; endMs: number } | null {
+  const arr = toMs(f.arrivalInstant);
+  const dep = toMs(f.departureInstant);
+  if (arr === null && dep === null) return null;
+  if (arr !== null && dep !== null) return { startMs: arr, endMs: dep < arr ? arr + HOUR_MS : dep };
+  if (arr !== null) return { startMs: arr, endMs: arr + 90 * 60 * 1000 };
+  return { startMs: dep! - 90 * 60 * 1000, endMs: dep! };
+}
 
 export default function TimelinePage() {
   return (
@@ -56,40 +78,121 @@ export default function TimelinePage() {
 function TimelinePageInner() {
   const { status } = useSession();
   const { date, shift, goToday } = useDate();
-  const [flights, setFlights] = useState<FlightWithRelations[]>([]);
+
+  // Cache multi-dia y union deduplicada
+  const [flightsByDate, setFlightsByDate] = useState<Map<string, FlightWithRelations[]>>(new Map());
+  const inFlight = useRef<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState(new Date());
   const [selectedFlightId, setSelectedFlightId] = useState<string | null>(null);
   const [paxCrewModal, setPaxCrewModal] = useState<{ flightId: string; direction: "ARRIVAL" | "DEPARTURE" } | null>(null);
   const [filter, setFilter] = useState<FilterKind>("all");
-  const [zoom, setZoom] = useState<6 | 12 | 24>(24);
   const [sortBy, setSortBy] = useState<SortKind>("time");
 
+  // ─── Viewport ─────────────────────────────────────────────────────
+  const [windowHours, setWindowHours] = useState<WindowHours>(24);
+  const [viewportCenterMs, setViewportCenterMs] = useState<number>(() => Date.now());
+  const lastDateRef = useRef<number | null>(null);
+
+  // Recentra cuando cambia `date` (URL): si es hoy, NOW; si no, mediodia UTC del dia
+  useEffect(() => {
+    const dms = date.getTime();
+    if (lastDateRef.current === dms) return;
+    lastDateRef.current = dms;
+    const todayMs = palmaDayUtc().getTime();
+    if (dms === todayMs) {
+      setViewportCenterMs(Date.now());
+    } else {
+      setViewportCenterMs(palmaDayUtc(date).getTime() + 12 * HOUR_MS);
+    }
+  }, [date]);
+
+  const range: TimelineRange = useMemo(
+    () => rangeFromCenter(viewportCenterMs, windowHours * HOUR_MS),
+    [viewportCenterMs, windowHours],
+  );
+
+  // ─── Tick de "now" cada minuto ──────────────────────────────────
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 60_000);
     return () => clearInterval(t);
   }, []);
 
-  const fetchFlights = useCallback(async () => {
+  // ─── Fetch multi-dia bajo demanda ─────────────────────────────────
+  const fetchOne = useCallback(async (dateStr: string) => {
+    if (inFlight.current.has(dateStr)) return;
+    inFlight.current.add(dateStr);
     try {
-      const dateStr = dateToSqlString(date);
       const res = await fetch(`/api/flights?date=${dateStr}`);
       if (res.ok) {
         const data = await res.json();
-        setFlights(data.flights);
+        setFlightsByDate((prev) => {
+          const next = new Map(prev);
+          next.set(dateStr, data.flights as FlightWithRelations[]);
+          return next;
+        });
       }
     } finally {
-      setLoading(false);
+      inFlight.current.delete(dateStr);
     }
-  }, [date]);
+  }, []);
 
+  // Re-fetch de los dias ya cacheados (para SSE)
+  const refetchCached = useCallback(async () => {
+    const dates = Array.from(flightsByDate.keys());
+    await Promise.all(
+      dates.map(async (d) => {
+        // Bypass del lock — queremos refrescar incluso si una request previa estaba activa
+        try {
+          const res = await fetch(`/api/flights?date=${d}`);
+          if (res.ok) {
+            const data = await res.json();
+            setFlightsByDate((prev) => {
+              const next = new Map(prev);
+              next.set(d, data.flights as FlightWithRelations[]);
+              return next;
+            });
+          }
+        } catch {
+          // noop
+        }
+      }),
+    );
+  }, [flightsByDate]);
+
+  // Cuando cambia el rango visible, descargamos los dias que faltan
   useEffect(() => {
-    if (status === "authenticated") fetchFlights();
-  }, [status, fetchFlights]);
+    if (status !== "authenticated") return;
+    const needed = palmaDaysInRange(range);
+    const missing = needed.filter((d) => !flightsByDate.has(d) && !inFlight.current.has(d));
+    if (missing.length === 0) {
+      setLoading(false);
+      return;
+    }
+    Promise.all(missing.map(fetchOne)).finally(() => setLoading(false));
+  }, [range, status, flightsByDate, fetchOne]);
 
-  useEventStream({ onEvent: () => fetchFlights(), enabled: status === "authenticated" });
+  useEventStream({ onEvent: () => refetchCached(), enabled: status === "authenticated" });
 
-  // Keyboard shortcuts: ESC cierra panel; ←/→ navega fechas; T = hoy; 1/2/3 = zoom.
+  // ─── Union deduplicada por id ────────────────────────────────────
+  const flights = useMemo<FlightWithRelations[]>(() => {
+    const map = new Map<string, FlightWithRelations>();
+    for (const list of flightsByDate.values()) {
+      for (const f of list) map.set(f.id, f);
+    }
+    return Array.from(map.values());
+  }, [flightsByDate]);
+
+  // ─── Vuelos cuyo intervalo intersecta el viewport ─────────────────
+  const visibleInRange = useMemo(() => {
+    return flights.filter((f) => {
+      const iv = flightInterval(f);
+      if (!iv) return false;
+      return iv.endMs >= range.startMs && iv.startMs <= range.endMs;
+    });
+  }, [flights, range]);
+
+  // ─── Atajos de teclado ────────────────────────────────────────────
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement | null)?.tagName;
@@ -97,31 +200,32 @@ function TimelinePageInner() {
       if (e.key === "Escape" && selectedFlightId) { setSelectedFlightId(null); return; }
       if (e.key === "ArrowLeft") shift(-1);
       else if (e.key === "ArrowRight") shift(1);
-      else if (e.key === "t" || e.key === "T") goToday();
-      else if (e.key === "1") setZoom(6);
-      else if (e.key === "2") setZoom(12);
-      else if (e.key === "3") setZoom(24);
+      else if (e.key === "t" || e.key === "T") {
+        goToday();
+        setViewportCenterMs(Date.now());
+      } else if (e.key === "1") setWindowHours(6);
+      else if (e.key === "2") setWindowHours(12);
+      else if (e.key === "3") setWindowHours(24);
+      else if (e.key === "4") setWindowHours(48);
+      else if (e.key === "5") setWindowHours(72);
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-    // shift/goToday come from useDate(); re-binding the listener on every
-    // render is more expensive than keeping the closure capture stable.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedFlightId, date]);
 
-  const range: TimelineRange = useMemo(() => zoomedRange(zoom, now), [zoom, now]);
-
+  // ─── Filter / sort ────────────────────────────────────────────────
   const filterCounts = useMemo(() => ({
-    all: flights.length,
-    private: flights.filter((f) => !isCommercialCallsign(f.callsign)).length,
-    commercial: flights.filter((f) => isCommercialCallsign(f.callsign)).length,
-    overnight: flights.filter((f) => f.isOvernight).length,
-    ferry: flights.filter((f) => f.flightCategory === "FERRY").length,
-    cancelled: flights.filter((f) => f.flightCategory === "CANCELLED").length,
-  }), [flights]);
+    all: visibleInRange.length,
+    private: visibleInRange.filter((f) => !isCommercialCallsign(f.callsign)).length,
+    commercial: visibleInRange.filter((f) => isCommercialCallsign(f.callsign)).length,
+    overnight: visibleInRange.filter((f) => f.isOvernight).length,
+    ferry: visibleInRange.filter((f) => f.flightCategory === "FERRY").length,
+    cancelled: visibleInRange.filter((f) => f.flightCategory === "CANCELLED").length,
+  }), [visibleInRange]);
 
   const filtered = useMemo(() => {
-    let xs = flights;
+    let xs = visibleInRange;
     if (filter === "private") xs = xs.filter((f) => !isCommercialCallsign(f.callsign));
     if (filter === "commercial") xs = xs.filter((f) => isCommercialCallsign(f.callsign));
     if (filter === "overnight") xs = xs.filter((f) => f.isOvernight);
@@ -129,7 +233,6 @@ function TimelinePageInner() {
     if (filter === "cancelled") xs = xs.filter((f) => f.flightCategory === "CANCELLED");
     return [...xs].sort((a, b) => {
       if (sortBy === "stand") {
-        // Asignados primero (alfa-num natural), luego TBD por hora
         const pa = a.parking || ""; const pb = b.parking || "";
         if (pa && !pb) return -1;
         if (!pa && pb) return 1;
@@ -138,12 +241,13 @@ function TimelinePageInner() {
           if (cmp !== 0) return cmp;
         }
       }
-      const ta = parseHHMM(a.eta) ?? parseHHMM(a.etd) ?? 99999;
-      const tb = parseHHMM(b.eta) ?? parseHHMM(b.etd) ?? 99999;
+      const ta = toMs(a.arrivalInstant) ?? toMs(a.departureInstant) ?? Number.MAX_SAFE_INTEGER;
+      const tb = toMs(b.arrivalInstant) ?? toMs(b.departureInstant) ?? Number.MAX_SAFE_INTEGER;
       return ta - tb;
     });
-  }, [flights, filter, sortBy]);
+  }, [visibleInRange, filter, sortBy]);
 
+  // Stats agregados sobre la union cacheada — el "now" puede caer en otro dia
   const stats = useMemo(
     () => computeHeaderStats(flights as unknown as FlightLite[], date, now),
     [flights, date, now],
@@ -154,50 +258,76 @@ function TimelinePageInner() {
     [flights, selectedFlightId],
   );
 
-  const dayShort = shortDate(date);
-  const isToday = dayShort === shortDate(palmaDayUtc());
+  const nowMs = now.getTime();
+  const nowInRange = nowMs >= range.startMs && nowMs <= range.endMs;
   const nowPct = nowPctInRange(now, range);
-
   const fmt = (d: Date, tz?: string) =>
     d.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", timeZone: tz });
 
-  // Hours array for the ruler — major (every 1h) within the visible range
-  const visibleHours = useMemo(() => {
-    const startH = Math.ceil(range.startMin / 60);
-    const endH = Math.floor(range.endMin / 60);
-    return Array.from({ length: endH - startH + 1 }, (_, i) => startH + i);
-  }, [range]);
+  // ─── Ruler ticks ──────────────────────────────────────────────────
+  const stepHours = stepHoursFor(windowHours);
+  const ticks = useMemo(() => rulerTicks(range, stepHours), [range, stepHours]);
 
-  // Parking occupancy per hour
+  // ─── Ocupacion (count por hora cubierta) ─────────────────────────
   const occupancy = useMemo(() => {
-    const out: Array<{ hour: number; count: number }> = [];
-    for (const h of visibleHours) {
-      const hourMin = h * 60;
-      const c = flights.filter((f) => {
-        const eta = parseHHMM(f.eta);
-        const etd = parseHHMM(f.etd);
-        if (eta === null || etd === null) return false;
-        if (etd < eta) return hourMin >= eta || hourMin <= etd;
-        return hourMin >= eta && hourMin <= etd;
+    const buckets = rulerTicks(range, 1);
+    return buckets.map((t) => {
+      const hourStart = t.ms;
+      const hourEnd = t.ms + HOUR_MS;
+      const count = flights.filter((f) => {
+        const iv = flightInterval(f);
+        if (!iv) return false;
+        return iv.startMs <= hourEnd && iv.endMs >= hourStart;
       }).length;
-      out.push({ hour: h, count: c });
-    }
-    return out;
-  }, [flights, visibleHours]);
+      return { ms: t.ms, count };
+    });
+  }, [flights, range]);
+  const occupancyPeak = useMemo(() => Math.max(0, ...occupancy.map((o) => o.count)), [occupancy]);
 
-  // "Activos ahora" — robust to zoom: count flights whose [eta, etd] contains now,
-  // independiente de si la hora actual está dentro de la ventana visible.
+  // ─── Activos ahora / Proximas 2h sobre toda la union ─────────────
   const activeNowCount = useMemo(() => {
-    if (!isToday) return 0;
-    const m = now.getUTCHours() * 60 + now.getUTCMinutes();
     return flights.filter((f) => {
-      const eta = parseHHMM(f.eta); const etd = parseHHMM(f.etd);
-      if (eta === null || etd === null) return false;
-      if (etd < eta) return m >= eta || m <= etd;
-      return m >= eta && m <= etd;
+      const iv = flightInterval(f);
+      if (!iv) return false;
+      return iv.startMs <= nowMs && nowMs <= iv.endMs;
     }).length;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [flights, now, dayShort]);
+  }, [flights, nowMs]);
+
+  const next2h = useMemo(() => {
+    const win = 2 * HOUR_MS;
+    let arr = 0, dep = 0;
+    for (const f of flights) {
+      const a = toMs(f.arrivalInstant);
+      const d = toMs(f.departureInstant);
+      if (a !== null && a >= nowMs && a <= nowMs + win) arr++;
+      if (d !== null && d >= nowMs && d <= nowMs + win) dep++;
+    }
+    return { arr, dep, total: arr + dep };
+  }, [flights, nowMs]);
+
+  // ─── Wheel handlers (pan / zoom) ─────────────────────────────────
+  const laneRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const el = laneRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      if (e.shiftKey || e.ctrlKey) {
+        const idx = ZOOM_STEPS.indexOf(windowHours);
+        if (idx < 0) return;
+        const dir = (e.deltaY + e.deltaX) > 0 ? 1 : -1; // down → bigger window
+        const nextIdx = Math.max(0, Math.min(ZOOM_STEPS.length - 1, idx + dir));
+        if (nextIdx !== idx) setWindowHours(ZOOM_STEPS[nextIdx]);
+        return;
+      }
+      const total = windowHours * HOUR_MS;
+      const delta = (e.deltaY + e.deltaX) * total * 0.0008;
+      setViewportCenterMs((c) => c + delta);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [windowHours]);
 
   if (status === "loading" || loading) {
     return <div className="flex h-screen items-center justify-center bg-[#0a0a0a] text-white">Cargando Timeline...</div>;
@@ -208,9 +338,9 @@ function TimelinePageInner() {
 
       {/* SUMMARY band */}
       <div className="flex items-stretch border-b border-gray-200 bg-white px-7">
-        <Stat label="Movimientos" value={String(flights.length)} sub={`${stats.arrivals} LLEG · ${stats.departures} SAL`} />
+        <Stat label="Movimientos" value={String(filtered.length)} sub={`${stats.arrivals} LLEG · ${stats.departures} SAL`} />
         <Stat label="Activos ahora" value={String(activeNowCount)} sub="en parking" />
-        <Stat label="Próximas 2 h" value={String(countNext2h(flights, now))} sub={`${countNext2hKind(flights, now, "DEP")} SAL · ${countNext2hKind(flights, now, "ARR")} LLEG`} />
+        <Stat label="Próximas 2 h" value={String(next2h.total)} sub={`${next2h.dep} SAL · ${next2h.arr} LLEG`} />
         <Stat label="Servicios pend." value={String(stats.pendingDepServices)} sub="fuel + catering" />
         {stats.alerts > 0 && (
           <Stat label="Alerta" value={String(stats.alerts)} sub="ETD pasada" alert />
@@ -242,69 +372,73 @@ function TimelinePageInner() {
             ))}
           </div>
 
-          <div className="flex items-center bg-gray-100 rounded-md p-0.5" title="Zoom (1/2/3)">
-            {([6, 12, 24] as const).map((z) => (
+          <div className="flex items-center bg-gray-100 rounded-md p-0.5" title="Zoom (1/2/3/4/5)">
+            {ZOOM_STEPS.map((z) => (
               <button
                 key={z}
-                onClick={() => setZoom(z)}
-                className={`px-2.5 py-1 text-[11px] font-semibold rounded ${zoom === z ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+                onClick={() => setWindowHours(z)}
+                className={`px-2.5 py-1 text-[11px] font-semibold rounded ${windowHours === z ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
                 style={{ fontFamily: "JetBrains Mono, monospace" }}
               >
                 {z}h
               </button>
             ))}
           </div>
+
+          {!nowInRange && (
+            <button
+              onClick={() => { goToday(); setViewportCenterMs(Date.now()); }}
+              className="px-2.5 py-1 text-[11px] font-semibold rounded bg-blue-50 text-blue-700 hover:bg-blue-100"
+              title="Centrar en NOW (T)"
+            >
+              Centrar en ahora
+            </button>
+          )}
         </div>
       </div>
 
       {/* MAIN: timeline + panel */}
       <main className="flex flex-1 overflow-hidden">
-        <div className="flex-1 overflow-auto bg-white">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden bg-white">
           {/* RULER */}
           <div className="grid grid-cols-[320px_1fr] border-b border-gray-200 sticky top-0 z-20 bg-white">
             <div className="flex items-end justify-between px-4 pt-3.5 pb-1.5 bg-[#fafafa] border-r border-gray-200">
               <span className="text-[10px] uppercase tracking-wider font-semibold text-gray-400">Aeronave · {sortBy === "stand" ? "stand" : "hora"}</span>
               <span className="text-[9.5px] text-gray-400" style={{ fontFamily: "JetBrains Mono, monospace" }}>{filtered.length}</span>
             </div>
-            <div className="relative h-[42px]">
-              {/* Shift bands behind — sutiles barras de color, no texto */}
-              {SHIFTS.map((s, i) => {
-                const left = minToPct(s.startMin, range);
-                const width = minToPct(s.endMin, range) - left;
-                if (width <= 0 || left >= 100) return null;
-                const colors = ["oklch(0.97 0.02 75)", "oklch(0.97 0.02 230)", "oklch(0.96 0.02 280)"];
-                return (
-                  <div
-                    key={s.label}
-                    className="absolute bottom-0 h-1"
-                    style={{ left: `${Math.max(0, left)}%`, width: `${Math.min(100 - Math.max(0, left), width)}%`, background: colors[i] }}
-                    title={`Turno ${s.label}`}
-                  />
-                );
-              })}
-
+            <div className="relative h-[52px] overflow-hidden">
               {/* Hours */}
-              {visibleHours.map((h) => {
-                const pct = minToPct(h * 60, range);
+              {ticks.map((t) => {
+                const pct = msToPct(t.ms, range);
                 if (pct < 0 || pct > 100) return null;
-                const isNowH = isToday && h === now.getUTCHours();
+                const d = new Date(t.ms);
+                const dd = String(d.getUTCDate()).padStart(2, "0");
+                const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
                 return (
-                  <div key={h} className="absolute top-0 bottom-0" style={{ left: `${pct}%` }}>
-                    <div className="absolute left-0 bottom-1 w-px h-2 bg-gray-300" />
+                  <div key={t.ms} className="absolute top-0 bottom-0" style={{ left: `${pct}%` }}>
+                    <div className={`absolute left-0 bottom-1 w-px ${t.isMidnight ? "h-4 bg-gray-400" : "h-2 bg-gray-300"}`} />
                     <div
-                      className={`absolute left-0 bottom-4 -translate-x-1/2 text-[11px] font-medium whitespace-nowrap tabular-nums ${isNowH ? "opacity-30" : "text-gray-700"}`}
+                      className="absolute left-0 bottom-4 -translate-x-1/2 text-[11px] font-medium whitespace-nowrap tabular-nums text-gray-700"
                       style={{ fontFamily: "JetBrains Mono, monospace" }}
                     >
-                      {String(h).padStart(2, "0")}
+                      {String(t.hour).padStart(2, "0")}
                     </div>
+                    {t.isMidnight && (
+                      <div
+                        className="absolute left-0 -translate-x-1/2 text-[9.5px] font-semibold text-gray-500 whitespace-nowrap"
+                        style={{ bottom: "0px", fontFamily: "JetBrains Mono, monospace" }}
+                      >
+                        {dd}/{mm}
+                      </div>
+                    )}
                   </div>
                 );
               })}
 
               {/* NOW tag */}
-              {isToday && (
+              {nowInRange && (
                 <div
-                  className="absolute top-2 -translate-x-1/2 px-2 py-0.5 text-[10px] font-bold rounded-full text-white tracking-wider z-10 whitespace-nowrap"
+                  className="absolute top-1 -translate-x-1/2 px-2 py-0.5 text-[10px] font-bold rounded-full text-white tracking-wider z-10 whitespace-nowrap"
                   style={{ left: `${nowPct}%`, background: "oklch(0.55 0.2 25)", boxShadow: "0 1px 6px oklch(0.55 0.2 25 / 0.4)", fontFamily: "JetBrains Mono, monospace" }}
                 >
                   {fmt(now, "UTC")} Z
@@ -322,57 +456,60 @@ function TimelinePageInner() {
             <div className="flex items-center justify-between px-4 py-2 bg-[#fafafa] border-r border-gray-200">
               <span className="text-[10px] uppercase tracking-wider font-bold text-gray-400">Ocupación</span>
               <span className="text-[10.5px] text-gray-600" style={{ fontFamily: "JetBrains Mono, monospace" }}>
-                pico {Math.max(...occupancy.map((o) => o.count), 0)}/{STANDS}
+                pico {occupancyPeak}/{STANDS}
               </span>
             </div>
-            <div className="relative h-10 py-1">
-              {/* baseline */}
+            <div className="relative h-10 py-1 overflow-hidden">
               <div className="absolute left-0 right-0 bottom-1 h-px bg-gray-200" />
-              {/* capacity threshold (80% = 0.8 * STANDS) */}
               <div className="absolute left-0 right-0 border-t border-dashed border-gray-200" style={{ bottom: `${4 + 0.8 * 28}px` }} />
               {occupancy.map((o) => {
                 if (o.count === 0) return null;
-                const leftPct = minToPct(o.hour * 60, range);
-                const widthPct = minToPct((o.hour + 1) * 60, range) - leftPct;
+                const leftPct = msToPct(o.ms, range);
+                const widthPct = msToPct(o.ms + HOUR_MS, range) - leftPct;
                 if (leftPct >= 100 || leftPct + widthPct <= 0) return null;
                 const ratio = Math.min(1, o.count / STANDS);
                 const barH = Math.max(2, ratio * 28);
                 const peak = o.count >= Math.ceil(STANDS * 0.8);
+                const visibleLeft = Math.max(0, leftPct);
+                const visibleWidth = Math.min(100, leftPct + widthPct) - visibleLeft;
+                if (visibleWidth <= 0) return null;
                 return (
                   <div
-                    key={o.hour}
+                    key={o.ms}
                     className="absolute bottom-1 rounded-t"
                     style={{
-                      left: `${leftPct + widthPct * 0.08}%`,
-                      width: `${widthPct * 0.84}%`,
+                      left: `${visibleLeft + visibleWidth * 0.08}%`,
+                      width: `${visibleWidth * 0.84}%`,
                       height: `${barH}px`,
                       background: peak ? "oklch(0.68 0.16 25 / 0.85)" : "oklch(0.7 0.1 245 / 0.7)",
                     }}
                   >
-                    <span
-                      className="absolute -top-3.5 left-1/2 -translate-x-1/2 text-[9.5px] font-bold tabular-nums"
-                      style={{ fontFamily: "JetBrains Mono, monospace", color: peak ? "oklch(0.45 0.18 25)" : "#6b7280" }}
-                    >
-                      {o.count}
-                    </span>
+                    {windowHours <= 24 && (
+                      <span
+                        className="absolute -top-3.5 left-1/2 -translate-x-1/2 text-[9.5px] font-bold tabular-nums"
+                        style={{ fontFamily: "JetBrains Mono, monospace", color: peak ? "oklch(0.45 0.18 25)" : "#6b7280" }}
+                      >
+                        {o.count}
+                      </span>
+                    )}
                   </div>
                 );
               })}
             </div>
           </div>
 
-          {/* ROWS */}
-          <div className="relative">
+          {/* ROWS — lane area que captura el wheel */}
+          <div ref={laneRef} className="relative overflow-x-hidden">
             {filtered.map((f) => (
               <FlightRow
                 key={f.id}
                 flight={f}
-                viewDayShort={dayShort}
                 range={range}
+                ticks={ticks}
                 isSelected={selectedFlightId === f.id}
                 onClick={() => setSelectedFlightId(selectedFlightId === f.id ? null : f.id)}
                 nowPct={nowPct}
-                showNow={isToday}
+                showNow={nowInRange}
               />
             ))}
 
@@ -380,12 +517,10 @@ function TimelinePageInner() {
               <div className="py-20 px-12 text-center">
                 <div className="text-[42px] mb-3 opacity-30">✈</div>
                 <div className="text-gray-700 font-semibold text-[14px] mb-1">
-                  {flights.length === 0 ? "Sin movimientos para este día" : "Ningún vuelo coincide con el filtro"}
+                  {flights.length === 0 ? "Sin movimientos en la ventana visible" : "Ningún vuelo coincide con el filtro"}
                 </div>
                 <div className="text-gray-400 text-[12px]">
-                  {flights.length === 0
-                    ? "Prueba con otra fecha (← →) o vuelve a hoy (T)"
-                    : "Quita filtros para ver todos los movimientos"}
+                  Desplaza la rueda para mover el eje · Shift+rueda para zoom · T para centrar en ahora
                 </div>
               </div>
             )}
@@ -417,9 +552,9 @@ function TimelinePageInner() {
           <FlightDetailPanel
             flight={selectedFlight}
             onClose={() => setSelectedFlightId(null)}
-            onMutated={fetchFlights}
+            onMutated={refetchCached}
             onOpenPaxCrew={(direction) => setPaxCrewModal({ flightId: selectedFlight.id, direction })}
-            onDeleted={() => { setSelectedFlightId(null); fetchFlights(); }}
+            onDeleted={() => { setSelectedFlightId(null); refetchCached(); }}
           />
         )}
       </main>
@@ -427,7 +562,7 @@ function TimelinePageInner() {
       {paxCrewModal && selectedFlight && (
         <PassengerCrewModal
           isOpen={true}
-          onClose={() => { setPaxCrewModal(null); fetchFlights(); }}
+          onClose={() => { setPaxCrewModal(null); refetchCached(); }}
           flightId={paxCrewModal.flightId}
           direction={paxCrewModal.direction}
           flightLabel={`${selectedFlight.callsign} (${selectedFlight.registration})`}
@@ -435,29 +570,6 @@ function TimelinePageInner() {
       )}
     </div>
   );
-}
-
-// ─── Helpers de render ───────────────────────────────────────────────────────
-
-function countNext2h(flights: Flight[], now: Date): number {
-  const nowMin = now.getUTCHours() * 60 + now.getUTCMinutes();
-  return flights.filter((f) => {
-    const eta = parseHHMM(f.eta); const etd = parseHHMM(f.etd);
-    return (eta !== null && eta >= nowMin && eta <= nowMin + 120) ||
-           (etd !== null && etd >= nowMin && etd <= nowMin + 120);
-  }).length;
-}
-
-function countNext2hKind(flights: Flight[], now: Date, kind: "ARR" | "DEP"): number {
-  const nowMin = now.getUTCHours() * 60 + now.getUTCMinutes();
-  return flights.filter((f) => {
-    if (kind === "ARR") {
-      const eta = parseHHMM(f.eta);
-      return eta !== null && eta >= nowMin && eta <= nowMin + 120;
-    }
-    const etd = parseHHMM(f.etd);
-    return etd !== null && etd >= nowMin && etd <= nowMin + 120;
-  }).length;
 }
 
 // ─── Sub-componentes ───────────────────────────────────────────────────────
@@ -554,7 +666,6 @@ const URGENCY_PILL_COLOR: Record<string, string> = {
   PARKED:     "oklch(0.7 0.14 290)",
   DEPARTING:  "oklch(0.78 0.16 85)",
   DEPARTED:   "#d1d5db",
-  // legacy
   ON_BLOCKS:  "oklch(0.55 0.15 245)",
   TURNAROUND: "oklch(0.78 0.16 85)",
   BOARDING:   "oklch(0.68 0.18 50)",
@@ -562,28 +673,31 @@ const URGENCY_PILL_COLOR: Record<string, string> = {
 };
 
 function FlightRow({
-  flight, viewDayShort, range, isSelected, onClick, nowPct, showNow,
+  flight, range, ticks, isSelected, onClick, nowPct, showNow,
 }: {
   flight: FlightWithRelations;
-  viewDayShort: string;
   range: TimelineRange;
+  ticks: { ms: number; hour: number; isMidnight: boolean }[];
   isSelected: boolean;
   onClick: () => void;
   nowPct: number;
   showNow: boolean;
 }) {
-  const bounds = computeBarBounds(flight, viewDayShort, range);
+  const bounds = computeBarBounds(flight, range);
   const pips = bounds ? flightPips(flight, flight.services, bounds, range) : [];
   const operator = getOperatorName(flight.callsign);
   const isPrivate = operator === "Privado";
   const segments = barSegments(flight.state, flight.paxDepState === "BOARDED");
 
-  const isAlert = flight.state !== "DEPARTED" && flight.etd && parseHHMM(flight.etd) !== null && parseHHMM(flight.etd)! < (new Date().getUTCHours() * 60 + new Date().getUTCMinutes());
+  const nowMs = Date.now();
+  const depMs = toMs(flight.departureInstant);
+  const isAlert = flight.state !== "DEPARTED" && depMs !== null && depMs < nowMs;
   const isDeparted = flight.state === "DEPARTED" || flight.state === "OFF_BLOCKS";
   const isFuture = flight.state === "EXPECTED";
 
-  const etaPct = parseHHMM(flight.eta) !== null ? minToPct(parseHHMM(flight.eta)!, range) : null;
-  const etdPct = parseHHMM(flight.etd) !== null ? minToPct(parseHHMM(flight.etd)!, range) : null;
+  const arrMs = toMs(flight.arrivalInstant);
+  const etaPct = arrMs !== null ? msToPct(arrMs, range) : null;
+  const etdPct = depMs !== null ? msToPct(depMs, range) : null;
 
   const rowBg = isAlert ? "bg-red-50/60" : isDeparted ? "bg-gray-50" : "bg-white";
 
@@ -634,13 +748,17 @@ function FlightRow({
 
       {/* LANE */}
       <div className="relative">
-        {/* hour grid lines */}
-        {Array.from({ length: Math.ceil((range.endMin - range.startMin) / 60) + 1 }, (_, i) => {
-          const h = Math.ceil(range.startMin / 60) + i;
-          const pct = minToPct(h * 60, range);
+        {/* hour grid lines — mas marcadas en medianoche */}
+        {ticks.map((t) => {
+          const pct = msToPct(t.ms, range);
           if (pct < 0 || pct > 100) return null;
-          const major = h % 6 === 0;
-          return <div key={h} className="absolute top-0 bottom-0 w-px" style={{ left: `${pct}%`, background: major ? "#f3f4f6" : "oklch(0.95 0 0)" }} />;
+          return (
+            <div
+              key={t.ms}
+              className="absolute top-0 bottom-0 w-px"
+              style={{ left: `${pct}%`, background: t.isMidnight ? "#d1d5db" : "oklch(0.95 0 0)" }}
+            />
+          );
         })}
 
         {/* BAR */}
@@ -700,7 +818,7 @@ function FlightRow({
           <Marker pct={etdPct} kind="etd" actual={!!flight.atd} label={flight.atd || flight.etd || ""} below />
         )}
 
-        {/* NOW LINE per row — sutil, debajo de pips y markers */}
+        {/* NOW LINE per row */}
         {showNow && nowPct >= 0 && nowPct <= 100 && (
           <div className="absolute top-0 bottom-0 w-px z-[2] pointer-events-none" style={{ left: `${nowPct}%`, background: "oklch(0.6 0.2 25 / 0.55)" }} />
         )}
@@ -734,3 +852,4 @@ function Marker({ pct, kind, actual, label, below }: {
     </div>
   );
 }
+
