@@ -66,7 +66,7 @@ export async function parseCybermaxPdf(buffer: Buffer): Promise<ParseResult> {
     etd: f.depTime,
   }));
 
-  return { date: v2.sheetDate, flights, errors: [] };
+  return { date: v2.sheetDate, flights, errors: v2.errors ?? [] };
 }
 
 /** Convert a DD/MM/YY date string to a JS Date at midnight UTC */
