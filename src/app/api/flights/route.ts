@@ -42,9 +42,10 @@ export async function GET(req: NextRequest) {
             include: {
               passengers: { orderBy: { createdAt: "asc" } },
               crewAssignments: { include: { crewMember: true } },
+              tasks: true,
             },
           }
-        : true,
+        : { include: { tasks: true } },
       services: { orderBy: { createdAt: "asc" } },
       lostItems: { orderBy: { createdAt: "asc" } },
       crewItems: { orderBy: { createdAt: "asc" } },
@@ -208,7 +209,7 @@ export async function POST(req: NextRequest) {
     where: { id: visit.id },
     include: {
       aircraft: true,
-      movements: true,
+      movements: { include: { tasks: true } },
       services: true,
       lostItems: true,
       crewItems: true,

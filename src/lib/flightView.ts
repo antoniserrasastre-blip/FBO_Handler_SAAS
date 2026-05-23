@@ -8,7 +8,7 @@
 // to find the right Movement row (ARRIVAL vs DEPARTURE) and map the legacy
 // field name to its v2 location.
 
-import type { FlightView, FlightViewService, FlightViewLostItem, FlightViewCrewItem } from "@/types/v2";
+import type { FlightView, FlightViewService, FlightViewLostItem, FlightViewCrewItem, FlightViewTask } from "@/types/v2";
 
 type AnyRecord = Record<string, unknown>;
 
@@ -32,6 +32,24 @@ interface VisitWithMovements {
 
 function pick<T extends AnyRecord>(rows: T[], dir: "ARRIVAL" | "DEPARTURE"): T | null {
   return rows.find((r) => r.direction === dir) || null;
+}
+
+function collectTasks(arr: AnyRecord | null, dep: AnyRecord | null): FlightViewTask[] {
+  const out: FlightViewTask[] = [];
+  for (const [mov, direction] of [[arr, "ARRIVAL"], [dep, "DEPARTURE"]] as const) {
+    const rows = (mov?.tasks as AnyRecord[] | undefined) ?? [];
+    for (const t of rows) {
+      out.push({
+        id: t.id as string,
+        movementId: t.movementId as string | undefined,
+        type: t.type as string,
+        state: t.state as string,
+        direction,
+        doneAt: (t.doneAt as Date | string | null) ?? null,
+      });
+    }
+  }
+  return out;
 }
 
 function dateToDdMm(d: Date | string | null): string | null {
@@ -155,6 +173,7 @@ export function toFlightView(visit: VisitWithMovements): FlightView {
     services: visit.services as FlightViewService[] | undefined,
     lostItems: visit.lostItems as FlightViewLostItem[] | undefined,
     crewItems: visit.crewItems as FlightViewCrewItem[] | undefined,
+    tasks: collectTasks(arr, dep),
     ata: (arr?.ata as string | null) ?? null,
     atd: (dep?.atd as string | null) ?? null,
     livePhase: (liveSource?.livePhase as string | null) ?? null,

@@ -320,6 +320,44 @@ export const CREW_ITEM_LABELS: Record<CrewItemType, string> = {
 export const CREW_ITEM_STATES = ["STORED", "RETURNED"] as const;
 export type CrewItemState = (typeof CREW_ITEM_STATES)[number];
 
+// Checklist de turno — tareas por leg (llegada/salida) que no tienen control
+// propio en la tarjeta. El catálogo (puesto, fase, condición de aplicabilidad)
+// vive en src/lib/checklist.ts.
+export const TASK_TYPES = [
+  // Llegada
+  "PAX_COUNTED",      // pax reales contados
+  "CREW_RECEIVED",    // tripulación recibida
+  "POLICE_NOTIFIED",  // policía / guardia civil avisados
+  "PETS_ARRIVAL",     // mascotas gestionadas a la llegada
+  // Salida
+  "SECURITY_PAX",     // seguridad validó nombres/ID de pax
+  "SECURITY_CREW",    // seguridad validó tripulación
+  "CATERING_LOADED",  // catering subido a bordo
+  "PETS_DEPARTURE",   // mascotas a bordo
+  // Rampa (físico durante la estancia)
+  "GPU",              // GPU conectado
+  "WATER",            // agua potable
+  "CLEANING",         // limpieza de cabina
+] as const;
+export type TaskType = (typeof TASK_TYPES)[number];
+
+export const TASK_LABELS: Record<TaskType, string> = {
+  PAX_COUNTED: "Pax reales contados",
+  CREW_RECEIVED: "Tripulación recibida",
+  POLICE_NOTIFIED: "Policía / G. Civil avisados",
+  PETS_ARRIVAL: "Mascotas gestionadas",
+  SECURITY_PAX: "Seguridad validó IDs pax",
+  SECURITY_CREW: "Seguridad validó tripulación",
+  CATERING_LOADED: "Catering a bordo",
+  PETS_DEPARTURE: "Mascotas a bordo",
+  GPU: "GPU conectado",
+  WATER: "Agua potable",
+  CLEANING: "Limpieza de cabina",
+};
+
+export const TASK_STATES = ["PENDING", "DONE", "NA"] as const;
+export type TaskState = (typeof TASK_STATES)[number];
+
 // Qué "mitad" del vuelo le interesa a cada puesto en la vista de turno.
 //  - ARRIVALS  → leg de llegada (recepción pax/crew, inventario que deja la crew)
 //  - DEPARTURES→ leg de salida (validación seguridad, entrega extras/servicios)
