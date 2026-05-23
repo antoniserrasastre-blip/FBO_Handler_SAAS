@@ -35,6 +35,7 @@ export interface ParsedFlight {
 export interface ParseResult {
   sheetDate: string;
   flights: ParsedFlight[];
+  errors: string[];
 }
 
 const COLUMNS = {
@@ -82,7 +83,8 @@ interface PdfItem {
   page: number;
 }
 
-function parsePageItems(items: PdfItem[], isFirstPage: boolean): { sheetDate: string; flights: ParsedFlight[] } {
+function parsePageItems(items: PdfItem[], isFirstPage: boolean, pageNum: number): { sheetDate: string; flights: ParsedFlight[]; errors: string[] } {
+  const errors: string[] = [];
   // Group items by rounded Y
   const rowsByY = new Map<number, PdfItem[]>();
   for (const it of items) {
@@ -118,11 +120,13 @@ function parsePageItems(items: PdfItem[], isFirstPage: boolean): { sheetDate: st
   }
 
   const flights: ParsedFlight[] = [];
+  let rowIdx = 0;
   for (const row of merged) {
     const arrCs = row.items.find(it => it.x >= 18 && it.x <= 35);
     if (!arrCs) continue;
     if (/^(Vuelo|Origen|Avión|F\.Prev|Hora|LLEGADAS|SALIDAS|MALLORCAIR|Orden|Día|Page)/i.test(arrCs.text)) continue;
     if (/^\d{2}\/\d{2}\/\d{2}/.test(arrCs.text)) continue;
+    rowIdx++;
 
     const f: ParsedFlight = {
       callsign: '', origin: '', prevDate: '', arrTime: '',
@@ -155,10 +159,20 @@ function parsePageItems(items: PdfItem[], isFirstPage: boolean): { sheetDate: st
     }
 
     f.flightType = detectFlightType(f.callsign, f.registration);
+
+    // Registra filas con datos pero sin campos clave para feedback al usuario
+    if (!f.registration && (f.callsign || f.depCallsign)) {
+      errors.push(`Página ${pageNum}, fila ${rowIdx}: registración no detectada (callsign "${f.callsign || f.depCallsign}")`);
+    } else if (!f.callsign && !f.depCallsign && f.registration) {
+      errors.push(`Página ${pageNum}, fila ${rowIdx}: callsign no detectado (matrícula "${f.registration}")`);
+    } else if (!f.arrTime && !f.depTime && f.registration) {
+      errors.push(`Página ${pageNum}, fila ${rowIdx}: sin ETA ni ETD (matrícula "${f.registration}")`);
+    }
+
     flights.push(f);
   }
 
-  return { sheetDate, flights };
+  return { sheetDate, flights, errors };
 }
 
 export async function parseCybermaxPdf(buffer: Buffer | Uint8Array): Promise<ParseResult> {
@@ -184,12 +198,18 @@ export async function parseCybermaxPdf(buffer: Buffer | Uint8Array): Promise<Par
 
   let sheetDate = '';
   const allFlights: ParsedFlight[] = [];
+  const allErrors: string[] = [];
 
   for (let i = 0; i < pageItems.length; i++) {
-    const { sheetDate: sd, flights } = parsePageItems(pageItems[i] || [], i === 0);
+    const { sheetDate: sd, flights, errors } = parsePageItems(pageItems[i] || [], i === 0, i + 1);
     if (sd) sheetDate = sd;
     allFlights.push(...flights);
+    allErrors.push(...errors);
   }
 
-  return { sheetDate, flights: allFlights };
+  if (!sheetDate) {
+    allErrors.push("No se detectó la fecha de la sheet en el PDF");
+  }
+
+  return { sheetDate, flights: allFlights, errors: allErrors };
 }

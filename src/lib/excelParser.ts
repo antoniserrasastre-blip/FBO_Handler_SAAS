@@ -160,6 +160,16 @@ export function parseExtrasExcel(buffer: Buffer): ExcelParseResult {
   let currentRegLeft: string | null = null;
   let currentRegRight: string | null = null;
 
+  // Cabeceras conocidas que no deben reportarse como matrículas dudosas
+  const HEADER_HINTS = /FECHA|CATERING|NETJETS|PRENSA|MCR|RELAY|VUELO|EXTRAS|SKYVALET/i;
+
+  function maybeReportSuspect(col: string, colLabel: string, rowIdx: number) {
+    if (!col) return;
+    if (col.length <= 1) return;
+    if (HEADER_HINTS.test(col)) return;
+    errors.push(`Fila ${rowIdx + 1}: valor "${col}" en columna ${colLabel} no parece matrícula y se ha ignorado`);
+  }
+
   for (let i = 2; i < specialRowStart; i++) {
     const row = rows[i] || [];
     const colA = row[0] != null ? String(row[0]).trim() : "";
@@ -172,6 +182,8 @@ export function parseExtrasExcel(buffer: Buffer): ExcelParseResult {
       if (colB) addDesc(currentRegLeft, colB);
     } else if (colB && currentRegLeft) {
       addDesc(currentRegLeft, colB);
+    } else if (colA && !isRegistration(colA)) {
+      maybeReportSuspect(colA, "A", i);
     }
 
     if (colE && isRegistration(colE)) {
@@ -179,6 +191,8 @@ export function parseExtrasExcel(buffer: Buffer): ExcelParseResult {
       if (colF) addDesc(currentRegRight, colF);
     } else if (colF && currentRegRight) {
       addDesc(currentRegRight, colF);
+    } else if (colE && !isRegistration(colE)) {
+      maybeReportSuspect(colE, "E", i);
     }
   }
 
@@ -232,12 +246,16 @@ export function parseExtrasExcel(buffer: Buffer): ExcelParseResult {
 
         // Parse reference: "12297037 - 3" → ref=12297037
         const refMatch = String(njeRefRaw).match(/^(\d+)/);
-        if (refMatch) {
+        if (!refMatch) {
+          errors.push(`Fila ${i + 1}: catering NetJets con ref "${njeRefRaw}" / reg "${njeRegRaw}" no parseable`);
+        } else {
           const ref = refMatch[1];
 
           // Parse reg: "CSPHF / P" or "CSPHF/C"
           const regTypeMatch = njeRegRaw.match(/^([A-Z0-9]+)\s*\/?\s*([PC])?$/i);
-          if (regTypeMatch) {
+          if (!regTypeMatch) {
+            errors.push(`Fila ${i + 1}: catering NetJets con ref "${njeRefRaw}" / reg "${njeRegRaw}" no parseable`);
+          } else {
             const reg = cleanReg(regTypeMatch[1]);
             const target = regTypeMatch[2]?.toUpperCase() === "C" ? "CREW"
               : regTypeMatch[2]?.toUpperCase() === "P" ? "PAX"
@@ -312,6 +330,10 @@ export function parseExtrasExcel(buffer: Buffer): ExcelParseResult {
 
   // Convert date like "13APR", "10ABR", "5MAY" to YYYY-MM-DD
   const parsedDate = parseExcelDate(date);
+
+  if (!date) {
+    errors.push("No se ha podido detectar la fecha del Excel — usar la fecha actual");
+  }
 
   return { date: parsedDate || date, extras, errors };
 }
