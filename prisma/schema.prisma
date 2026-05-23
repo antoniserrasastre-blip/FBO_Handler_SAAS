@@ -117,6 +117,7 @@ model Visit {
   movements   Movement[]
   services    Service[]
   lostItems   LostItem[]
+  crewItems   CrewItem[]
   eventLogs   EventLog[]
 
   createdAt   DateTime @default(now())
@@ -321,6 +322,36 @@ model CustomServicePreset {
   createdBy     User?    @relation(fields: [createdById], references: [id])
 
   @@index([createdById])
+}
+
+// ============================================================================
+// CrewItem — inventario de la crew guardado en llegada y devuelto en salida.
+// Reusa el catálogo de tipos de Service (termo, bolsa nevera/congelador,
+// vajilla, lavandería, custom) pero con semántica de almacenaje: la pata de
+// Llegadas lo registra (STORED) y la de Salidas lo devuelve (RETURNED). Es el
+// puente entre los dos puestos de filtro.
+// ============================================================================
+
+model CrewItem {
+  id           String    @id @default(cuid())
+  visitId      String
+  visit        Visit     @relation(fields: [visitId], references: [id], onDelete: Cascade)
+
+  type         String    // THERMOS | COOLER_BAG | STORAGE_BAG | DISHES | LAUNDRY | CUSTOM
+  customName   String?
+  quantity     Int       @default(1)
+  state        String    @default("STORED") // STORED | RETURNED
+  notes        String?
+
+  storedAt     DateTime  @default(now())
+  storedById   String?
+  returnedAt   DateTime?
+  returnedById String?
+
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([visitId])
 }
 
 model LostItem {

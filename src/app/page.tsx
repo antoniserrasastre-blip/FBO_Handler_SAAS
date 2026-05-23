@@ -463,45 +463,6 @@ function HomePageInner() {
     return () => window.clearTimeout(id);
   }, [visibleFlights]);
 
-  // Auto-scroll al primer vuelo activo en la primera carga
-  useEffect(() => {
-    if (didAutoScrollRef.current) return;
-    if (!visibleFlights.length) return;
-
-    const now = new Date();
-    const nowMin = now.getUTCHours() * 60 + now.getUTCMinutes();
-
-    const parseHHMM = (s: string | null | undefined): number | null => {
-      if (!s) return null;
-      const m = s.match(/^(\d{1,2}):(\d{2})$/);
-      return m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : null;
-    };
-
-    const target = visibleFlights.find((f) => {
-      if (f.state === "OFF_BLOCKS") return false;
-      const ref = parseHHMM(f.etd) ?? parseHHMM(f.eta);
-      if (ref === null) return true;
-      return ref >= nowMin - 30;
-    });
-
-    if (!target) return;
-
-    const id = window.setTimeout(() => {
-      const el = document.getElementById(`flight-${target.id}`);
-      if (!el) return;
-      const rect = el.getBoundingClientRect();
-      const inView = rect.top >= 0 && rect.top <= window.innerHeight - 100;
-      if (inView) {
-        didAutoScrollRef.current = true;
-        return;
-      }
-      el.scrollIntoView({ behavior: "smooth", block: "start" });
-      didAutoScrollRef.current = true;
-    }, 100);
-
-    return () => window.clearTimeout(id);
-  }, [visibleFlights]);
-
   // Seleccionar y enfocar el card de un vuelo desde alertas/stats. Si el vuelo
   // no está en `visibleFlights` por culpa de los filtros activos, los limpiamos
   // (con un toast informativo) y diferimos el scroll un frame para que React

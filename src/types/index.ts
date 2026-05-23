@@ -303,6 +303,23 @@ export const SHIFT_POST_LABELS: Record<ShiftPost, string> = {
   COORDINATOR: "Coordinador",
 };
 
+// Inventario de crew — catálogo de cosas que la crew deja guardadas en la
+// llegada y se devuelven en la salida. Mismo catálogo base que los servicios.
+export const CREW_ITEM_TYPES = ["THERMOS", "COOLER_BAG", "STORAGE_BAG", "DISHES", "LAUNDRY", "CUSTOM"] as const;
+export type CrewItemType = (typeof CREW_ITEM_TYPES)[number];
+
+export const CREW_ITEM_LABELS: Record<CrewItemType, string> = {
+  THERMOS: "Termo",
+  COOLER_BAG: "Bolsa nevera",
+  STORAGE_BAG: "Bolsa congelador",
+  DISHES: "Vajilla",
+  LAUNDRY: "Lavandería",
+  CUSTOM: "Otro",
+};
+
+export const CREW_ITEM_STATES = ["STORED", "RETURNED"] as const;
+export type CrewItemState = (typeof CREW_ITEM_STATES)[number];
+
 // Qué "mitad" del vuelo le interesa a cada puesto en la vista de turno.
 //  - ARRIVALS  → leg de llegada (recepción pax/crew, inventario que deja la crew)
 //  - DEPARTURES→ leg de salida (validación seguridad, entrega extras/servicios)

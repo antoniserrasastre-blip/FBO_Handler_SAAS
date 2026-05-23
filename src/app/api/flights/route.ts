@@ -47,6 +47,7 @@ export async function GET(req: NextRequest) {
         : true,
       services: { orderBy: { createdAt: "asc" } },
       lostItems: { orderBy: { createdAt: "asc" } },
+      crewItems: { orderBy: { createdAt: "asc" } },
     },
   });
 
@@ -210,6 +211,7 @@ export async function POST(req: NextRequest) {
       movements: true,
       services: true,
       lostItems: true,
+      crewItems: true,
     },
   });
   return NextResponse.json(refreshed ? toFlightView(refreshed) : null, { status: 201 });
