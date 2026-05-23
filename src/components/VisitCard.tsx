@@ -40,6 +40,7 @@ import { getFlightClock } from "@/lib/flightUrgency";
 import { LastModifiedBadge } from "@/components/LastModifiedBadge";
 import { OpsToggleStrip } from "@/components/OpsToggleStrip";
 import { ServiceChipRow } from "@/components/ServiceChipRow";
+import { CrewInventory } from "@/components/CrewInventory";
 import { AddServicePicker } from "@/components/AddServicePicker";
 import { StateStepper } from "@/components/StateStepper";
 import { InlineNumber } from "@/components/InlineNumber";
@@ -339,6 +340,11 @@ export const VisitCard = memo(function VisitCard({
         onToggle={onServiceToggle}
         readOnly={readOnly}
       />
+
+      {/* ─── Inventario de crew (guardado en llegada → devuelto en salida) ─── */}
+      <div onClick={(e) => e.stopPropagation()}>
+        <CrewInventory visitId={flight.id} items={flight.crewItems || []} readOnly={readOnly} />
+      </div>
 
       {/* ─── Ops toggle strip — touch-friendly cycle buttons ────────── */}
       {onUpdate && !readOnly && (
