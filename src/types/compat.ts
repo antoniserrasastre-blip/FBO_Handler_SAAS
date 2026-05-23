@@ -2,7 +2,7 @@
 // The v1 Prisma models (Flight, DaySheet, Service, Passenger, CrewMember,
 // LostItem) no longer exist; these aliases bridge UI imports to the v2 shape.
 
-export type { FlightView as Flight, FlightViewService as Service, FlightViewLostItem as LostItem } from "./v2";
+export type { FlightView as Flight, FlightViewService as Service, FlightViewLostItem as LostItem, FlightViewCrewItem as CrewItem } from "./v2";
 
 export interface DaySheet {
   id: string;

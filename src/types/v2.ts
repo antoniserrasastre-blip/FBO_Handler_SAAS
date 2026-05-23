@@ -124,6 +124,7 @@ export interface FlightView {
 
   services?: FlightViewService[];
   lostItems?: FlightViewLostItem[];
+  crewItems?: FlightViewCrewItem[];
 
   createdAt: Date | string;
   updatedAt: Date | string;
@@ -161,5 +162,18 @@ export interface FlightViewLostItem {
   claimedAt: string | null;
   deliveredAt: string | null;
   claimedBy: string | null;
+  createdAt: Date | string;
+}
+
+export interface FlightViewCrewItem {
+  id: string;
+  visitId?: string;
+  type: string;            // CrewItemType
+  customName: string | null;
+  quantity: number;
+  state: string;           // STORED | RETURNED
+  notes: string | null;
+  storedAt: Date | string | null;
+  returnedAt: Date | string | null;
   createdAt: Date | string;
 }

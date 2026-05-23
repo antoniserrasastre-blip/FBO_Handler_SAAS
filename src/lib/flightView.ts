@@ -8,7 +8,7 @@
 // to find the right Movement row (ARRIVAL vs DEPARTURE) and map the legacy
 // field name to its v2 location.
 
-import type { FlightView, FlightViewService, FlightViewLostItem } from "@/types/v2";
+import type { FlightView, FlightViewService, FlightViewLostItem, FlightViewCrewItem } from "@/types/v2";
 
 type AnyRecord = Record<string, unknown>;
 
@@ -27,6 +27,7 @@ interface VisitWithMovements {
   movements: AnyRecord[];
   services?: unknown[];
   lostItems?: unknown[];
+  crewItems?: unknown[];
 }
 
 function pick<T extends AnyRecord>(rows: T[], dir: "ARRIVAL" | "DEPARTURE"): T | null {
@@ -153,6 +154,7 @@ export function toFlightView(visit: VisitWithMovements): FlightView {
 
     services: visit.services as FlightViewService[] | undefined,
     lostItems: visit.lostItems as FlightViewLostItem[] | undefined,
+    crewItems: visit.crewItems as FlightViewCrewItem[] | undefined,
     ata: (arr?.ata as string | null) ?? null,
     atd: (dep?.atd as string | null) ?? null,
     livePhase: (liveSource?.livePhase as string | null) ?? null,
