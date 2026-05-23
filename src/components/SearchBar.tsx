@@ -5,6 +5,7 @@ import { Flight, Service, LostItem, EventLog } from "@/types/compat";
 import { findOperator } from "@/lib/operators";
 import { getRequiredAuthorities } from "@/lib/countries";
 import { isFarFromGA } from "@/lib/parkingStands";
+import { getAirportInfo } from "@/lib/airports";
 import { FLIGHT_STATE_CONFIG, FlightState } from "@/types";
 import { CloseIcon } from "./Icons";
 import { Search } from "lucide-react";
@@ -114,6 +115,13 @@ function matchesSingleToken(flight: FlightWithRelations, token: string): boolean
   // --- Origins / destinations ---
   if (flight.origin?.toLowerCase().includes(token)) return true;
   if (flight.destination?.toLowerCase().includes(token)) return true;
+  // Buscar también por ciudad/nombre de aeropuerto (token sin acentos vs nombre normalizado)
+  const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  const tokenNorm = norm(token);
+  const originInfo = getAirportInfo(flight.origin);
+  if (originInfo && (norm(originInfo.city).includes(tokenNorm) || norm(originInfo.name).includes(tokenNorm))) return true;
+  const destInfo = getAirportInfo(flight.destination);
+  if (destInfo && (norm(destInfo.city).includes(tokenNorm) || norm(destInfo.name).includes(tokenNorm))) return true;
 
   // --- Fuel ---
   if ((token === "fuel" || token === "combustible") && flight.fuelState !== "SERVED") return true;

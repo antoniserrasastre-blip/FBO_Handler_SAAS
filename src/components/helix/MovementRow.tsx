@@ -6,6 +6,7 @@ import { StatePill, type FboState } from "./Pill";
 import { ServicePip, type ServicePipState } from "./ServicePip";
 import { QuickTimeEdit } from "@/components/QuickTimeEdit";
 import { checkCompatibility, isFarFromGA, getStandDescription } from "@/lib/parkingStands";
+import { getAirportInfo } from "@/lib/airports";
 
 export interface MovementRowProps {
   direction: "ARRIVAL" | "DEPARTURE";
@@ -29,6 +30,8 @@ export interface MovementRowProps {
   aircraftType?: string | null;
   /** Callsign for this specific leg. Rendered as a compact pill next to the airport. */
   callsign?: string | null;
+  /** Render la ciudad junto al ICAO (e.g. "LFPB · París"). */
+  showCity?: boolean;
 }
 
 const DIR_LABEL: Record<MovementRowProps["direction"], string> = {
@@ -52,8 +55,10 @@ export function MovementRow({
   sheetDate,
   aircraftType,
   callsign,
+  showCity,
 }: MovementRowProps) {
   const showDate = date && date !== sheetDate;
+  const cityInfo = showCity && airport ? getAirportInfo(airport) : null;
 
   const parkingMeta = (() => {
     if (!parking) return null;
@@ -83,6 +88,11 @@ export function MovementRow({
       <div className="leg-route">
         <div className="airport">
           {airport || "—"}
+          {cityInfo ? (
+            <span className="ml-1.5 align-middle text-xs font-normal text-ink-3" title={cityInfo.name}>
+              {cityInfo.city}
+            </span>
+          ) : null}
           {callsign ? (
             <span
               className="ml-1.5 inline-flex cursor-copy items-center rounded bg-bg-subtle px-1.5 py-px align-middle font-mono text-[11px] font-medium text-ink-2"
