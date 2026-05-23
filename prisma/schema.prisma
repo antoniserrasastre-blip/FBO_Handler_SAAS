@@ -22,6 +22,29 @@ model User {
   updatedAt DateTime   @updatedAt
   eventLogs EventLog[]
   servicePresets CustomServicePreset[]
+  shifts    Shift[]
+  assignedVisits Visit[] @relation("AssignedVisits")
+}
+
+// ============================================================================
+// Shift — fichaje de turno. Un usuario abre un turno con uno o varios puestos
+// activos (Rampa / Llegadas / Salidas / Runner / Coordinador). El puesto es
+// mutable en caliente; multi-puesto soportado vía CSV en `posts`.
+// ============================================================================
+
+model Shift {
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  posts         String    // CSV de ShiftPost: "ARRIVALS,DEPARTURES" | "RAMP" | "RUNNER"
+  startedAt     DateTime  @default(now())
+  endedAt       DateTime?               // null mientras el turno está abierto
+  handoverNotes String?                 // resumen al cerrar, para el siguiente turno
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([endedAt])
 }
 
 // ============================================================================
@@ -87,6 +110,10 @@ model Visit {
   departureDate DateTime? // UTC date of actual departure
   notes         String?
 
+  // Rampa: el coordinador asigna el vuelo entero a un handler de turno.
+  assignedToId  String?
+  assignedTo    User?    @relation("AssignedVisits", fields: [assignedToId], references: [id])
+
   movements   Movement[]
   services    Service[]
   lostItems   LostItem[]
@@ -98,6 +125,7 @@ model Visit {
   @@index([aircraftId])
   @@index([palmaDay])
   @@index([operatorId])
+  @@index([assignedToId])
 }
 
 model Movement {
