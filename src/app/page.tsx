@@ -18,6 +18,7 @@ import { QuickAddFlight } from "@/components/QuickAddFlight";
 import { PassengerCrewModal } from "@/components/PassengerCrewModal";
 import { useOverdueAlert } from "@/hooks/useOverdueAlert";
 import { ShiftHandover } from "@/components/ShiftHandover";
+import { ShiftBar } from "@/components/ShiftBar";
 import { HomeActionBar } from "@/components/HomeActionBar";
 import { HelixButton, Stat, StatBand, useDate } from "@/components/helix";
 
@@ -26,6 +27,9 @@ import { shortDate } from "@/app/dia/diaHelpers";
 import { isFlightPending } from "@/lib/pendingFilter";
 import { flightWithinHours } from "@/lib/timeWindow";
 import { isServiceOverdue } from "@/lib/overdue";
+import { visibleForPosts } from "@/lib/shiftView";
+import { SHIFT_POST_LABELS } from "@/types";
+import type { ShiftDTO } from "@/hooks/useShift";
 
 const PENDING_ONLY_KEY = "fbo:filters:pendingOnly";
 // `NEXT_HOURS_KEY` reemplaza la antigua `NEXT_8H_KEY` ("1"/"0"). El chip ahora
@@ -88,6 +92,12 @@ function HomePageInner() {
   const [pendingOnly, setPendingOnly] = useState<boolean>(false);
   const [nextHours, setNextHours] = useState<NextHoursWindow>(0);
   const [hideCancelled, setHideCancelled] = useState<boolean>(false);
+
+  // Modo turno: cuando hay turno fichado, la vista se reduce a la cola del
+  // puesto (llegadas/salidas/rampa/runner). `shiftQueueActive` permite alternar
+  // entre "mi cola" y "toda la jornada" sin cerrar el turno.
+  const [myShift, setMyShift] = useState<ShiftDTO | null>(null);
+  const [shiftQueueActive, setShiftQueueActive] = useState<boolean>(true);
   // Tick que se incrementa cada minuto cuando "Próximas Xh" está activo y es
   // hoy, para que un vuelo entre/salga de la ventana sin refresco manual.
   const [nowTick, setNowTick] = useState(0);
@@ -406,10 +416,13 @@ function HomePageInner() {
     if (pendingOnly) xs = xs.filter(isFlightPending);
     if (nextHours > 0 && isToday) xs = xs.filter((f) => flightWithinHours(f, nextHours));
     if (hideCancelled) xs = xs.filter((f) => f.flightCategory !== "CANCELLED");
+    if (myShift && shiftQueueActive && isToday && myShift.posts.length > 0) {
+      xs = visibleForPosts(xs, { posts: myShift.posts, currentUserId: session?.user?.id ?? null });
+    }
     return xs;
     // `nowTick` fuerza recálculo cada minuto cuando el filtro está activo.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filteredFlights, pendingOnly, nextHours, hideCancelled, isToday, nowTick]);
+  }, [filteredFlights, pendingOnly, nextHours, hideCancelled, isToday, nowTick, myShift, shiftQueueActive]);
 
   // Auto-scroll al primer vuelo activo en la primera carga
   useEffect(() => {
@@ -663,6 +676,28 @@ function HomePageInner() {
         <div className="print-header">
           MALLORCAIR FBO — Orden del dia {date.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
         </div>
+
+        {/* Barra de turno — fichaje y puestos. Con turno activo, filtra la vista a tu cola. */}
+        <div className="mb-3 no-print">
+          <ShiftBar onShiftChange={setMyShift} />
+          {myShift && isToday && myShift.posts.length > 0 ? (
+            <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-ink-3">
+              <span>
+                {shiftQueueActive
+                  ? `Mostrando tu cola — ${myShift.posts.map((p) => SHIFT_POST_LABELS[p]).join(", ")} (${visibleFlights.length})`
+                  : "Mostrando toda la jornada"}
+              </span>
+              <button
+                type="button"
+                onClick={() => setShiftQueueActive((v) => !v)}
+                className="rounded-hx-pill bg-bg-muted px-2 py-0.5 font-medium text-ink-2 hover:bg-bg-sunken"
+              >
+                {shiftQueueActive ? "Ver toda la jornada" : "Ver mi cola"}
+              </button>
+            </div>
+          ) : null}
+        </div>
+
         {/* Filter toggles — pendingOnly + nextHours + hideCancelled, capa AND sobre SearchBar. */}
         {flights.length > 0 && (
           <FilterToggleStrip
