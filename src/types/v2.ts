@@ -125,6 +125,7 @@ export interface FlightView {
   services?: FlightViewService[];
   lostItems?: FlightViewLostItem[];
   crewItems?: FlightViewCrewItem[];
+  tasks?: FlightViewTask[];
 
   createdAt: Date | string;
   updatedAt: Date | string;
@@ -176,4 +177,13 @@ export interface FlightViewCrewItem {
   storedAt: Date | string | null;
   returnedAt: Date | string | null;
   createdAt: Date | string;
+}
+
+export interface FlightViewTask {
+  id: string;
+  movementId?: string;
+  type: string;                          // TaskType
+  state: string;                         // PENDING | DONE | NA
+  direction: "ARRIVAL" | "DEPARTURE";
+  doneAt: Date | string | null;
 }

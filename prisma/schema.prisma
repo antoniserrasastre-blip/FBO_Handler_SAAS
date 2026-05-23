@@ -184,6 +184,7 @@ model Movement {
 
   passengers       Passenger[]
   crewAssignments  CrewAssignment[]
+  tasks            MovementTask[]
   eventLogs        EventLog[]
 
   // OpenSky live-tracking snapshot (last seen). Nullable until first match.
@@ -322,6 +323,28 @@ model CustomServicePreset {
   createdBy     User?    @relation(fields: [createdById], references: [id])
 
   @@index([createdById])
+}
+
+// ============================================================================
+// MovementTask — tarea de checklist por leg (llegada/salida). Cubre el trabajo
+// que no tiene control propio (GPU, agua, limpieza, validación de seguridad,
+// policía avisada, mascotas, recepción de pax/crew). El catálogo de tareas
+// aplicables y su puesto vive en src/lib/checklist.ts (declarativo, condicional).
+// ============================================================================
+
+model MovementTask {
+  id          String    @id @default(cuid())
+  movementId  String
+  movement    Movement  @relation(fields: [movementId], references: [id], onDelete: Cascade)
+  type        String    // ver TASK_TYPES en src/types
+  state       String    @default("PENDING") // PENDING | DONE | NA
+  doneById    String?
+  doneAt      DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([movementId, type])
+  @@index([movementId])
 }
 
 // ============================================================================

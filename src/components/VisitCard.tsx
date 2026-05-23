@@ -22,7 +22,7 @@
 import { useMemo, useState, memo } from "react";
 import type { Flight, Service, LostItem, EventLog } from "@/types/compat";
 import type { FlightCategory } from "@/types/v2";
-import { normalizeFlightState } from "@/types";
+import { normalizeFlightState, type ShiftPost } from "@/types";
 import { StatePill, type FboState } from "@/components/helix/Pill";
 import { HelixPill } from "@/components/helix/Pill";
 import { MovementRow } from "@/components/helix/MovementRow";
@@ -41,6 +41,7 @@ import { LastModifiedBadge } from "@/components/LastModifiedBadge";
 import { OpsToggleStrip } from "@/components/OpsToggleStrip";
 import { ServiceChipRow } from "@/components/ServiceChipRow";
 import { CrewInventory } from "@/components/CrewInventory";
+import { ChecklistPanel } from "@/components/ChecklistPanel";
 import { AddServicePicker } from "@/components/AddServicePicker";
 import { StateStepper } from "@/components/StateStepper";
 import { InlineNumber } from "@/components/InlineNumber";
@@ -124,6 +125,8 @@ export interface VisitCardProps {
   onOpenPeople?: (visitId: string, direction: "ARRIVAL" | "DEPARTURE") => void;
   /** Operating-day date of the sheet (DD/MM/YY). Used to mark overnight legs. */
   sheetDate?: string | null;
+  /** Puestos de turno activos. Si se pasan, el checklist se filtra a esas tareas. */
+  shiftPosts?: ShiftPost[];
   readOnly?: boolean;
 }
 
@@ -146,6 +149,7 @@ export const VisitCard = memo(function VisitCard({
   onDelete,
   onOpenPeople,
   sheetDate,
+  shiftPosts,
   readOnly = false,
 }: VisitCardProps) {
   const [expanded, setExpanded] = useState(false);
@@ -344,6 +348,11 @@ export const VisitCard = memo(function VisitCard({
       {/* ─── Inventario de crew (guardado en llegada → devuelto en salida) ─── */}
       <div onClick={(e) => e.stopPropagation()}>
         <CrewInventory visitId={flight.id} items={flight.crewItems || []} readOnly={readOnly} />
+      </div>
+
+      {/* ─── Checklist de turno (tareas adaptadas al vuelo, filtradas por puesto) ─── */}
+      <div onClick={(e) => e.stopPropagation()}>
+        <ChecklistPanel flight={flight} posts={shiftPosts} readOnly={readOnly} />
       </div>
 
       {/* ─── Ops toggle strip — touch-friendly cycle buttons ────────── */}
