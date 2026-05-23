@@ -35,6 +35,8 @@ import { PassportField } from "@/components/helix/PassportField";
 import { ChevronDown, ChevronUp, StickyNote } from "lucide-react";
 import { LostItemIcon } from "@/components/Icons";
 import { TurnaroundCountdown } from "@/components/TurnaroundCountdown";
+import { useLiveCountdown } from "@/hooks/useLiveCountdown";
+import { getFlightClock } from "@/lib/flightUrgency";
 import { LastModifiedBadge } from "@/components/LastModifiedBadge";
 import { OpsToggleStrip } from "@/components/OpsToggleStrip";
 import { ServiceChipRow } from "@/components/ServiceChipRow";
@@ -188,9 +190,28 @@ export const VisitCard = memo(function VisitCard({
     [crew]
   );
 
+  // Urgency outline — refleja getFlightClock + useLiveCountdown
+  const clock = getFlightClock({ state: flight.state, eta: flight.eta, etd: flight.etd });
+  const minutesLeft = useLiveCountdown(clock.ref);
+  const urgency: "past" | "critical" | "warning" | null =
+    isCancelled || minutesLeft === null || clock.kind === null
+      ? null
+      : minutesLeft < 0
+        ? "past"
+        : minutesLeft <= 30
+          ? "critical"
+          : minutesLeft <= 60
+            ? "warning"
+            : null;
+
   return (
     <article
-      className={`hx-visit-card ${isSelected ? "selected" : ""} ${isCancelled ? "cancelled" : ""}`}
+      className={`hx-visit-card ${isSelected ? "selected" : ""} ${isCancelled ? "cancelled" : ""} ${
+        urgency === "past" ? "ring-2 ring-danger ring-offset-1" :
+        urgency === "critical" ? "ring-2 ring-warning ring-offset-1" :
+        urgency === "warning" ? "ring-1 ring-warning/60" :
+        ""
+      }`}
       onClick={() => onSelect?.(flight.id)}
     >
       {/* ─── Hero ──────────────────────────────────────────────────── */}
