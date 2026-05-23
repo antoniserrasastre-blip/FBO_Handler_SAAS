@@ -283,6 +283,7 @@ export const VisitCard = memo(function VisitCard({
           cancelled={isCancelled}
           date={flight.arrivalDate}
           sheetDate={sheetDate}
+          showCity
           onTimeSave={onUpdate && !readOnly ? (v) => onUpdate(flight.id, { eta: v }) : undefined}
         />
         <MovementRow
@@ -298,6 +299,7 @@ export const VisitCard = memo(function VisitCard({
           cancelled={isCancelled}
           date={flight.departureDate}
           sheetDate={sheetDate}
+          showCity
           onTimeSave={onUpdate && !readOnly ? (v) => onUpdate(flight.id, { etd: v }) : undefined}
         />
       </div>
