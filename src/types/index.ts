@@ -290,6 +290,32 @@ export const ROLE_LABELS: Record<Role, string> = {
   VIEWER: "Viewer (solo lectura)",
 };
 
+// Shift posts — el puesto operativo dentro de un turno fichado. Distinto del
+// `Role` (permisos). Un turno puede tener varios puestos activos a la vez.
+export const SHIFT_POSTS = ["RAMP", "ARRIVALS", "DEPARTURES", "RUNNER", "COORDINATOR"] as const;
+export type ShiftPost = (typeof SHIFT_POSTS)[number];
+
+export const SHIFT_POST_LABELS: Record<ShiftPost, string> = {
+  RAMP: "Rampa",
+  ARRIVALS: "Llegadas",
+  DEPARTURES: "Salidas",
+  RUNNER: "Runner",
+  COORDINATOR: "Coordinador",
+};
+
+// Qué "mitad" del vuelo le interesa a cada puesto en la vista de turno.
+//  - ARRIVALS  → leg de llegada (recepción pax/crew, inventario que deja la crew)
+//  - DEPARTURES→ leg de salida (validación seguridad, entrega extras/servicios)
+//  - RAMP / COORDINATOR → vuelo completo
+//  - RUNNER    → cola de servicios pendientes (transversal)
+export const SHIFT_POST_FOCUS: Record<ShiftPost, "ARRIVAL" | "DEPARTURE" | "BOTH" | "SERVICES"> = {
+  RAMP: "BOTH",
+  ARRIVALS: "ARRIVAL",
+  DEPARTURES: "DEPARTURE",
+  RUNNER: "SERVICES",
+  COORDINATOR: "BOTH",
+};
+
 // Extend next-auth types
 declare module "next-auth" {
   interface User {
