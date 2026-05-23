@@ -805,6 +805,7 @@ function HomePageInner() {
                     onBadgeClick={setSearchQuery}
                     onOpenDetail={(id) => router.push(`/dia?flight=${id}`)}
                     onOpenPeople={(visitId, direction) => setPeopleModal({ visitId, direction })}
+                    shiftPosts={myShift && shiftQueueActive && isToday ? myShift.posts : undefined}
                     readOnly={false}
                   />
                 </div>
