@@ -32,7 +32,7 @@ import { CategoryPill } from "@/components/helix/CategoryPill";
 import { RqstChip } from "@/components/helix/RqstChip";
 import { PetCount } from "@/components/helix/PetCount";
 import { PassportField } from "@/components/helix/PassportField";
-import { ChevronDown, ChevronUp, StickyNote, ListChecks, Package } from "lucide-react";
+import { ChevronDown, ChevronUp, StickyNote, ListChecks, Package, User } from "lucide-react";
 import { tasksForFlight, checklistProgress } from "@/lib/checklist";
 import { LostItemIcon } from "@/components/Icons";
 import { TurnaroundCountdown } from "@/components/TurnaroundCountdown";
@@ -128,6 +128,12 @@ export interface VisitCardProps {
   sheetDate?: string | null;
   /** Puestos de turno activos. Si se pasan, el checklist se filtra a esas tareas. */
   shiftPosts?: ShiftPost[];
+  /** Usuario actual: si coincide con flight.assignedToId, la tarjeta se marca "Mío". */
+  currentUserId?: string | null;
+  /** Trabajadores fichados a los que el coordinador puede asignar el vuelo. */
+  assignableUsers?: { id: string; name: string }[];
+  /** Asigna (o desasigna con null) el vuelo a un trabajador. Solo coordinador. */
+  onAssign?: (flightId: string, userId: string | null) => void;
   readOnly?: boolean;
 }
 
@@ -151,6 +157,9 @@ export const VisitCard = memo(function VisitCard({
   onOpenPeople,
   sheetDate,
   shiftPosts,
+  currentUserId,
+  assignableUsers,
+  onAssign,
   readOnly = false,
 }: VisitCardProps) {
   const [expanded, setExpanded] = useState(false);
@@ -163,6 +172,11 @@ export const VisitCard = memo(function VisitCard({
 
   const isCancelled = flight.flightCategory === "CANCELLED";
   const services = flight.services || [];
+
+  // Asignación: el coordinador edita; el resto la ve en modo lectura.
+  const isCoordinator = shiftPosts?.includes("COORDINATOR") ?? false;
+  const canAssign = isCoordinator && !!assignableUsers && !!onAssign && !readOnly;
+  const isMine = !!flight.assignedToId && flight.assignedToId === currentUserId;
 
   // Pernocta: use the persisted flag and fall back to date comparison so
   // legacy data (imports before isOvernight existed) still surfaces it.
@@ -244,6 +258,27 @@ export const VisitCard = memo(function VisitCard({
         <TurnaroundCountdown eta={flight.eta} etd={flight.etd} flightState={flight.state} />
 
         <div className="badges">
+          {/* Chip de asignación: editable para coordinador, lectura para el resto. */}
+          {canAssign && assignableUsers && onAssign ? (
+            <span className="hx-pill hx-pill-default" onClick={(e) => e.stopPropagation()} title="Asignar handler">
+              <User size={10} aria-hidden />
+              <InlineSelect
+                value={flight.assignedToId ?? ""}
+                options={["", ...assignableUsers.map((u) => u.id)]}
+                labels={{ "": "Sin asignar", ...Object.fromEntries(assignableUsers.map((u) => [u.id, u.name])) }}
+                onSave={(v) => onAssign(flight.id, v || null)}
+              />
+            </span>
+          ) : flight.assignedToName ? (
+            <span className="hx-pill hx-pill-default" title={`Asignado a ${flight.assignedToName}`}>
+              <User size={10} aria-hidden /> {flight.assignedToName}
+            </span>
+          ) : null}
+          {isMine ? (
+            <span className="hx-pill hx-pill-info" title="Vuelo asignado a ti">
+              Mío
+            </span>
+          ) : null}
           <CategoryPill
             category={(flight.flightCategory || "COMMERCIAL") as FlightCategory}
             modified={flight.modifiedFlag}
