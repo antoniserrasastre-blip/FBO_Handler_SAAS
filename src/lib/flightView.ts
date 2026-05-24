@@ -9,6 +9,7 @@
 // field name to its v2 location.
 
 import type { FlightView, FlightViewService, FlightViewLostItem, FlightViewCrewItem, FlightViewTask } from "@/types/v2";
+import { resolveAirport } from "./airportsFallback";
 
 type AnyRecord = Record<string, unknown>;
 
@@ -78,6 +79,11 @@ export function toFlightView(visit: VisitWithMovements): FlightView {
   const arr = pick(visit.movements as AnyRecord[], "ARRIVAL");
   const dep = pick(visit.movements as AnyRecord[], "DEPARTURE");
 
+  // Resolve airport city/name once per leg (curated catalog first, then the
+  // OurAirports fallback). Done here so the client never loads the big dataset.
+  const originInfo = resolveAirport((arr?.origin as string | null) ?? null);
+  const destInfo = resolveAirport((dep?.destination as string | null) ?? null);
+
   // Prefer DEPARTURE for "primary" fields like callsign/state, fall back to ARRIVAL.
   // This matches the old Flight model where a single row carried both legs and
   // the callsign typically referred to the departure leg in UI displays.
@@ -111,10 +117,14 @@ export function toFlightView(visit: VisitWithMovements): FlightView {
     aircraftType: visit.aircraft?.aircraftType || "",
 
     origin: (arr?.origin as string | null) ?? null,
+    originCity: originInfo?.city ?? null,
+    originName: originInfo?.name ?? null,
     eta: (arr?.eta as string | null) ?? null,
     arrivalDate: dateToDdMm((visit.arrivalDate ?? (arr?.scheduledDate as Date | null)) || null),
 
     destination: (dep?.destination as string | null) ?? null,
+    destCity: destInfo?.city ?? null,
+    destName: destInfo?.name ?? null,
     etd: (dep?.etd as string | null) ?? null,
     departureDate: dateToDdMm((visit.departureDate ?? (dep?.scheduledDate as Date | null)) || null),
     arrivalInstant: combineInstant(

@@ -55,6 +55,12 @@ export interface FlightView {
   destination: string | null;
   etd: string | null;
   departureDate: string | null;        // "DD/MM"
+  // Resolved airport city/name (curated catalog first, OurAirports fallback).
+  // Filled server-side in toFlightView() so the client never loads the big dataset.
+  originCity: string | null;
+  originName: string | null;
+  destCity: string | null;
+  destName: string | null;
   /**
    * Combined UTC instant of the arrival (scheduledDate of ARRIVAL Movement
    * + eta HH:MM Zulu). Null when either piece is missing. Used by the

@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
+    "build:airports": "tsx scripts/buildAirports.ts",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:push-turso": "tsx scripts/push-turso-schema.ts",

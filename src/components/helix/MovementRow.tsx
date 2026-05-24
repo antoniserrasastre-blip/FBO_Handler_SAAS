@@ -6,7 +6,6 @@ import { StatePill, type FboState } from "./Pill";
 import { ServicePip, type ServicePipState } from "./ServicePip";
 import { QuickTimeEdit } from "@/components/QuickTimeEdit";
 import { checkCompatibility, isFarFromGA, getStandDescription } from "@/lib/parkingStands";
-import { getAirportInfo } from "@/lib/airports";
 
 export interface MovementRowProps {
   direction: "ARRIVAL" | "DEPARTURE";
@@ -32,6 +31,11 @@ export interface MovementRowProps {
   callsign?: string | null;
   /** Render la ciudad junto al ICAO (e.g. "LFPB · París"). */
   showCity?: boolean;
+  // city/name vienen pre-resueltos desde el servidor (FlightView): primero
+  // el catálogo curado, luego el fallback de OurAirports. El cliente ya no
+  // resuelve el ICAO localmente.
+  city?: string | null;
+  name?: string | null;
 }
 
 const DIR_LABEL: Record<MovementRowProps["direction"], string> = {
@@ -56,9 +60,11 @@ export function MovementRow({
   aircraftType,
   callsign,
   showCity,
+  city,
+  name,
 }: MovementRowProps) {
   const showDate = date && date !== sheetDate;
-  const cityInfo = showCity && airport ? getAirportInfo(airport) : null;
+  const showCityName = Boolean(showCity && city);
 
   const parkingMeta = (() => {
     if (!parking) return null;
@@ -88,9 +94,9 @@ export function MovementRow({
       <div className="leg-route">
         <div className="airport">
           {airport || "—"}
-          {cityInfo ? (
-            <span className="ml-1.5 align-middle text-xs font-normal text-ink-3" title={cityInfo.name}>
-              {cityInfo.city}
+          {showCityName ? (
+            <span className="ml-1.5 align-middle text-xs font-normal text-ink-3" title={name ?? undefined}>
+              {city}
             </span>
           ) : null}
           {callsign ? (

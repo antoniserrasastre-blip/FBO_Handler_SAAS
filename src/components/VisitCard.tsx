@@ -446,6 +446,8 @@ export const VisitCard = memo(function VisitCard({
                   date={flight.arrivalDate}
                   sheetDate={sheetDate}
                   showCity
+                  city={flight.originCity}
+                  name={flight.originName}
                   onTimeSave={onUpdate && !readOnly ? (v) => onUpdate(flight.id, { eta: v }) : undefined}
                 />
               ) : (
@@ -463,6 +465,8 @@ export const VisitCard = memo(function VisitCard({
                   date={flight.departureDate}
                   sheetDate={sheetDate}
                   showCity
+                  city={flight.destCity}
+                  name={flight.destName}
                   onTimeSave={onUpdate && !readOnly ? (v) => onUpdate(flight.id, { etd: v }) : undefined}
                 />
               )}
