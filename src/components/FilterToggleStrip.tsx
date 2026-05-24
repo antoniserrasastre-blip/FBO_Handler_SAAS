@@ -20,18 +20,24 @@ export interface FilterToggleStripProps {
   pendingOnly: boolean;
   nextHours: NextHoursWindow;
   hideCancelled: boolean;
+  mineOnly?: boolean;
   /** When false, the "Próximas Xh" chip is hidden (e.g. !isToday). */
   showNextHours: boolean;
+  /** When false, the "Mis vuelos" chip is hidden (e.g. no active shift queue). */
+  showMineOnly?: boolean;
   /** Count over the full flights list (pre-search) for the pending chip. */
   pendingCount?: number;
   /** Count of flights matching the CURRENT window (or 8h when OFF, see page.tsx). */
   nextHoursCount?: number;
   /** Count over the full flights list (pre-search) for the cancelled chip. */
   hideCancelledCount?: number;
+  /** Count of flights assigned to the current user (pre-search). */
+  mineOnlyCount?: number;
   onChange: (next: {
     pendingOnly: boolean;
     nextHours: NextHoursWindow;
     hideCancelled: boolean;
+    mineOnly: boolean;
   }) => void;
 }
 
@@ -72,10 +78,13 @@ export function FilterToggleStrip({
   pendingOnly,
   nextHours,
   hideCancelled,
+  mineOnly = false,
   showNextHours,
+  showMineOnly = false,
   pendingCount,
   nextHoursCount,
   hideCancelledCount,
+  mineOnlyCount,
   onChange,
 }: FilterToggleStripProps) {
   const nextHoursActive = nextHours > 0;
@@ -85,7 +94,7 @@ export function FilterToggleStrip({
         type="button"
         aria-pressed={pendingOnly}
         onClick={() =>
-          onChange({ pendingOnly: !pendingOnly, nextHours, hideCancelled })
+          onChange({ pendingOnly: !pendingOnly, nextHours, hideCancelled, mineOnly })
         }
         className={`${CHIP_CLASSES} ${pendingOnly ? ACTIVE_CLASSES : INACTIVE_CLASSES}`}
       >
@@ -105,6 +114,7 @@ export function FilterToggleStrip({
               pendingOnly,
               nextHours: NEXT_HOURS_CYCLE[nextHours],
               hideCancelled,
+              mineOnly,
             })
           }
           className={`${CHIP_CLASSES} ${nextHoursActive ? ACTIVE_CLASSES : INACTIVE_CLASSES}`}
@@ -120,7 +130,7 @@ export function FilterToggleStrip({
         type="button"
         aria-pressed={hideCancelled}
         onClick={() =>
-          onChange({ pendingOnly, nextHours, hideCancelled: !hideCancelled })
+          onChange({ pendingOnly, nextHours, hideCancelled: !hideCancelled, mineOnly })
         }
         className={`${CHIP_CLASSES} ${hideCancelled ? ACTIVE_CLASSES : INACTIVE_CLASSES}`}
       >
@@ -129,6 +139,22 @@ export function FilterToggleStrip({
           <span className="ml-1 opacity-70">· {hideCancelledCount}</span>
         ) : null}
       </button>
+
+      {showMineOnly ? (
+        <button
+          type="button"
+          aria-pressed={mineOnly}
+          onClick={() =>
+            onChange({ pendingOnly, nextHours, hideCancelled, mineOnly: !mineOnly })
+          }
+          className={`${CHIP_CLASSES} ${mineOnly ? ACTIVE_CLASSES : INACTIVE_CLASSES}`}
+        >
+          Mis vuelos
+          {mineOnlyCount !== undefined && mineOnlyCount > 0 ? (
+            <span className="ml-1 opacity-70">· {mineOnlyCount}</span>
+          ) : null}
+        </button>
+      ) : null}
     </div>
   );
 }

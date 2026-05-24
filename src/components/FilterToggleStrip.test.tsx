@@ -51,6 +51,7 @@ describe("FilterToggleStrip", () => {
       pendingOnly: true,
       nextHours: 0,
       hideCancelled: false,
+      mineOnly: false,
     });
   });
 
@@ -74,6 +75,7 @@ describe("FilterToggleStrip", () => {
       pendingOnly: true,
       nextHours: 4,
       hideCancelled: false,
+      mineOnly: false,
     });
   });
 
@@ -95,6 +97,7 @@ describe("FilterToggleStrip", () => {
       pendingOnly: false,
       nextHours: 8,
       hideCancelled: false,
+      mineOnly: false,
     });
   });
 
@@ -116,6 +119,7 @@ describe("FilterToggleStrip", () => {
       pendingOnly: false,
       nextHours: 0,
       hideCancelled: false,
+      mineOnly: false,
     });
   });
 
@@ -135,6 +139,7 @@ describe("FilterToggleStrip", () => {
       pendingOnly: true,
       nextHours: 4,
       hideCancelled: true,
+      mineOnly: false,
     });
   });
 

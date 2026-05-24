@@ -38,6 +38,7 @@ const PENDING_ONLY_KEY = "fbo:filters:pendingOnly";
 const NEXT_HOURS_KEY = "fbo:filters:nextHours";
 const LEGACY_NEXT_8H_KEY = "fbo:filters:next8h";
 const HIDE_CANCELLED_KEY = "fbo:filters:hideCancelled";
+const MINE_ONLY_KEY = "fbo:filters:mineOnly";
 
 type NextHoursWindow = 0 | 4 | 8;
 
@@ -92,6 +93,9 @@ function HomePageInner() {
   const [pendingOnly, setPendingOnly] = useState<boolean>(false);
   const [nextHours, setNextHours] = useState<NextHoursWindow>(0);
   const [hideCancelled, setHideCancelled] = useState<boolean>(false);
+  // "Mis vuelos" — solo los vuelos asignados al usuario actual. Útil para el
+  // pistero en turno: su pestaña muestra "lo suyo". Solo aplica con cola activa.
+  const [mineOnly, setMineOnly] = useState<boolean>(false);
 
   // Modo turno: cuando hay turno fichado, la vista se reduce a la cola del
   // puesto (llegadas/salidas/rampa/runner). `shiftQueueActive` permite alternar
@@ -143,6 +147,7 @@ function HomePageInner() {
         if (legacy !== null) window.localStorage.removeItem(LEGACY_NEXT_8H_KEY);
       }
       if (window.localStorage.getItem(HIDE_CANCELLED_KEY) === "1") setHideCancelled(true);
+      if (window.localStorage.getItem(MINE_ONLY_KEY) === "1") setMineOnly(true);
     } catch {
       // localStorage no disponible (modo privado, sandbox, etc.) — sin coste.
     }
@@ -173,6 +178,14 @@ function HomePageInner() {
       // ignore
     }
   }, [hideCancelled]);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(MINE_ONLY_KEY, mineOnly ? "1" : "0");
+    } catch {
+      // ignore
+    }
+  }, [mineOnly]);
 
   const allServices = useMemo(() => flights.flatMap((f) => f.services || []), [flights]);
   const overdueCount = useOverdueAlert(allServices, soundEnabled && isToday);
@@ -447,10 +460,17 @@ function HomePageInner() {
     if (myShift && shiftQueueActive && isToday && myShift.posts.length > 0) {
       xs = visibleForPosts(xs, { posts: myShift.posts, currentUserId: session?.user?.id ?? null });
     }
+    // "Mis vuelos": solo se aplica mientras el chip es visible (cola activa hoy
+    // + sesión). Si el turno acaba, la condición desaparece y el filtro deja de
+    // aplicar — no esconde toda la lista de forma confusa.
+    if (mineOnly && myShift && shiftQueueActive && isToday && session?.user?.id) {
+      const uid = session.user.id;
+      xs = xs.filter((f) => f.assignedToId === uid);
+    }
     return xs;
     // `nowTick` fuerza recálculo cada minuto cuando el filtro está activo.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filteredFlights, pendingOnly, nextHours, hideCancelled, isToday, nowTick, myShift, shiftQueueActive]);
+  }, [filteredFlights, pendingOnly, nextHours, hideCancelled, isToday, nowTick, myShift, shiftQueueActive, mineOnly, session?.user?.id]);
 
   // Auto-scroll al primer vuelo activo en la primera carga
   useEffect(() => {
@@ -509,6 +529,7 @@ function HomePageInner() {
       if (pendingOnly) setPendingOnly(false);
       if (nextHours > 0) setNextHours(0);
       if (hideCancelled) setHideCancelled(false);
+      if (mineOnly) setMineOnly(false);
       addToast("Filtros desactivados para mostrar el vuelo", undefined, "info");
     }
     setSelectedFlightId(flightId);
@@ -516,7 +537,7 @@ function HomePageInner() {
       const el = document.getElementById(`flight-${flightId}`);
       if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
     });
-  }, [visibleFlights, flights, searchQuery, pendingOnly, nextHours, hideCancelled, addToast, router]);
+  }, [visibleFlights, flights, searchQuery, pendingOnly, nextHours, hideCancelled, mineOnly, addToast, router]);
 
   // Keyboard shortcuts (after handlers are defined)
   useEffect(() => {
@@ -651,7 +672,16 @@ function HomePageInner() {
     [flights, nextHours, nowTick],
   );
 
-  const togglesActive = pendingOnly || (nextHours > 0 && isToday);
+  // El chip "Mis vuelos" solo tiene sentido cuando hay cola de turno activa hoy
+  // y existe sesión — un trabajador sin turno no tiene "lo suyo".
+  const canShowMine = !!(myShift && shiftQueueActive && isToday && session?.user?.id);
+  const mineCount = useMemo(() => {
+    const uid = session?.user?.id;
+    if (!uid) return 0;
+    return flights.filter((f) => f.assignedToId === uid).length;
+  }, [flights, session?.user?.id]);
+
+  const togglesActive = pendingOnly || (nextHours > 0 && isToday) || (mineOnly && canShowMine);
 
   if (status === "loading" || loading) {
     return (
@@ -732,14 +762,18 @@ function HomePageInner() {
             pendingOnly={pendingOnly}
             nextHours={nextHours}
             hideCancelled={hideCancelled}
+            mineOnly={mineOnly}
             showNextHours={isToday}
+            showMineOnly={canShowMine}
             pendingCount={pendingCount}
             nextHoursCount={nextHoursCount}
             hideCancelledCount={flights.filter((f) => f.flightCategory === "CANCELLED").length}
-            onChange={({ pendingOnly: nextPending, nextHours: nextWindow, hideCancelled: nextHideCancelled }) => {
+            mineOnlyCount={mineCount}
+            onChange={({ pendingOnly: nextPending, nextHours: nextWindow, hideCancelled: nextHideCancelled, mineOnly: nextMine }) => {
               setPendingOnly(nextPending);
               setNextHours(nextWindow);
               setHideCancelled(nextHideCancelled);
+              setMineOnly(nextMine);
             }}
           />
         )}
