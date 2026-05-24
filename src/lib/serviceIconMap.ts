@@ -16,6 +16,9 @@ export const SERVICE_TYPE_TO_ICON: Record<ServiceType, ServiceKey> = {
   WATER: "water",
   GPU: "gpu",
   ICE: "water",
+  CLEANING: "cleaning",
+  STAIRS: "stairs",
+  ASU: "ac",
   CUSTOM: "cargo",
 };
 
