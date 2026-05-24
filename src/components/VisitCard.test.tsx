@@ -452,6 +452,83 @@ describe("VisitCard people editor handoff", () => {
   });
 });
 
+describe("VisitCard assignment", () => {
+  it("renders the assignment selector for a coordinator with assignable users", () => {
+    render(
+      <VisitCard
+        flight={makeFlight({ id: "v-1" })}
+        shiftPosts={["COORDINATOR"]}
+        assignableUsers={[{ id: "u-1", name: "Ana" }, { id: "u-2", name: "Bea" }]}
+        onAssign={vi.fn()}
+      />
+    );
+    expect(screen.getByRole("option", { name: "Sin asignar" })).toBeTruthy();
+    expect(screen.getByRole("option", { name: "Ana" })).toBeTruthy();
+    expect(screen.getByRole("option", { name: "Bea" })).toBeTruthy();
+  });
+
+  it("fires onAssign with the chosen user id from the selector", async () => {
+    const onAssign = vi.fn();
+    render(
+      <VisitCard
+        flight={makeFlight({ id: "v-1" })}
+        shiftPosts={["COORDINATOR"]}
+        assignableUsers={[{ id: "u-1", name: "Ana" }]}
+        onAssign={onAssign}
+      />
+    );
+    await userEvent.selectOptions(screen.getByRole("combobox"), "u-1");
+    expect(onAssign).toHaveBeenCalledWith("v-1", "u-1");
+  });
+
+  it("fires onAssign with null when 'Sin asignar' is chosen", async () => {
+    const onAssign = vi.fn();
+    render(
+      <VisitCard
+        flight={makeFlight({ id: "v-1", assignedToId: "u-1", assignedToName: "Ana" })}
+        shiftPosts={["COORDINATOR"]}
+        assignableUsers={[{ id: "u-1", name: "Ana" }]}
+        onAssign={onAssign}
+      />
+    );
+    await userEvent.selectOptions(screen.getByRole("combobox"), "Sin asignar");
+    expect(onAssign).toHaveBeenCalledWith("v-1", null);
+  });
+
+  it("shows the assigned name read-only when the user is not a coordinator", () => {
+    render(
+      <VisitCard
+        flight={makeFlight({ id: "v-1", assignedToId: "u-1", assignedToName: "Ana" })}
+        shiftPosts={["RAMP"]}
+      />
+    );
+    expect(screen.queryByRole("combobox")).toBeNull();
+    expect(screen.getByTitle(/asignado a ana/i)).toBeTruthy();
+  });
+
+  it("shows the 'Mío' badge when the flight is assigned to the current user", () => {
+    render(
+      <VisitCard
+        flight={makeFlight({ id: "v-1", assignedToId: "u-1", assignedToName: "Ana" })}
+        shiftPosts={["RAMP"]}
+        currentUserId="u-1"
+      />
+    );
+    expect(screen.getByTitle(/asignado a ti/i)).toBeTruthy();
+  });
+
+  it("does not show the 'Mío' badge when the flight is assigned to someone else", () => {
+    render(
+      <VisitCard
+        flight={makeFlight({ id: "v-1", assignedToId: "u-2", assignedToName: "Bea" })}
+        shiftPosts={["RAMP"]}
+        currentUserId="u-1"
+      />
+    );
+    expect(screen.queryByTitle(/asignado a ti/i)).toBeNull();
+  });
+});
+
 describe("VisitCard editing handoff", () => {
   it("offers an Editar button that routes to the detail panel", async () => {
     const onOpenDetail = vi.fn();

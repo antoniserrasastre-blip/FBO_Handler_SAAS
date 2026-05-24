@@ -17,8 +17,8 @@ export interface ShiftViewFlight {
   etd?: string | null;
   ata?: string | null;
   atd?: string | null;
-  // compat (FlightView) NO tiene `assignedToId`; lo dejamos opcional para que
-  // futuros consumidores puedan pasarlo, pero hoy `mine` queda siempre vacío.
+  // Handler de turno asignado por el coordinador. FlightView lo expone, así que
+  // la cola `mine` se rellena para el usuario actual.
   assignedToId?: string | null;
   services?: { state: string }[];
 }
@@ -121,8 +121,6 @@ export function projectShiftQueues<T extends ShiftViewFlight>(
     if (inDep) departures.push(f);
     if (inArr || inDep) ramp.push(f);
     if (hasPendingService(f)) runner.push(f);
-    // compat (FlightView) no expone `assignedToId`, así que en la práctica esto
-    // no se cumple y `mine` queda vacío hasta que el campo exista.
     if (userId && f.assignedToId === userId) mine.push(f);
   }
 

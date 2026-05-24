@@ -21,6 +21,8 @@ interface VisitWithMovements {
   arrivalDate: Date | null;
   departureDate: Date | null;
   notes: string | null;
+  assignedToId?: string | null;
+  assignedTo?: { id: string; name: string } | null;
   createdAt: Date;
   updatedAt: Date;
   aircraft?: { registration: string; aircraftType: string | null };
@@ -164,6 +166,9 @@ export function toFlightView(visit: VisitWithMovements): FlightView {
 
     linkedFlightId: null,                   // Pernoctas: encoded by Visit.type=OVERNIGHT
     notes: visit.notes,
+
+    assignedToId: visit.assignedToId ?? null,
+    assignedToName: visit.assignedTo?.name ?? null,
 
     rqstNumber: (dep?.rqstNumber as string | null) ?? (arr?.rqstNumber as string | null) ?? null,
     flightCategory: ((dep?.flightCategory as string) || (arr?.flightCategory as string) || "COMMERCIAL") as FlightView["flightCategory"],

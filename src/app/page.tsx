@@ -29,7 +29,7 @@ import { flightWithinHours } from "@/lib/timeWindow";
 import { isServiceOverdue } from "@/lib/overdue";
 import { visibleForPosts } from "@/lib/shiftView";
 import { SHIFT_POST_LABELS } from "@/types";
-import type { ShiftDTO } from "@/hooks/useShift";
+import { useShift, type ShiftDTO } from "@/hooks/useShift";
 
 const PENDING_ONLY_KEY = "fbo:filters:pendingOnly";
 // `NEXT_HOURS_KEY` reemplaza la antigua `NEXT_8H_KEY` ("1"/"0"). El chip ahora
@@ -101,6 +101,14 @@ function HomePageInner() {
   // Tick que se incrementa cada minuto cuando "Próximas Xh" está activo y es
   // hoy, para que un vuelo entre/salga de la ventana sin refresco manual.
   const [nowTick, setNowTick] = useState(0);
+
+  // Turnos activos (todos los fichados) — fuente de los handlers asignables.
+  // ShiftBar mantiene su propio useShift para fichaje; aquí solo leemos la lista.
+  const { activeShifts } = useShift();
+  const assignableUsers = useMemo(
+    () => activeShifts.map((s) => ({ id: s.userId, name: s.userName || s.userId })),
+    [activeShifts],
+  );
 
   // Operations date is owned by the global Helix header via the URL (?d=).
   const { date, isToday, setDate } = useDate();
@@ -288,6 +296,26 @@ function HomePageInner() {
     } catch {
       fetchFlights();
       addToast("Sin conexion — cambio no guardado", undefined, "warning", () => handleFlightUpdate(id, data));
+    }
+  };
+
+  // Asignación de handler (coordinador). PATCH del vuelo entero; la respuesta
+  // trae assignedToName resuelto por el backend, así que reemplazamos con ella.
+  const handleAssign = async (flightId: string, userId: string | null) => {
+    try {
+      const res = await fetch(`/api/flights/${flightId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assignedToId: userId }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setFlights((prev) => prev.map((f) => (f.id === flightId ? updated : f)));
+      } else {
+        addToast("Error al asignar vuelo", undefined, "warning", () => handleAssign(flightId, userId));
+      }
+    } catch {
+      addToast("Sin conexion — asignación no guardada", undefined, "warning", () => handleAssign(flightId, userId));
     }
   };
 
@@ -806,6 +834,9 @@ function HomePageInner() {
                     onOpenDetail={(id) => router.push(`/dia?flight=${id}`)}
                     onOpenPeople={(visitId, direction) => setPeopleModal({ visitId, direction })}
                     shiftPosts={myShift && shiftQueueActive && isToday ? myShift.posts : undefined}
+                    currentUserId={session?.user?.id ?? null}
+                    assignableUsers={assignableUsers}
+                    onAssign={handleAssign}
                     readOnly={false}
                   />
                 </div>

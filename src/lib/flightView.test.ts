@@ -11,6 +11,8 @@ interface VisitFixtureInput {
   type?: string | null;
   arrivalDate?: Date | null;
   departureDate?: Date | null;
+  assignedToId?: string | null;
+  assignedTo?: { id: string; name: string } | null;
   movements: AnyRecord[];
 }
 
@@ -25,6 +27,8 @@ function buildVisit(input: VisitFixtureInput) {
     arrivalDate: input.arrivalDate ?? null,
     departureDate: input.departureDate ?? null,
     notes: null,
+    assignedToId: input.assignedToId ?? null,
+    assignedTo: input.assignedTo ?? null,
     createdAt: now,
     updatedAt: now,
     aircraft: { registration: "EC-TEST", aircraftType: "C68A" },
@@ -95,6 +99,28 @@ describe("toFlightView — departureInstant", () => {
     const fv = toFlightView(visit);
     expect(fv.departureInstant).toBeInstanceOf(Date);
     expect((fv.departureInstant as Date).toISOString()).toBe("2026-05-22T14:00:00.000Z");
+  });
+});
+
+describe("toFlightView — assignación de rampa", () => {
+  it("mapea assignedToId y assignedTo.name del Visit", () => {
+    const visit = buildVisit({
+      assignedToId: "user-7",
+      assignedTo: { id: "user-7", name: "Pistero Pep" },
+      movements: [{ id: "mov-dep", direction: "DEPARTURE", etd: "14:00" }],
+    });
+    const fv = toFlightView(visit);
+    expect(fv.assignedToId).toBe("user-7");
+    expect(fv.assignedToName).toBe("Pistero Pep");
+  });
+
+  it("deja assignedToId/assignedToName en null cuando el vuelo no está asignado", () => {
+    const visit = buildVisit({
+      movements: [{ id: "mov-dep", direction: "DEPARTURE", etd: "14:00" }],
+    });
+    const fv = toFlightView(visit);
+    expect(fv.assignedToId).toBeNull();
+    expect(fv.assignedToName).toBeNull();
   });
 });
 

@@ -37,6 +37,7 @@ export async function GET(req: NextRequest) {
     },
     include: {
       aircraft: true,
+      assignedTo: { select: { id: true, name: true } },
       movements: includePeople
         ? {
             include: {
@@ -209,6 +210,7 @@ export async function POST(req: NextRequest) {
     where: { id: visit.id },
     include: {
       aircraft: true,
+      assignedTo: { select: { id: true, name: true } },
       movements: { include: { tasks: true } },
       services: true,
       lostItems: true,

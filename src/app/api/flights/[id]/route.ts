@@ -29,6 +29,7 @@ const ALLOWED_FLIGHT_PATCH_FIELDS = new Set([
   "fuelState", "fuelRequestedAt", "fuelServedAt",
   "toiletState", "toiletRequestedAt", "toiletCompletedAt",
   "linkedFlightId", "notes",
+  "assignedToId",
 ]);
 
 async function loadVisit(id: string) {
@@ -36,6 +37,7 @@ async function loadVisit(id: string) {
     where: { id },
     include: {
       aircraft: true,
+      assignedTo: { select: { id: true, name: true } },
       movements: true,
       services: true,
       lostItems: true,
@@ -66,6 +68,14 @@ export async function PATCH(
   for (const key of Object.keys(rawBody)) {
     if (!ALLOWED_FLIGHT_PATCH_FIELDS.has(key)) continue;
     const value = rawBody[key];
+
+    // Asignación de rampa: vive en Visit.assignedToId (null = desasignar).
+    // No pasa por routeFieldToMovement porque no es un campo de Movement legacy.
+    if (key === "assignedToId") {
+      visitUpdates.assignedToId = typeof value === "string" && value ? value : null;
+      continue;
+    }
+
     const route = routeFieldToMovement(key);
     if (!route) continue;
     if ("onVisit" in route) {
@@ -154,6 +164,9 @@ export async function PATCH(
   if (rawBody.tobt !== undefined && rawBody.tobt !== previousView.tobt) changes.push(`TOBT: ${previousView.tobt || "--"} → ${rawBody.tobt || "--"}`);
   if (rawBody.parking !== undefined && rawBody.parking !== previousView.parking) changes.push(`Parking: ${previousView.parking || "--"} → ${rawBody.parking || "--"}`);
   if (rawBody.notes !== undefined && rawBody.notes !== previousView.notes) changes.push(rawBody.notes ? `Nota actualizada` : `Nota eliminada`);
+  if (rawBody.assignedToId !== undefined && (visitUpdates.assignedToId ?? null) !== previousView.assignedToId) {
+    changes.push(visitUpdates.assignedToId ? `flight_assigned → ${flightView.assignedToName || visitUpdates.assignedToId}` : `flight_unassigned`);
+  }
   if (autoTransition) changes.push(`Auto-transición → ${FLIGHT_STATE_CONFIG[autoTransition].label}`);
 
   if (changes.length > 0) {
