@@ -7,7 +7,7 @@
 // cuántos vuelos hay en tu cola de turno. El estado lo controla page.tsx
 // (`shiftQueueActive`); aquí solo pintamos y notificamos el cambio.
 
-import { ListChecks, CalendarDays } from "lucide-react";
+import { ListChecks, CalendarDays, Clock } from "lucide-react";
 
 export interface ShiftQueueToggleProps {
   /** true → "Mi cola"; false → "Toda la jornada". Controlado por page.tsx. */
@@ -21,6 +21,7 @@ export interface ShiftQueueToggleProps {
 
 export function ShiftQueueToggle({ active, onChange, postsLabel, queueCount }: ShiftQueueToggleProps) {
   return (
+    <div>
     <div
       role="group"
       aria-label="Modo de vista de turno"
@@ -68,6 +69,21 @@ export function ShiftQueueToggle({ active, onChange, postsLabel, queueCount }: S
         </span>
         <span className="mt-0.5 text-xs font-normal text-ink-3">Todos los puestos</span>
       </button>
+    </div>
+
+      {/* Rótulo del alcance: deja claro QUÉ se está viendo. Sin esto, "Mi cola"
+          esconde la mayor parte del día sin avisar y desconcierta (la gente cree
+          que faltan vuelos). En modo cola explicamos la ventana y recordamos que
+          el resto del día está a un toque en "Toda la jornada". */}
+      {active ? (
+        <p className="mt-1.5 flex items-start gap-1.5 px-1 text-xs leading-snug text-ink-3">
+          <Clock size={13} className="mt-0.5 shrink-0 text-ink-3" aria-hidden />
+          <span>
+            Solo lo de tu turno <strong className="font-semibold text-ink-2">ahora y en la próxima hora</strong>. El
+            resto del día, en «Toda la jornada».
+          </span>
+        </p>
+      ) : null}
     </div>
   );
 }
