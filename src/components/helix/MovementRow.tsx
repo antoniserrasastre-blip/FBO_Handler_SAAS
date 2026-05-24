@@ -95,7 +95,7 @@ export function MovementRow({
           ) : null}
           {callsign ? (
             <span
-              className="ml-1.5 inline-flex cursor-copy items-center rounded bg-bg-subtle px-1.5 py-px align-middle font-mono text-[11px] font-medium text-ink-2"
+              className="ml-1.5 inline-flex cursor-copy items-center rounded bg-bg-subtle px-1.5 py-0.5 align-middle font-mono text-xs font-medium text-ink-2"
               onClick={(e) => {
                 e.stopPropagation();
                 navigator.clipboard?.writeText(callsign);
@@ -111,7 +111,7 @@ export function MovementRow({
 
       <div className="leg-meta">
         <StatePill state={state} />
-        <span className="text-xs text-ink-3 font-mono" title={`${paxCount} pax · ${crewCount} crew`}>
+        <span className="text-xs font-semibold text-ink-2 font-mono [font-variant-numeric:tabular-nums]" title={`${paxCount} pax · ${crewCount} crew`}>
           {paxCount}p · {crewCount}c
         </span>
         {parking && parkingMeta ? (

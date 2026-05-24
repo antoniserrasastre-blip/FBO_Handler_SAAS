@@ -101,6 +101,23 @@ describe("FilterToggleStrip", () => {
     });
   });
 
+  it("renders the cyclic stepper affordance (3 pips) on the time-window chip", () => {
+    render(
+      <FilterToggleStrip
+        pendingOnly={false}
+        nextHours={4}
+        hideCancelled={false}
+        showNextHours={true}
+        onChange={() => undefined}
+      />,
+    );
+    const chip = screen.getByRole("button", { name: /Filtrar a próximas 4/ });
+    // Three cycle pips (OFF · 4h · 8h) marked aria-hidden — proves the chip
+    // reads as a stepper, not a plain on/off toggle.
+    const pips = chip.querySelectorAll("span[aria-hidden] > span");
+    expect(pips.length).toBe(3);
+  });
+
   it("clicking the time-window chip from 8h cycles back to OFF", () => {
     const onChange = vi.fn();
     render(

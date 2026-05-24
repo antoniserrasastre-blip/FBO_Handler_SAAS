@@ -66,8 +66,8 @@ export function StateStepper({ value, onChange, disabled = false }: StateStepper
                 e.stopPropagation();
                 if (!disabled && !isCurrent) onChange(s);
               }}
-              style={isCurrent ? { backgroundColor: cfg.color, borderColor: cfg.color, color: "#fff" } : undefined}
-              className={`flex min-h-[36px] items-center gap-1 rounded-full border px-2.5 text-[12px] font-semibold whitespace-nowrap transition active:scale-95 disabled:cursor-default disabled:opacity-50 ${
+              style={isCurrent ? { backgroundColor: cfg.color, borderColor: cfg.color, color: "#fff", touchAction: "manipulation" } : { touchAction: "manipulation" }}
+              className={`flex min-h-[44px] items-center gap-1 rounded-full border px-3 text-[12px] font-semibold whitespace-nowrap transition active:scale-95 disabled:cursor-default disabled:opacity-50 ${
                 isCurrent
                   ? "shadow-hx-sm"
                   : position === "past"

@@ -54,21 +54,27 @@ function CrewItemChip({ item, readOnly, onToggle, onDelete }: CrewItemChipProps)
       ? " — toca para reabrir (marcar guardado)"
       : " — toca para marcar devuelto";
 
+  // Chip ≥48px de alto, texto 14px e icono 18px. El estado ("Guardado"/
+  // "Devuelto") se muestra visible, no sólo en title/aria. El botón de borrar no
+  // puede depender de hover en táctil: lo mantenemos siempre visible y con su
+  // propio target ≥44px embebido a la derecha del chip.
   return (
     <span className="group relative inline-flex items-center">
       <button
         type="button"
         disabled={readOnly}
         onClick={readOnly ? undefined : onToggle}
-        className={`hx-pill ${toneClass} ${readOnly ? "cursor-default" : "cursor-pointer"}`}
-        title={`${label}${qty}: ${stateText}${item.notes ? ` · ${item.notes}` : ""}${ariaHint}`}
-        aria-label={`${label}${qty}: ${stateText}.${ariaHint}`}
-        style={{ touchAction: "manipulation", paddingRight: readOnly ? undefined : "1.25rem" }}
+        className={`hx-pill min-h-[48px] gap-2 rounded-hx-md px-3.5 py-2 text-sm transition duration-200 ease-snap will-change-transform active:scale-95 disabled:active:scale-100 ${toneClass} ${readOnly ? "cursor-default" : "cursor-pointer"}`}
+        aria-label={`${label}${qty}: ${stateText}.${item.notes ? ` ${item.notes}.` : ""}${ariaHint}`}
+        style={{ touchAction: "manipulation", paddingRight: readOnly ? undefined : "2.75rem" }}
       >
-        {returned ? <Check size={11} aria-hidden /> : <span className="dot" aria-hidden />}
+        {returned ? <Check size={18} aria-hidden /> : <Package size={18} aria-hidden />}
         <span className="max-w-[160px] truncate">
           {label}
           {qty}
+        </span>
+        <span aria-hidden className="ml-0.5 text-xs font-semibold uppercase tracking-wide opacity-80">
+          {stateText}
         </span>
       </button>
       {!readOnly && (
@@ -76,10 +82,10 @@ function CrewItemChip({ item, readOnly, onToggle, onDelete }: CrewItemChipProps)
           type="button"
           onClick={onDelete}
           aria-label={`Eliminar ${label}`}
-          title="Eliminar"
-          className="absolute right-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full text-ink-3 opacity-0 transition hover:bg-bg-muted hover:text-danger-strong group-hover:opacity-100 focus:opacity-100"
+          className="absolute right-0 inline-flex h-12 w-11 items-center justify-center rounded-r-hx-md text-ink-2 transition hover:bg-bg-muted hover:text-danger-strong active:bg-bg-muted active:text-danger-strong focus:text-danger-strong"
+          style={{ touchAction: "manipulation" }}
         >
-          <X size={11} />
+          <X size={18} />
         </button>
       )}
     </span>
@@ -233,9 +239,9 @@ export function CrewInventory({ visitId, items, readOnly, onChanged }: CrewInven
   return (
     <div className="flex flex-col gap-1.5">
       {showHeader && (
-        <span className="text-xs font-medium text-ink-3">Inventario crew</span>
+        <span className="text-sm font-semibold text-ink-2">Inventario crew</span>
       )}
-      <div className="flex flex-wrap items-center gap-1.5">
+      <div className="flex flex-wrap items-center gap-2">
         {localItems.map((item) => (
           <CrewItemChip
             key={item.id}
@@ -250,12 +256,13 @@ export function CrewInventory({ visitId, items, readOnly, onChanged }: CrewInven
           <div className="relative" ref={popoverRef}>
             <HelixButton
               variant="ghost"
-              size="sm"
+              size="md"
+              className="min-h-[44px] gap-1.5 text-sm font-semibold"
               onClick={() => setOpen((o) => !o)}
               aria-haspopup="dialog"
               aria-expanded={open}
             >
-              <Plus size={12} aria-hidden /> Inventario
+              <Plus size={16} aria-hidden /> Inventario
             </HelixButton>
 
             {open && (
@@ -264,16 +271,16 @@ export function CrewInventory({ visitId, items, readOnly, onChanged }: CrewInven
                 aria-label="Añadir al inventario crew"
                 className="absolute left-0 top-full z-20 mt-1 flex w-64 flex-col gap-2 rounded-hx-md border border-line bg-bg p-3 shadow-hx-lg"
               >
-                <div className="flex items-center gap-1.5 text-xs font-medium text-ink-2">
-                  <Package size={13} aria-hidden /> Añadir al inventario
+                <div className="flex items-center gap-1.5 text-sm font-semibold text-ink-1">
+                  <Package size={16} aria-hidden /> Añadir al inventario
                 </div>
 
-                <label className="flex flex-col gap-1 text-[11px] text-ink-3">
+                <label className="flex flex-col gap-1 text-xs font-semibold text-ink-2">
                   Tipo
                   <select
                     value={pickType}
                     onChange={(e) => setPickType(e.target.value as CrewItemType)}
-                    className="rounded-hx-md border border-line bg-bg-muted px-2 py-1.5 text-xs text-ink-1"
+                    className="min-h-[44px] rounded-hx-md border border-line bg-bg-muted px-2 py-1.5 text-sm text-ink-1"
                   >
                     {CREW_ITEM_TYPES.map((t) => (
                       <option key={t} value={t}>
@@ -284,7 +291,7 @@ export function CrewInventory({ visitId, items, readOnly, onChanged }: CrewInven
                 </label>
 
                 {pickType === "CUSTOM" && (
-                  <label className="flex flex-col gap-1 text-[11px] text-ink-3">
+                  <label className="flex flex-col gap-1 text-xs font-semibold text-ink-2">
                     Nombre
                     <input
                       ref={nameInputRef}
@@ -299,29 +306,35 @@ export function CrewInventory({ visitId, items, readOnly, onChanged }: CrewInven
                       }}
                       placeholder="Describe el objeto…"
                       maxLength={64}
-                      className="rounded-hx-md border border-line bg-bg-muted px-2 py-1.5 text-xs text-ink-1"
+                      className="min-h-[44px] rounded-hx-md border border-line bg-bg-muted px-2 py-1.5 text-sm text-ink-1"
                     />
                   </label>
                 )}
 
-                <label className="flex flex-col gap-1 text-[11px] text-ink-3">
+                <label className="flex flex-col gap-1 text-xs font-semibold text-ink-2">
                   Cantidad
                   <input
                     type="number"
                     min={1}
                     value={pickQty}
                     onChange={(e) => setPickQty(Number(e.target.value))}
-                    className="rounded-hx-md border border-line bg-bg-muted px-2 py-1.5 text-xs text-ink-1"
+                    className="min-h-[44px] rounded-hx-md border border-line bg-bg-muted px-2 py-1.5 text-sm text-ink-1"
                   />
                 </label>
 
                 <div className="mt-1 flex items-center justify-end gap-2">
-                  <HelixButton variant="ghost" size="sm" onClick={closePicker}>
+                  <HelixButton
+                    variant="ghost"
+                    size="md"
+                    className="min-h-[44px] text-sm"
+                    onClick={closePicker}
+                  >
                     Cancelar
                   </HelixButton>
                   <HelixButton
                     variant="primary"
-                    size="sm"
+                    size="md"
+                    className="min-h-[44px] text-sm font-semibold"
                     disabled={busy || (pickType === "CUSTOM" && !pickName.trim())}
                     onClick={() => void addItem()}
                   >

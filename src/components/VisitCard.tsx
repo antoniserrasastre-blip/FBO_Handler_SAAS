@@ -32,8 +32,15 @@ import { CategoryPill } from "@/components/helix/CategoryPill";
 import { RqstChip } from "@/components/helix/RqstChip";
 import { PetCount } from "@/components/helix/PetCount";
 import { PassportField } from "@/components/helix/PassportField";
-import { ChevronDown, ChevronUp, StickyNote, ListChecks, Package, User } from "lucide-react";
+import { ChevronDown, ChevronUp, StickyNote, ListChecks, Package, User, MoreHorizontal, Check, ArrowRight } from "lucide-react";
 import { tasksForFlight, checklistProgress } from "@/lib/checklist";
+import {
+  deriveFocus,
+  legOrder,
+  hasSecondaryLeg,
+  derivePrimaryAction,
+  nextStateColor,
+} from "@/lib/postFocus";
 import { LostItemIcon } from "@/components/Icons";
 import { TurnaroundCountdown } from "@/components/TurnaroundCountdown";
 import { useLiveCountdown } from "@/hooks/useLiveCountdown";
@@ -211,15 +218,33 @@ export const VisitCard = memo(function VisitCard({
     [crew]
   );
 
+  // Foco de la tarjeta según el puesto fichado: decide qué leg manda.
+  const focus = useMemo(() => deriveFocus(shiftPosts), [shiftPosts]);
+  const legsOrdered = useMemo(() => legOrder(focus), [focus]);
+  const secondaryDimmed = hasSecondaryLeg(focus);
+
   // Resumen de trabajo (checklist + inventario) para la fila colapsada.
-  const work = useMemo(() => {
-    if (isCancelled) return { done: 0, total: 0, inv: 0, invTotal: 0, hasWork: false };
+  // `tasks` se reutiliza para resolver la acción primaria de la tarjeta.
+  const { work, tasks } = useMemo(() => {
+    if (isCancelled) {
+      return { work: { done: 0, total: 0, inv: 0, invTotal: 0, hasWork: false }, tasks: [] };
+    }
     const tasks = tasksForFlight(flight, shiftPosts ? { posts: shiftPosts } : undefined);
     const { done, total } = checklistProgress(tasks);
     const crewItems = flight.crewItems || [];
     const inv = crewItems.filter((i) => i.state !== "RETURNED").length;
-    return { done, total, inv, invTotal: crewItems.length, hasWork: total > 0 || crewItems.length > 0 };
+    return {
+      work: { done, total, inv, invTotal: crewItems.length, hasWork: total > 0 || crewItems.length > 0 },
+      tasks,
+    };
   }, [flight, shiftPosts, isCancelled]);
+
+  // Acción primaria — UNA por tarjeta: la próxima tarea del puesto o, si no
+  // hay tareas pendientes, el siguiente paso de estado del vuelo.
+  const primaryAction = useMemo(
+    () => (isCancelled ? null : derivePrimaryAction(focus, flight.state, tasks)),
+    [focus, flight.state, tasks, isCancelled],
+  );
 
   // Urgency outline — refleja getFlightClock + useLiveCountdown
   const clock = getFlightClock({ state: flight.state, eta: flight.eta, etd: flight.etd });
@@ -247,21 +272,22 @@ export const VisitCard = memo(function VisitCard({
     >
       {/* ─── Hero ──────────────────────────────────────────────────── */}
       <div className="hero">
-        <StatePill state={primaryFboState} />
-        <AircraftBadge
-          registration={flight.registration}
-          aircraftType={flight.aircraftType}
-          onSelectRegistration={(reg) => navigator.clipboard?.writeText(reg)}
-        />
-        <OperatorBadge callsign={flight.callsign} onSelect={onBadgeClick} />
-        <RqstChip rqstNumber={flight.rqstNumber} />
-        <TurnaroundCountdown eta={flight.eta} etd={flight.etd} flightState={flight.state} />
-
-        <div className="badges">
-          {/* Chip de asignación: editable para coordinador, lectura para el resto. */}
+        {/* Fila de identidad: lo que el pistero lee primero, grande y legible. */}
+        <div className="hero-id">
+          <StatePill state={primaryFboState} />
+          <AircraftBadge
+            registration={flight.registration}
+            aircraftType={flight.aircraftType}
+            onSelectRegistration={(reg) => navigator.clipboard?.writeText(reg)}
+          />
+          <OperatorBadge callsign={flight.callsign} onSelect={onBadgeClick} />
+          <RqstChip rqstNumber={flight.rqstNumber} />
+          <TurnaroundCountdown eta={flight.eta} etd={flight.etd} flightState={flight.state} />
+          <div className="spacer" />
+          {/* Asignación: chip visible (no sólo en title) para coordinar en pista. */}
           {canAssign && assignableUsers && onAssign ? (
             <span className="hx-pill hx-pill-default" onClick={(e) => e.stopPropagation()} title="Asignar handler">
-              <User size={10} aria-hidden />
+              <User size={12} aria-hidden />
               <InlineSelect
                 value={flight.assignedToId ?? ""}
                 options={["", ...assignableUsers.map((u) => u.id)]}
@@ -269,12 +295,22 @@ export const VisitCard = memo(function VisitCard({
                 onSave={(v) => onAssign(flight.id, v || null)}
               />
             </span>
+          ) : isMine ? (
+            <span className="hx-pill hx-pill-info" title="Vuelo asignado a ti">
+              <User size={12} aria-hidden /> Mío
+            </span>
           ) : flight.assignedToName ? (
             <span className="hx-pill hx-pill-default" title={`Asignado a ${flight.assignedToName}`}>
-              <User size={10} aria-hidden /> {flight.assignedToName}
+              <User size={12} aria-hidden /> {flight.assignedToName}
             </span>
           ) : null}
-          {isMine ? (
+        </div>
+
+        {/* Fila secundaria: badges atenuados. Marcadores siempre visibles
+            (pista no tiene hover); detalle editable se enruta al detalle. */}
+        <div className="badges">
+          {/* "Mío" duplicado cuando además hay selector de coordinador. */}
+          {canAssign && isMine ? (
             <span className="hx-pill hx-pill-info" title="Vuelo asignado a ti">
               Mío
             </span>
@@ -294,7 +330,7 @@ export const VisitCard = memo(function VisitCard({
           ) : null}
           {flight.notes ? (
             <span className="hx-pill hx-pill-note" title={flight.notes}>
-              <StickyNote size={10} /> Nota
+              <StickyNote size={12} /> Nota
             </span>
           ) : null}
           {(() => {
@@ -302,33 +338,69 @@ export const VisitCard = memo(function VisitCard({
             if (pending === 0) return null;
             return (
               <span className="hx-pill hx-pill-lost" title={`${pending} objeto${pending !== 1 ? "s" : ""} pendiente${pending !== 1 ? "s" : ""}`}>
-                <LostItemIcon size={10} /> {pending} objeto{pending !== 1 ? "s" : ""}
+                <LostItemIcon size={12} /> {pending} objeto{pending !== 1 ? "s" : ""}
               </span>
             );
           })()}
-        </div>
 
-        <div className="spacer" />
+          <div className="spacer" />
 
-        <button
-          type="button"
-          className="hx-btn hx-btn-ghost hx-btn-sm"
-          onClick={(e) => { e.stopPropagation(); setExpanded((x) => !x); }}
-          title={expanded ? "Contraer" : "Ver personas"}
-        >
-          {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-          {departurePax.length + arrivalPaxDep.length} pax · {departureCrew.length + arrivalCrew.length} crew
-        </button>
-        {!readOnly && onOpenDetail && !isMobile ? (
           <button
             type="button"
-            className="hx-btn hx-btn-secondary hx-btn-sm"
-            onClick={(e) => { e.stopPropagation(); onOpenDetail(flight.id); }}
+            className="hx-btn hx-btn-ghost hx-btn-sm hx-people-toggle"
+            onClick={(e) => { e.stopPropagation(); setExpanded((x) => !x); }}
+            title={expanded ? "Contraer" : "Ver personas"}
           >
-            Editar
+            {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            {departurePax.length + arrivalPaxDep.length} pax · {departureCrew.length + arrivalCrew.length} crew
           </button>
-        ) : null}
+          {!readOnly && onOpenDetail && !isMobile ? (
+            <button
+              type="button"
+              className="hx-btn hx-btn-secondary hx-btn-sm"
+              onClick={(e) => { e.stopPropagation(); onOpenDetail(flight.id); }}
+            >
+              Editar
+            </button>
+          ) : null}
+          {/* En móvil "Más" enruta al detalle (/dia) en vez de abrir el edit-strip. */}
+          {!readOnly && onOpenDetail && isMobile ? (
+            <button
+              type="button"
+              className="hx-btn hx-btn-ghost hx-btn-sm"
+              onClick={(e) => { e.stopPropagation(); onOpenDetail(flight.id); }}
+              aria-label="Más opciones (abrir detalle)"
+            >
+              <MoreHorizontal size={16} /> Más
+            </button>
+          ) : null}
+        </div>
       </div>
+
+      {/* ─── Acción primaria — UNA por tarjeta, ancha y táctil ─────────── */}
+      {!readOnly && primaryAction ? (
+        <div className="primary-action" onClick={(e) => e.stopPropagation()}>
+          {primaryAction.kind === "state" && onUpdate ? (
+            <button
+              type="button"
+              className="hx-primary-cta"
+              style={{ backgroundColor: nextStateColor(primaryAction.next), borderColor: nextStateColor(primaryAction.next) }}
+              onClick={() => onUpdate(flight.id, { state: primaryAction.next })}
+            >
+              <ArrowRight size={18} aria-hidden /> {primaryAction.label}
+            </button>
+          ) : primaryAction.kind === "task" ? (
+            <button
+              type="button"
+              className="hx-primary-cta hx-primary-cta-task"
+              onClick={() => setWorkOpen(true)}
+              aria-label={`Siguiente tarea: ${primaryAction.label}`}
+            >
+              <Check size={18} aria-hidden /> Siguiente: {primaryAction.label}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
 
       {/* ─── Progress bar (state-driven) ──────────────────────────── */}
       {(() => {
@@ -341,40 +413,62 @@ export const VisitCard = memo(function VisitCard({
         );
       })()}
 
-      {/* ─── Body: two MovementRow ────────────────────────────────── */}
-      <div className="hx-visit-timeline">
-        <MovementRow
-          direction="ARRIVAL"
-          time={flight.eta}
-          airport={flight.origin}
-          callsign={flight.arrivalCallsign || flight.callsign}
-          state={arrState}
-          paxCount={flight.paxArrival}
-          crewCount={flight.crewArrival}
-          parking={flight.parking}
-          aircraftType={flight.aircraftType}
-          cancelled={isCancelled}
-          date={flight.arrivalDate}
-          sheetDate={sheetDate}
-          showCity
-          onTimeSave={onUpdate && !readOnly ? (v) => onUpdate(flight.id, { eta: v }) : undefined}
+      {/* ─── SERVICES focus (runner): la banda de servicios manda y va
+            antes que los legs, que quedan compactos abajo. ─────────────── */}
+      {focus === "SERVICES" ? (
+        <ServiceChipRow
+          services={services}
+          onToggle={onServiceToggle}
+          readOnly={readOnly}
+          posts={shiftPosts}
         />
-        <MovementRow
-          direction="DEPARTURE"
-          time={flight.etd}
-          airport={flight.destination}
-          callsign={flight.departureCallsign || flight.callsign}
-          state={depState}
-          paxCount={flight.paxDeparture}
-          crewCount={flight.crewDeparture}
-          parking={flight.parking}
-          aircraftType={flight.aircraftType}
-          cancelled={isCancelled}
-          date={flight.departureDate}
-          sheetDate={sheetDate}
-          showCity
-          onTimeSave={onUpdate && !readOnly ? (v) => onUpdate(flight.id, { etd: v }) : undefined}
-        />
+      ) : null}
+
+      {/* ─── Body: two MovementRow, reordenadas según el foco del puesto ─ */}
+      <div className={`hx-visit-timeline focus-${focus.toLowerCase()}`}>
+        {legsOrdered.map((dir, idx) => {
+          // El segundo leg se atenúa/compacta en focos especializados.
+          const isSecondary = secondaryDimmed && idx === 1;
+          return (
+            <div key={dir} className={isSecondary ? "leg-secondary" : "leg-primary"}>
+              {dir === "ARRIVAL" ? (
+                <MovementRow
+                  direction="ARRIVAL"
+                  time={flight.eta}
+                  airport={flight.origin}
+                  callsign={flight.arrivalCallsign || flight.callsign}
+                  state={arrState}
+                  paxCount={flight.paxArrival}
+                  crewCount={flight.crewArrival}
+                  parking={flight.parking}
+                  aircraftType={flight.aircraftType}
+                  cancelled={isCancelled}
+                  date={flight.arrivalDate}
+                  sheetDate={sheetDate}
+                  showCity
+                  onTimeSave={onUpdate && !readOnly ? (v) => onUpdate(flight.id, { eta: v }) : undefined}
+                />
+              ) : (
+                <MovementRow
+                  direction="DEPARTURE"
+                  time={flight.etd}
+                  airport={flight.destination}
+                  callsign={flight.departureCallsign || flight.callsign}
+                  state={depState}
+                  paxCount={flight.paxDeparture}
+                  crewCount={flight.crewDeparture}
+                  parking={flight.parking}
+                  aircraftType={flight.aircraftType}
+                  cancelled={isCancelled}
+                  date={flight.departureDate}
+                  sheetDate={sheetDate}
+                  showCity
+                  onTimeSave={onUpdate && !readOnly ? (v) => onUpdate(flight.id, { etd: v }) : undefined}
+                />
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {/* ─── State stepper — control principal del ciclo del vuelo ──── */}
@@ -386,12 +480,15 @@ export const VisitCard = memo(function VisitCard({
       ) : null}
 
       {/* ─── Services strip (chips touch-friendly) ───────────────────── */}
-      <ServiceChipRow
-        services={services}
-        onToggle={onServiceToggle}
-        readOnly={readOnly}
-        posts={shiftPosts}
-      />
+      {/* En SERVICES focus la banda ya se pintó arriba; no duplicar. */}
+      {focus !== "SERVICES" ? (
+        <ServiceChipRow
+          services={services}
+          onToggle={onServiceToggle}
+          readOnly={readOnly}
+          posts={shiftPosts}
+        />
+      ) : null}
 
       {/* ─── Resumen de trabajo (colapsado) + detalle bajo demanda ─── */}
       {!readOnly && work.hasWork && (
@@ -430,7 +527,9 @@ export const VisitCard = memo(function VisitCard({
       )}
 
       {/* ─── Inline edit strip (expanded) ──────────────────────────── */}
-      {expanded && !readOnly && onUpdate && (
+      {/* En móvil no se abre la edición pesada inline: el botón "Más" del
+          hero enruta al detalle (/dia). Aquí sólo desktop. */}
+      {expanded && !readOnly && onUpdate && !isMobile && (
         <div className="edit-strip" onClick={(e) => e.stopPropagation()}>
           <div className="edit-group">
             <h3 className="edit-group-title">Operación</h3>

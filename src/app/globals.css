@@ -415,15 +415,82 @@
 .hx-visit-card.cancelled { opacity: 0.7; }
 .hx-visit-card .hero {
   display: flex;
-  align-items: center;
-  gap: var(--s-3);
+  flex-direction: column;
+  gap: var(--s-2);
   padding: var(--s-3) var(--s-4);
   background: var(--c-bg-subtle);
   border-bottom: 1px solid var(--c-border-subtle);
+}
+/* Fila de identidad: estado + matrícula + operador + countdown. Lo primero
+   que lee el pistero, así que va con jerarquía y separación generosa. */
+.hx-visit-card .hero .hero-id {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
   flex-wrap: wrap;
 }
-.hx-visit-card .hero .badges { display: inline-flex; gap: var(--s-1); flex-wrap: wrap; align-items: center; }
-.hx-visit-card .hero .spacer { flex: 1; }
+/* Fila secundaria de badges: atenuada, compacta, envuelve. */
+.hx-visit-card .hero .badges {
+  display: flex;
+  gap: var(--s-2);
+  flex-wrap: wrap;
+  align-items: center;
+}
+.hx-visit-card .hero .spacer { flex: 1 1 auto; min-width: var(--s-2); }
+
+/* Toggle pax/crew: target táctil mínimo, números tabulares legibles. */
+.hx-visit-card .hx-people-toggle {
+  min-height: 44px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+/* ── Acción primaria: UNA por tarjeta, ancha (≥48px) y dominante ──────── */
+.hx-visit-card .primary-action {
+  padding: 0 var(--s-4) var(--s-3);
+  background: var(--c-bg-subtle);
+}
+.hx-visit-card .hx-primary-cta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-2);
+  width: 100%;
+  min-height: 48px;
+  padding: 0 var(--s-4);
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  font-size: var(--t-md);
+  font-weight: 700;
+  color: #fff;
+  cursor: pointer;
+  transition: filter var(--dur-fast) var(--ease-snap), transform var(--dur-fast) var(--ease-snap);
+  touch-action: manipulation;
+  box-shadow: var(--sh-sm);
+}
+.hx-visit-card .hx-primary-cta:hover { filter: brightness(0.95); }
+.hx-visit-card .hx-primary-cta:active { transform: scale(0.98); }
+.hx-visit-card .hx-primary-cta:focus-visible { outline: 2px solid var(--c-brand); outline-offset: 2px; }
+/* Variante "tarea": no es un avance de estado, así que va con la marca en vez
+   del color de estado para diferenciarla. */
+.hx-visit-card .hx-primary-cta-task {
+  background: var(--c-brand);
+  border-color: var(--c-brand-active);
+}
+
+/* ── Reordenación / jerarquía de legs por foco ───────────────────────── */
+/* El leg secundario (en focos especializados) se compacta y atenúa para que
+   el primario destaque. Mantiene legibilidad mínima (no usamos ink-3). */
+.hx-visit-card .leg-secondary {
+  opacity: 0.7;
+}
+.hx-visit-card .leg-secondary .hx-movement-row {
+  padding-top: var(--s-2);
+  padding-bottom: var(--s-2);
+}
+.hx-visit-card .leg-secondary .hx-movement-row .leg-time {
+  font-size: var(--t-lg);
+}
 .hx-visit-card .services-strip {
   display: flex;
   flex-wrap: wrap;
@@ -860,6 +927,10 @@
   .hx-visit-card .edit-strip {
     padding: var(--s-2) var(--s-3);
     gap: var(--s-2);
+  }
+  /* Acción primaria: padding más estrecho pero el botón sigue ≥48px y ancho. */
+  .hx-visit-card .primary-action {
+    padding: 0 var(--s-3) var(--s-2);
   }
 
   /* Movement row más compacto y con leg-time más pequeño */

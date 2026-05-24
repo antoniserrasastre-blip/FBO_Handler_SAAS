@@ -13,6 +13,12 @@
 // Style mirrors the QUICK_FILTERS chips in SearchBar so the strip reads as
 // part of the same filter family. State is owned by the parent (page.tsx)
 // so it can persist to localStorage and feed `visibleFlights`.
+//
+// Mobile-in-hand: chips are ≥44px tall touch targets with ≥12px text. The
+// time-window chip carries a small cycle indicator (Clock icon + segment
+// pips) so it reads as a stepper, not a plain on/off toggle.
+
+import { Clock } from "lucide-react";
 
 export type NextHoursWindow = 0 | 4 | 8;
 
@@ -41,10 +47,12 @@ export interface FilterToggleStripProps {
   }) => void;
 }
 
+// Touch target ≥44px tall, text ≥12px (text-xs). Inactive label uses ink-2
+// (not ink-3) to clear the 4.5:1 contrast bar on bg-muted for essential info.
 const CHIP_CLASSES =
-  "rounded-hx-pill px-2.5 py-0.5 font-mono text-[11px] font-semibold transition-colors";
+  "inline-flex min-h-[44px] items-center gap-1 rounded-hx-pill px-3 py-2 font-mono text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-brand/40";
 const ACTIVE_CLASSES = "bg-brand-tint text-brand-active ring-1 ring-brand";
-const INACTIVE_CLASSES = "bg-bg-muted text-ink-3 hover:bg-bg-sunken hover:text-ink-1";
+const INACTIVE_CLASSES = "bg-bg-muted text-ink-2 hover:bg-bg-sunken hover:text-ink-1";
 
 // Cycle order for the time-window chip. One click advances by one slot,
 // wrapping from 8 back to 0 so the chip can be turned off without leaving
@@ -54,6 +62,9 @@ const NEXT_HOURS_CYCLE: Record<NextHoursWindow, NextHoursWindow> = {
   4: 8,
   8: 0,
 };
+
+// Position of each window in the OFF → 4h → 8h cycle, for the pip indicator.
+const NEXT_HOURS_STEP: Record<NextHoursWindow, number> = { 0: 0, 4: 1, 8: 2 };
 
 function nextHoursLabel(value: NextHoursWindow): string {
   // When OFF, surface the default "8h" so the chip reads naturally before any
@@ -89,7 +100,7 @@ export function FilterToggleStrip({
 }: FilterToggleStripProps) {
   const nextHoursActive = nextHours > 0;
   return (
-    <div className="mb-2 flex flex-wrap items-center gap-1">
+    <div className="mb-2 flex flex-wrap items-center gap-1.5">
       <button
         type="button"
         aria-pressed={pendingOnly}
@@ -100,7 +111,7 @@ export function FilterToggleStrip({
       >
         Solo pendientes
         {pendingCount !== undefined && pendingCount > 0 ? (
-          <span className="ml-1 opacity-70">· {pendingCount}</span>
+          <span className="opacity-70">· {pendingCount}</span>
         ) : null}
       </button>
 
@@ -119,10 +130,26 @@ export function FilterToggleStrip({
           }
           className={`${CHIP_CLASSES} ${nextHoursActive ? ACTIVE_CLASSES : INACTIVE_CLASSES}`}
         >
+          <Clock size={14} aria-hidden className={nextHoursActive ? "" : "opacity-70"} />
           {nextHoursLabel(nextHours)}
           {nextHoursCount !== undefined && nextHoursCount > 0 ? (
-            <span className="ml-1 opacity-70">· {nextHoursCount}</span>
+            <span className="opacity-70">· {nextHoursCount}</span>
           ) : null}
+          {/* Cycle pips: 3 slots (OFF · 4h · 8h) show this chip steps, not toggles. */}
+          <span aria-hidden className="ml-0.5 inline-flex items-center gap-0.5">
+            {[0, 1, 2].map((step) => (
+              <span
+                key={step}
+                className={`block h-1 w-1 rounded-full ${
+                  step <= NEXT_HOURS_STEP[nextHours]
+                    ? nextHoursActive
+                      ? "bg-brand-active"
+                      : "bg-ink-3"
+                    : "bg-line"
+                }`}
+              />
+            ))}
+          </span>
         </button>
       ) : null}
 
@@ -136,7 +163,7 @@ export function FilterToggleStrip({
       >
         Ocultar cancelados
         {hideCancelledCount !== undefined && hideCancelledCount > 0 ? (
-          <span className="ml-1 opacity-70">· {hideCancelledCount}</span>
+          <span className="opacity-70">· {hideCancelledCount}</span>
         ) : null}
       </button>
 
@@ -151,7 +178,7 @@ export function FilterToggleStrip({
         >
           Mis vuelos
           {mineOnlyCount !== undefined && mineOnlyCount > 0 ? (
-            <span className="ml-1 opacity-70">· {mineOnlyCount}</span>
+            <span className="opacity-70">· {mineOnlyCount}</span>
           ) : null}
         </button>
       ) : null}

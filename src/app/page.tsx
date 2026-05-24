@@ -19,6 +19,7 @@ import { PassengerCrewModal } from "@/components/PassengerCrewModal";
 import { useOverdueAlert } from "@/hooks/useOverdueAlert";
 import { ShiftHandover } from "@/components/ShiftHandover";
 import { ShiftBar } from "@/components/ShiftBar";
+import { ShiftQueueToggle } from "@/components/ShiftQueueToggle";
 import { HomeActionBar } from "@/components/HomeActionBar";
 import { HelixButton, Stat, StatBand, useDate } from "@/components/helix";
 
@@ -30,6 +31,8 @@ import { isServiceOverdue } from "@/lib/overdue";
 import { visibleForPosts } from "@/lib/shiftView";
 import { SHIFT_POST_LABELS } from "@/types";
 import { useShift, type ShiftDTO } from "@/hooks/useShift";
+import { useIsMobile } from "@/hooks/useMediaQuery";
+import { ChevronDown, ChevronUp } from "@/components/Icons";
 
 const PENDING_ONLY_KEY = "fbo:filters:pendingOnly";
 // `NEXT_HOURS_KEY` reemplaza la antigua `NEXT_8H_KEY` ("1"/"0"). El chip ahora
@@ -105,6 +108,12 @@ function HomePageInner() {
   // Tick que se incrementa cada minuto cuando "Próximas Xh" está activo y es
   // hoy, para que un vuelo entre/salga de la ventana sin refresco manual.
   const [nowTick, setNowTick] = useState(0);
+
+  // En móvil, el "chrome" secundario (KPIs + alertas + servicios pendientes)
+  // entierra el primer vuelo. Lo colapsamos por defecto en móvil tras un
+  // resumen táctil; en desktop siempre va expandido. El usuario puede abrirlo.
+  const isMobile = useIsMobile();
+  const [summaryOpen, setSummaryOpen] = useState(false);
 
   // Turnos activos (todos los fichados) — fuente de los handlers asignables.
   // ShiftBar mantiene su propio useShift para fichaje; aquí solo leemos la lista.
@@ -695,40 +704,77 @@ function HomePageInner() {
     <div className="min-h-[calc(100vh-96px)] bg-bg">
       <DaySummary flights={flights} />
 
-      {/* KPI band — replaces the gray "X aviones (Y + Z)" caption-as-heading. */}
-      {flights.length > 0 && (
-        <StatBand>
-          <Stat
-            label="Vuelos"
-            value={
-              visibleFlights.length === flights.length
-                ? flights.length
-                : `${visibleFlights.length} / ${flights.length}`
-            }
-            sub={visibleFlights.length === flights.length ? "del día" : "filtrados"}
-          />
-          <Stat label="Llegadas" value={movementStats.arrivals} />
-          <Stat label="Salidas" value={movementStats.departures} />
+      {/* Barra de resumen colapsable — SOLO móvil. Compacta KPIs + alertas +
+          servicios pendientes tras un toque para que el primer vuelo aparezca
+          antes. En desktop el bloque va siempre expandido (ver más abajo). */}
+      {isMobile && flights.length > 0 && (
+        <button
+          type="button"
+          aria-expanded={summaryOpen}
+          aria-controls="day-chrome"
+          onClick={() => setSummaryOpen((v) => !v)}
+          className="flex w-full items-center gap-2 border-b border-line-subtle bg-bg px-3 py-2 text-left no-print"
+        >
+          <span className="text-sm font-semibold text-ink-1 tabular-nums">
+            {visibleFlights.length === flights.length
+              ? `${flights.length} vuelos`
+              : `${visibleFlights.length} / ${flights.length} vuelos`}
+          </span>
+          <span className="text-xs text-ink-3 tabular-nums">
+            {movementStats.arrivals} lleg · {movementStats.departures} sal
+          </span>
           {overdueCount > 0 ? (
-            <Stat
-              label="Retrasados"
-              value={overdueCount}
-              sub={overdueCount === 1 ? "vuelo" : "vuelos"}
-              tone="alert"
-              onClick={() => {
-                const overdue = flights.find((f) =>
-                  (f.services || []).some(isServiceOverdue),
-                );
-                if (overdue) focusFlight(overdue.id);
-              }}
-            />
+            <span className="rounded-hx-pill bg-danger-bg px-1.5 py-0.5 text-xs font-semibold text-danger-strong">
+              {overdueCount} retras.
+            </span>
           ) : null}
-        </StatBand>
+          <span className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-ink-3">
+            {summaryOpen ? "Ocultar" : "Resumen"}
+            {summaryOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+          </span>
+        </button>
       )}
 
-      {isToday && <TurnaroundAlerts flights={flights} referenceDate={date} onSelectFlight={focusFlight} />}
+      {/* Chrome secundario: KPIs, alertas de turnaround y servicios pendientes.
+          Visible siempre en desktop; colapsable en móvil (summaryOpen). */}
+      {(!isMobile || summaryOpen) && (
+        <div id="day-chrome">
+          {/* KPI band — replaces the gray "X aviones (Y + Z)" caption-as-heading. */}
+          {flights.length > 0 && (
+            <StatBand>
+              <Stat
+                label="Vuelos"
+                value={
+                  visibleFlights.length === flights.length
+                    ? flights.length
+                    : `${visibleFlights.length} / ${flights.length}`
+                }
+                sub={visibleFlights.length === flights.length ? "del día" : "filtrados"}
+              />
+              <Stat label="Llegadas" value={movementStats.arrivals} />
+              <Stat label="Salidas" value={movementStats.departures} />
+              {overdueCount > 0 ? (
+                <Stat
+                  label="Retrasados"
+                  value={overdueCount}
+                  sub={overdueCount === 1 ? "vuelo" : "vuelos"}
+                  tone="alert"
+                  onClick={() => {
+                    const overdue = flights.find((f) =>
+                      (f.services || []).some(isServiceOverdue),
+                    );
+                    if (overdue) focusFlight(overdue.id);
+                  }}
+                />
+              ) : null}
+            </StatBand>
+          )}
 
-      <PendingServicesPanel flights={flights} onQuickFilter={setSearchQuery} />
+          {isToday && <TurnaroundAlerts flights={flights} referenceDate={date} onSelectFlight={focusFlight} />}
+
+          <PendingServicesPanel flights={flights} onQuickFilter={setSearchQuery} />
+        </div>
+      )}
 
       <main className="mx-auto max-w-7xl px-3 py-3 sm:px-4 sm:py-4">
         <div className="print-header">
@@ -739,19 +785,13 @@ function HomePageInner() {
         <div className="mb-3 no-print">
           <ShiftBar onShiftChange={setMyShift} />
           {myShift && isToday && myShift.posts.length > 0 ? (
-            <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-ink-3">
-              <span>
-                {shiftQueueActive
-                  ? `Mostrando tu cola — ${myShift.posts.map((p) => SHIFT_POST_LABELS[p]).join(", ")} (${visibleFlights.length})`
-                  : "Mostrando toda la jornada"}
-              </span>
-              <button
-                type="button"
-                onClick={() => setShiftQueueActive((v) => !v)}
-                className="rounded-hx-pill bg-bg-muted px-2 py-0.5 font-medium text-ink-2 hover:bg-bg-sunken"
-              >
-                {shiftQueueActive ? "Ver toda la jornada" : "Ver mi cola"}
-              </button>
+            <div className="mt-2">
+              <ShiftQueueToggle
+                active={shiftQueueActive}
+                onChange={setShiftQueueActive}
+                postsLabel={myShift.posts.map((p) => SHIFT_POST_LABELS[p]).join(", ")}
+                queueCount={visibleFlights.length}
+              />
             </div>
           ) : null}
         </div>

@@ -866,3 +866,94 @@ describe("VisitCard inline edits — counts", () => {
     expect(screen.queryByText(/pax salida/i)).toBeNull();
   });
 });
+
+// ─── Post-aware focus + primary action ──────────────────────────────────────
+
+describe("VisitCard primary action", () => {
+  it("renders a single wide CTA that advances the flight state (FULL focus)", async () => {
+    const onUpdate = vi.fn();
+    render(<VisitCard flight={makeFlight({ id: "v-1", state: "PARKED" })} onUpdate={onUpdate} />);
+    // PARKED → TURNAROUND ("Empezar preparación").
+    const cta = screen.getByRole("button", { name: /empezar preparación/i });
+    await userEvent.click(cta);
+    expect(onUpdate).toHaveBeenCalledWith("v-1", { state: "TURNAROUND" });
+  });
+
+  it("does not render a primary action for a cancelled visit", () => {
+    render(<VisitCard flight={makeFlight({ flightCategory: "CANCELLED" })} onUpdate={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: /marcar|empezar|siguiente/i })).toBeNull();
+  });
+
+  it("does not render a primary action in read-only mode", () => {
+    render(<VisitCard flight={makeFlight({ state: "PARKED" })} readOnly />);
+    expect(screen.queryByRole("button", { name: /empezar preparación/i })).toBeNull();
+  });
+});
+
+describe("VisitCard post focus", () => {
+  it("leads with the DEPARTURE leg when the shift is DEPARTURES", () => {
+    const { container } = render(
+      <VisitCard flight={makeFlight()} shiftPosts={["DEPARTURES"]} />
+    );
+    const chips = Array.from(container.querySelectorAll(".hx-dir-chip")).map((c) => c.textContent);
+    expect(chips[0]).toBe("DEP");
+    expect(chips[1]).toBe("ARR");
+  });
+
+  it("keeps chronological ARR→DEP order on FULL focus (RAMP)", () => {
+    const { container } = render(
+      <VisitCard flight={makeFlight()} shiftPosts={["RAMP"]} />
+    );
+    const chips = Array.from(container.querySelectorAll(".hx-dir-chip")).map((c) => c.textContent);
+    expect(chips[0]).toBe("ARR");
+    expect(chips[1]).toBe("DEP");
+  });
+
+  it("dims the secondary leg in a specialized focus", () => {
+    const { container } = render(
+      <VisitCard flight={makeFlight()} shiftPosts={["ARRIVALS"]} />
+    );
+    // ARRIVAL focus: arrival primary, departure secondary (dimmed wrapper).
+    expect(container.querySelector(".leg-secondary")).not.toBeNull();
+  });
+
+  it("does not dim any leg on FULL focus", () => {
+    const { container } = render(
+      <VisitCard flight={makeFlight()} shiftPosts={["RAMP"]} />
+    );
+    expect(container.querySelector(".leg-secondary")).toBeNull();
+  });
+});
+
+describe("VisitCard mobile edit routing", () => {
+  afterEach(() => {
+    delete (window as unknown as { matchMedia?: unknown }).matchMedia;
+  });
+
+  it("routes the 'Más' affordance to the detail panel on mobile instead of opening the edit strip", async () => {
+    installMatchMedia(true);
+    const onOpenDetail = vi.fn();
+    render(
+      <VisitCard
+        flight={makeFlight({ id: "v-9", paxDeparture: 4 })}
+        onUpdate={vi.fn()}
+        onOpenDetail={onOpenDetail}
+      />
+    );
+    await userEvent.click(screen.getByRole("button", { name: /más opciones/i }));
+    expect(onOpenDetail).toHaveBeenCalledWith("v-9");
+  });
+
+  it("does not open the inline edit strip on mobile even when expanded", async () => {
+    installMatchMedia(true);
+    render(
+      <VisitCard
+        flight={makeFlight({ id: "v-9", paxDeparture: 4 })}
+        onUpdate={vi.fn()}
+      />
+    );
+    await userEvent.click(screen.getByText(/\d+ pax · \d+ crew/i));
+    // The heavy edit fields must not appear inline on mobile.
+    expect(screen.queryByText(/pax salida/i)).toBeNull();
+  });
+});

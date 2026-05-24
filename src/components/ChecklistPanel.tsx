@@ -54,18 +54,25 @@ function TaskRow({ task, readOnly, busy, onToggle }: TaskRowProps) {
       ? " — toca para marcar pendiente"
       : " — toca para marcar hecho";
 
+  // Sobreescribimos el box model compacto de .hx-pill con utilidades inline
+  // (cargadas en @tailwind utilities, posteriores a @layer components) para
+  // alcanzar target táctil ≥48px, texto 14px e icono 18px. press-state 200ms.
+  // El estado ("Hecho"/"Pendiente"/"No aplica") se muestra de forma visible —
+  // no sólo en title/aria — para no depender de hover en pista.
   return (
     <button
       type="button"
       disabled={!interactive || busy}
       onClick={interactive ? onToggle : undefined}
-      className={`hx-pill ${toneClass} ${interactive ? "cursor-pointer" : "cursor-default"}`}
-      title={`${task.label}: ${stateText}${hint}`}
+      className={`hx-pill min-h-[48px] gap-2 rounded-hx-md px-3.5 py-2 text-sm transition duration-200 ease-snap will-change-transform active:scale-95 disabled:active:scale-100 ${toneClass} ${interactive ? "cursor-pointer" : "cursor-default"}`}
       aria-label={`${task.label}: ${stateText}.${hint}`}
       style={{ touchAction: "manipulation" }}
     >
-      <Icon size={11} aria-hidden className={done ? undefined : "text-ink-3"} />
-      <span className={done ? "line-through opacity-70" : undefined}>{task.label}</span>
+      <Icon size={18} aria-hidden className={done ? undefined : "text-ink-2"} />
+      <span className={done ? "line-through opacity-80" : undefined}>{task.label}</span>
+      <span aria-hidden className="ml-0.5 text-xs font-semibold uppercase tracking-wide opacity-80">
+        {stateText}
+      </span>
     </button>
   );
 }
@@ -137,7 +144,7 @@ export function ChecklistPanel({ flight, posts, readOnly, onChanged }: Checklist
   const groupByPost = distinctPosts.length > 1;
 
   const renderPills = (list: ChecklistTask[]) => (
-    <div className="flex flex-wrap items-center gap-1.5">
+    <div className="flex flex-wrap items-center gap-2">
       {list.map((t) => (
         <TaskRow
           key={keyOf(t)}
@@ -156,18 +163,18 @@ export function ChecklistPanel({ flight, posts, readOnly, onChanged }: Checklist
   const groupByDirection = distinctDirections.length > 1;
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-ink-3">Checklist</span>
-        <span className="text-xs font-mono text-ink-3">
+        <span className="text-sm font-semibold text-ink-1">Checklist</span>
+        <span className="text-sm font-mono font-semibold text-ink-2">
           {progress.done}/{progress.total}
         </span>
       </div>
 
       {groupByPost ? (
         distinctPosts.map((post) => (
-          <div key={post} className="flex flex-col gap-1">
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-ink-3">
+          <div key={post} className="flex flex-col gap-2">
+            <span className="text-xs font-bold uppercase tracking-wide text-ink-1">
               {SHIFT_POST_LABELS[post]}
             </span>
             {renderPills(tasks.filter((t) => t.post === post))}
@@ -175,8 +182,8 @@ export function ChecklistPanel({ flight, posts, readOnly, onChanged }: Checklist
         ))
       ) : groupByDirection ? (
         distinctDirections.map((direction) => (
-          <div key={direction} className="flex flex-col gap-1">
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-ink-3">
+          <div key={direction} className="flex flex-col gap-2">
+            <span className="text-xs font-bold uppercase tracking-wide text-ink-1">
               {DIRECTION_LABELS[direction]}
             </span>
             {renderPills(tasks.filter((t) => t.direction === direction))}

@@ -6,13 +6,13 @@
 // avanzar de estado. La idea es no obligarle a expandir cards ni navegar al
 // detail panel para acciones cotidianas.
 //
-// Cuando state === BOARDING aparece un CTA verde "Despegó" para cerrar el
-// vuelo (OFF_BLOCKS) en un tap.
+// El avance del ciclo de vuelo (incluido el despegue → OFF_BLOCKS) lo posee
+// la acción primaria de la VisitCard y el StateStepper; aquí no se duplica.
 
 "use client";
 
 import type { ReactNode } from "react";
-import { Fuel, Droplet, Users, Car, PlaneTakeoff } from "lucide-react";
+import { Fuel, Droplet, Users, Car } from "lucide-react";
 import type { Flight } from "@/types/compat";
 import {
   FUEL_LABELS,
@@ -23,13 +23,12 @@ import {
   normalizeFlightState,
 } from "@/types";
 
-type Tone = "neutral" | "progress" | "done" | "go";
+type Tone = "neutral" | "progress" | "done";
 
 const TONE_CLASS: Record<Tone, string> = {
   neutral:  "bg-bg-muted text-ink-2 border-line",
   progress: "bg-warning-bg text-warning-strong border-warning-bg",
   done:     "bg-success-bg text-success-strong border-success-bg",
-  go:       "bg-success-strong text-white border-success-strong",
 };
 
 const FUEL_CYCLE: Record<string, string> = {
@@ -104,13 +103,14 @@ function ToggleChip({ icon, label, value, tone, onClick, disabled }: ToggleChipP
         e.stopPropagation();
         if (!disabled) onClick();
       }}
-      className={`flex min-h-[48px] min-w-[68px] flex-col items-center justify-center gap-0.5 rounded-hx-md border px-2 py-1 text-center transition active:scale-95 disabled:cursor-default disabled:opacity-50 ${TONE_CLASS[tone]}`}
+      className={`flex min-h-[48px] min-w-[72px] flex-col items-center justify-center gap-1 rounded-hx-md border px-2.5 py-1.5 text-center transition active:scale-95 disabled:cursor-default disabled:opacity-50 ${TONE_CLASS[tone]}`}
       aria-label={`${label}: ${value}`}
+      style={{ touchAction: "manipulation" }}
     >
-      <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider leading-none">
+      <span className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider leading-none">
         {icon} {label}
       </span>
-      <span className="text-[11px] font-mono leading-tight">{value}</span>
+      <span className="text-xs font-mono font-semibold leading-tight">{value}</span>
     </button>
   );
 }
@@ -160,12 +160,7 @@ export function OpsToggleStrip({ flight, onUpdate, readOnly = false }: OpsToggle
     onUpdate(flight.id, { paxDepTransportState: next } as Partial<Flight>);
   };
 
-  const closeFlight = () => {
-    onUpdate(flight.id, { state: "OFF_BLOCKS" } as Partial<Flight>);
-  };
-
   const normalized = normalizeFlightState(flight.state);
-  const showCloseCTA = normalized === "BOARDING";
 
   const showTransportArr = flight.paxArrTransportType && flight.paxArrTransportType !== "UNDEFINED";
   const showTransportDep = flight.paxDepTransportType && flight.paxDepTransportType !== "UNDEFINED";
@@ -178,7 +173,7 @@ export function OpsToggleStrip({ flight, onUpdate, readOnly = false }: OpsToggle
 
   return (
     <div
-      className="flex flex-wrap gap-1.5 border-t border-line-subtle bg-bg-subtle px-2 py-2"
+      className="flex flex-wrap gap-2 border-t border-line-subtle bg-bg-subtle px-2 py-2"
       onClick={(e) => e.stopPropagation()}
     >
       <ToggleChip
@@ -236,20 +231,6 @@ export function OpsToggleStrip({ flight, onUpdate, readOnly = false }: OpsToggle
           onClick={cycleTransportDep}
           disabled={disabled}
         />
-      )}
-      {showCloseCTA && (
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={(e) => {
-            e.stopPropagation();
-            if (!disabled) closeFlight();
-          }}
-          className={`ml-auto flex min-h-[48px] items-center gap-1.5 rounded-hx-md border px-3 py-1 text-sm font-semibold transition active:scale-95 disabled:cursor-default disabled:opacity-50 ${TONE_CLASS.go}`}
-          aria-label="Marcar despegue (OFF_BLOCKS)"
-        >
-          <PlaneTakeoff size={16} /> Despegó
-        </button>
       )}
     </div>
   );

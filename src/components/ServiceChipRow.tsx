@@ -84,7 +84,10 @@ function ServiceChip({ service, onToggle, disabled, highlight }: ServiceChipProp
     },
   });
 
-  const pressClass = isPressing && !disabled ? "scale-95 ring-2 ring-danger-strong/40" : "";
+  // Feedback táctil: el press-state usa una transición de 200ms (dentro del
+  // rango 150–300ms) y sólo escala/anillo, sin alterar el box model para que
+  // no haya saltos de layout entre chips.
+  const pressClass = isPressing && !disabled ? "scale-95 ring-2 ring-danger-strong/50" : "";
   const overdueClass = overdue && !isCancelled ? "overdue ring-2 ring-danger-strong" : "";
   const highlightClass =
     highlight && !isCancelled && !(overdue && !isCancelled) && !(isPressing && !disabled)
@@ -102,18 +105,22 @@ function ServiceChip({ service, onToggle, disabled, highlight }: ServiceChipProp
       // lo dispara el hook (pointerup → onClick) o el long-press.
       onClick={(e) => e.stopPropagation()}
       {...handlers}
-      className={`flex min-h-[48px] min-w-[88px] flex-col items-start justify-center gap-0.5 rounded-hx-md border px-2 py-1 text-left transition disabled:cursor-default disabled:opacity-50 ${TONE_CLASS[tone]} ${overdueClass} ${highlightClass} ${pressClass}`}
+      className={`flex min-h-[56px] min-w-[104px] flex-col items-start justify-center gap-1 rounded-hx-md border px-3.5 py-2 text-left transition duration-200 ease-snap will-change-transform disabled:cursor-default disabled:opacity-50 ${TONE_CLASS[tone]} ${overdueClass} ${highlightClass} ${pressClass}`}
       aria-label={`${baseLabel}${targetSuffix}: ${stateText}${overdue && !isCancelled ? " (retrasado)" : ""}. ${ariaHint}.`}
       title={service.reference ? `#${service.reference}` : undefined}
       style={{ touchAction: "manipulation" }}
     >
-      <span className="flex items-center gap-1 text-[11px] font-semibold leading-none">
-        <Icon width={14} height={14} />
-        <span className="truncate max-w-[140px]">{baseLabel}{targetSuffix}</span>
+      <span className="flex items-center gap-2 text-sm font-semibold leading-tight">
+        <Icon width={18} height={18} className="shrink-0" />
+        <span className="truncate max-w-[150px]">{baseLabel}{targetSuffix}</span>
       </span>
-      <span className="text-[11px] font-mono leading-tight">
+      <span className="flex items-center gap-1.5 text-sm font-mono font-semibold leading-tight">
         {stateText}
-        {overdue && !isCancelled ? " ⚠" : ""}
+        {overdue && !isCancelled ? (
+          <span className="text-danger-strong" aria-hidden>
+            ⚠ Retrasado
+          </span>
+        ) : null}
       </span>
     </button>
   );
@@ -137,7 +144,7 @@ export function ServiceChipRow({ services, onToggle, readOnly = false, posts }: 
 
   return (
     <div
-      className="services-strip flex flex-wrap items-center gap-1.5 border-t border-line-subtle bg-bg px-2 py-2"
+      className="services-strip flex flex-wrap items-center gap-2 border-t border-line-subtle bg-bg px-2 py-2"
       onClick={(e) => e.stopPropagation()}
     >
       {services.map((s) => {
@@ -155,8 +162,15 @@ export function ServiceChipRow({ services, onToggle, readOnly = false, posts }: 
           />
         );
       })}
-      <span className="ml-auto text-xs font-mono text-ink-muted">
-        {delivered}/{active} servidos
+      <span className="ml-auto flex flex-col items-end gap-0.5 text-right">
+        <span className="text-sm font-mono font-semibold text-ink-1">
+          {delivered}/{active} servidos
+        </span>
+        {!disabled ? (
+          <span className="text-xs font-medium text-ink-2">
+            Mantén pulsado para cancelar
+          </span>
+        ) : null}
       </span>
     </div>
   );
