@@ -83,6 +83,24 @@ export const SERVICE_TYPE_DEFAULT_PHASE: Record<ServiceType, ServicePhase> = {
   CUSTOM: "DEPARTURE",
 };
 
+// ¿El servicio pasa por el almacén (runner) o lo hace la rampa in situ?
+export const SERVICE_FROM_WAREHOUSE: Record<ServiceType, boolean> = {
+  CATERING: true,
+  DISHES: true,
+  COOLER_BAG: true,
+  STORAGE_BAG: true,
+  LAUNDRY: true,
+  THERMOS: true,
+  NEWSPAPERS: true,
+  WATER: false,
+  GPU: false,
+  ICE: true,
+  CLEANING: false,
+  STAIRS: false,
+  ASU: false,
+  CUSTOM: false,
+};
+
 export const SERVICE_TARGETS = ["CREW", "PAX"] as const;
 export type ServiceTarget = (typeof SERVICE_TARGETS)[number];
 

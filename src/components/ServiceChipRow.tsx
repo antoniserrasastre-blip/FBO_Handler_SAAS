@@ -15,7 +15,7 @@
 "use client";
 
 import type { Service } from "@/types/compat";
-import { SERVICE_LABELS, type ServiceType } from "@/types";
+import { SERVICE_LABELS, SERVICE_FROM_WAREHOUSE, type ServiceType, type ShiftPost } from "@/types";
 import { nextServiceState, type ServiceCycleState } from "@/lib/serviceCycle";
 import { iconForServiceType } from "@/lib/serviceIconMap";
 import { ServiceIcons } from "@/components/helix/ServiceIcons";
@@ -56,9 +56,10 @@ interface ServiceChipProps {
   service: Service;
   onToggle: (newState: ServiceChipState) => void;
   disabled?: boolean;
+  highlight?: boolean;
 }
 
-function ServiceChip({ service, onToggle, disabled }: ServiceChipProps) {
+function ServiceChip({ service, onToggle, disabled, highlight }: ServiceChipProps) {
   const Icon = ServiceIcons[iconForServiceType(service.type)];
   const baseLabel =
     service.customName ||
@@ -85,6 +86,10 @@ function ServiceChip({ service, onToggle, disabled }: ServiceChipProps) {
 
   const pressClass = isPressing && !disabled ? "scale-95 ring-2 ring-danger-strong/40" : "";
   const overdueClass = overdue && !isCancelled ? "overdue ring-2 ring-danger-strong" : "";
+  const highlightClass =
+    highlight && !isCancelled && !(overdue && !isCancelled) && !(isPressing && !disabled)
+      ? "ring-2 ring-info-strong ring-offset-1"
+      : "";
   const ariaHint = isCancelled
     ? "Mantén pulsado para restaurar"
     : "Mantén pulsado para cancelar";
@@ -97,7 +102,7 @@ function ServiceChip({ service, onToggle, disabled }: ServiceChipProps) {
       // lo dispara el hook (pointerup → onClick) o el long-press.
       onClick={(e) => e.stopPropagation()}
       {...handlers}
-      className={`flex min-h-[48px] min-w-[88px] flex-col items-start justify-center gap-0.5 rounded-hx-md border px-2 py-1 text-left transition disabled:cursor-default disabled:opacity-50 ${TONE_CLASS[tone]} ${overdueClass} ${pressClass}`}
+      className={`flex min-h-[48px] min-w-[88px] flex-col items-start justify-center gap-0.5 rounded-hx-md border px-2 py-1 text-left transition disabled:cursor-default disabled:opacity-50 ${TONE_CLASS[tone]} ${overdueClass} ${highlightClass} ${pressClass}`}
       aria-label={`${baseLabel}${targetSuffix}: ${stateText}${overdue && !isCancelled ? " (retrasado)" : ""}. ${ariaHint}.`}
       title={service.reference ? `#${service.reference}` : undefined}
       style={{ touchAction: "manipulation" }}
@@ -118,27 +123,38 @@ export interface ServiceChipRowProps {
   services: Service[];
   onToggle?: (serviceId: string, newState: ServiceChipState) => void;
   readOnly?: boolean;
+  posts?: ShiftPost[];
 }
 
-export function ServiceChipRow({ services, onToggle, readOnly = false }: ServiceChipRowProps) {
+export function ServiceChipRow({ services, onToggle, readOnly = false, posts }: ServiceChipRowProps) {
   if (services.length === 0) return null;
   const delivered = services.filter((s) => s.state === "DELIVERED").length;
   const active = services.filter((s) => s.state !== "CANCELLED").length;
   const disabled = readOnly || !onToggle;
+
+  const runnerTurn = !!posts?.includes("RUNNER");
+  const filterTurn = !!posts?.some((p) => p === "ARRIVALS" || p === "DEPARTURES");
 
   return (
     <div
       className="services-strip flex flex-wrap items-center gap-1.5 border-t border-line-subtle bg-bg px-2 py-2"
       onClick={(e) => e.stopPropagation()}
     >
-      {services.map((s) => (
-        <ServiceChip
-          key={s.id}
-          service={s}
-          disabled={disabled}
-          onToggle={(next) => onToggle?.(s.id, next)}
-        />
-      ))}
+      {services.map((s) => {
+        const fromWarehouse = SERVICE_FROM_WAREHOUSE[s.type as ServiceType] ?? false;
+        const mine =
+          fromWarehouse &&
+          ((runnerTurn && s.state === "PENDING") || (filterTurn && s.state === "ARRIVED"));
+        return (
+          <ServiceChip
+            key={s.id}
+            service={s}
+            disabled={disabled}
+            highlight={mine}
+            onToggle={(next) => onToggle?.(s.id, next)}
+          />
+        );
+      })}
       <span className="ml-auto text-xs font-mono text-ink-muted">
         {delivered}/{active} servidos
       </span>

@@ -355,6 +355,7 @@ export const VisitCard = memo(function VisitCard({
         services={services}
         onToggle={onServiceToggle}
         readOnly={readOnly}
+        posts={shiftPosts}
       />
 
       {/* ─── Resumen de trabajo (colapsado) + detalle bajo demanda ─── */}
