@@ -106,6 +106,10 @@ export interface FlightView {
   linkedFlightId: string | null;
   notes: string | null;
 
+  // Rampa: handler de turno al que el coordinador asignó el vuelo entero.
+  assignedToId: string | null;
+  assignedToName: string | null;
+
   // v2-only fields surfaced for new UI features
   rqstNumber: string | null;
   flightCategory: FlightCategory;

@@ -61,6 +61,8 @@ export function makeFlight(overrides: Partial<FlightView> = {}): FlightView {
     toiletCompletedAt: null,
     linkedFlightId: null,
     notes: null,
+    assignedToId: null,
+    assignedToName: null,
     rqstNumber: null,
     flightCategory: "COMMERCIAL",
     modifiedFlag: false,

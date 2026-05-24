@@ -67,6 +67,33 @@ describe("projectShiftQueues — runner", () => {
   });
 });
 
+describe("projectShiftQueues — cola mine (asignados)", () => {
+  it("un vuelo en ventana asignado al usuario actual entra en mine", () => {
+    const f = flight({ id: "owned", state: "ON_BLOCKS", eta: "10:20", assignedToId: "user-1" });
+    const q = projectShiftQueues([f], { ...opts(["RAMP"]), currentUserId: "user-1" });
+    expect(q.mine.map((x) => x.id)).toEqual(["owned"]);
+  });
+
+  it("un vuelo asignado a OTRO usuario no entra en mine", () => {
+    const f = flight({ id: "other", state: "ON_BLOCKS", eta: "10:20", assignedToId: "user-2" });
+    const q = projectShiftQueues([f], { ...opts(["RAMP"]), currentUserId: "user-1" });
+    expect(q.mine).toHaveLength(0);
+  });
+
+  it("sin currentUserId, mine queda vacío aunque haya asignaciones", () => {
+    const f = flight({ id: "owned", state: "ON_BLOCKS", eta: "10:20", assignedToId: "user-1" });
+    const q = projectShiftQueues([f], opts(["RAMP"]));
+    expect(q.mine).toHaveLength(0);
+  });
+
+  it("visibleForPosts(RAMP) incluye los vuelos de mine del usuario actual", () => {
+    // ETA fuera de ventana → no entra por arrivals/departures; solo por mine.
+    const f = flight({ id: "owned", state: "ON_BLOCKS", eta: "10:20", assignedToId: "user-1" });
+    const visible = visibleForPosts([f], { ...opts(["RAMP"]), currentUserId: "user-1" });
+    expect(visible.map((x) => x.id)).toEqual(["owned"]);
+  });
+});
+
 describe("visibleForPosts — unión deduplicada", () => {
   it("ARRIVALS + DEPARTURES no duplica un vuelo presente en ambas colas", () => {
     // ON_BLOCKS con ETA y ETD en ventana → arrivals y departures a la vez.
