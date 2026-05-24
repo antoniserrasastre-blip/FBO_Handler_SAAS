@@ -388,6 +388,11 @@ export const VisitCard = memo(function VisitCard({
         </>
       )}
 
+      {/* ─── Checklist de turno (tareas adaptadas al vuelo, filtradas por puesto) ─── */}
+      <div onClick={(e) => e.stopPropagation()}>
+        <ChecklistPanel flight={flight} posts={shiftPosts} readOnly={readOnly} />
+      </div>
+
       {/* ─── Ops toggle strip — touch-friendly cycle buttons ────────── */}
       {onUpdate && !readOnly && (
         <OpsToggleStrip flight={flight} onUpdate={onUpdate} readOnly={readOnly} />
