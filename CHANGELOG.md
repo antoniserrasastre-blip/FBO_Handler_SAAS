@@ -9,6 +9,52 @@
 
 ---
 
+## v0.3 — Modo turno y métricas (2026-05-24)
+
+**Qué ve distinto el handler**: al entrar ficha eligiendo su puesto
+(Rampa, Llegadas, Salidas, Runner o Coordinador) y la pantalla se le
+reduce a su cola — solo los vuelos y las tareas que le tocan en la
+próxima hora. Cada tarjeta lleva su checklist adaptado al vuelo y la
+lista se centra sola en el "ahora".
+
+**Qué se puede hacer que antes no**:
+
+- Fichar turno por puesto y ver solo tu cola. Con un toggle vuelves a la
+  jornada completa sin cerrar turno.
+- Checklist por puesto que se adapta al vuelo (mascotas, policía si viene
+  de fuera de Schengen, embarque, pushback...) agrupado por fase
+  Llegada / Salida.
+- Guardar objetos de la tripulación en la llegada y marcarlos devueltos
+  en la salida.
+- El coordinador asigna cada vuelo a un pistero; el pistero ve los suyos
+  con la marca "Mío" y puede filtrar "Mis vuelos".
+- Pantalla de métricas: puntualidad real, pasaje, servicios entregados y
+  previsión de los próximos 7 días.
+- Buscar origen y destino por ciudad sin saberte el código (escribes
+  "parís" y aparece Le Bourget); ya reconoce casi cualquier aeropuerto.
+- Servicios de limpieza, escalera y ASU, con la cola de cada puesto
+  resaltada.
+
+**Qué no hace todavía, y cuándo llega**:
+
+- Control de equipaje con etiquetas Dymo y estados de bodega/cabina. En v0.4.
+- Marcador * para vuelos sin contrato. En v0.4.
+- Sección Ayuda con el Manual de Filtro. En v0.4.
+- Vista temporal tipo Gantt de los vuelos en tierra. En v0.4.
+
+**Riesgo editorial vivo**: la cola de cada puesto es compartida — si dos
+personas fichan el mismo puesto ven la misma lista; el reparto fino entre
+ellas lo hace el coordinador a mano, no hay reparto automático todavía.
+La sincronía sigue siendo de una sola instancia (mismo límite que v0.2).
+
+**Decisiones firmadas que impactan esta versión**:
+
+- #47 · Fundación del modo turno — fichaje y vista por cola.
+- #54 · Dashboard de métricas con previsión a 7 días.
+- #56 · Asignación de vuelos coordinador → pistero.
+
+---
+
 ## v0.2 — Panel de operaciones (2026-04-20)
 
 **Qué ve distinto el handler**: abre el panel, ve la lista de
