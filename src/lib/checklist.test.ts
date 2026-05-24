@@ -70,12 +70,43 @@ describe("tasksForFlight — estado desde flight.tasks", () => {
 describe("tasksForFlight — leg de salida ausente", () => {
   it("sin departureMovementId no genera tareas de salida", () => {
     const result = types({ ...base, departureMovementId: null });
-    expect(result).not.toContain("GPU");
-    expect(result).not.toContain("WATER");
-    expect(result).not.toContain("CLEANING");
+    expect(result).not.toContain("PUSHBACK");
+    expect(result).not.toContain("BAGS_ON");
+    expect(result).not.toContain("PAX_ON");
     expect(result).not.toContain("SECURITY_PAX");
     expect(result).not.toContain("SECURITY_CREW");
-    expect(result.every((t) => t === "PAX_COUNTED" || t === "CREW_RECEIVED")).toBe(true);
+    expect(result.every((t) => t.endsWith("ARRIVAL") || ["PAX_COUNTED", "CREW_RECEIVED", "IN_POSITION", "PAX_OFF", "BAGS_OFF"].includes(t))).toBe(true);
+  });
+});
+
+describe("tasksForFlight — rampa salida", () => {
+  it("salida con pax genera BAGS_ON, PAX_ON y PUSHBACK", () => {
+    const result = types(base);
+    expect(result).toContain("BAGS_ON");
+    expect(result).toContain("PAX_ON");
+    expect(result).toContain("PUSHBACK");
+  });
+
+  it("ferry (paxDeparture 0) solo genera PUSHBACK en la salida", () => {
+    const result = types({ ...base, paxDeparture: 0 });
+    expect(result).toContain("PUSHBACK");
+    expect(result).not.toContain("BAGS_ON");
+    expect(result).not.toContain("PAX_ON");
+    expect(result).not.toContain("SECURITY_PAX");
+  });
+});
+
+describe("tasksForFlight — rampa llegada", () => {
+  it("llegada con pax genera IN_POSITION, PAX_OFF y BAGS_OFF", () => {
+    const result = types(base);
+    expect(result).toContain("IN_POSITION");
+    expect(result).toContain("PAX_OFF");
+    expect(result).toContain("BAGS_OFF");
+  });
+
+  it("CREW_PICKUP solo aparece en pernocta", () => {
+    expect(types(base)).not.toContain("CREW_PICKUP");
+    expect(types({ ...base, isOvernight: true })).toContain("CREW_PICKUP");
   });
 });
 
@@ -85,7 +116,7 @@ describe("checklistProgress — DONE y NA cuentan como done", () => {
       ...base,
       tasks: [
         { type: "PAX_COUNTED", direction: "ARRIVAL", state: "DONE" },
-        { type: "GPU", direction: "DEPARTURE", state: "NA" },
+        { type: "PUSHBACK", direction: "DEPARTURE", state: "NA" },
       ],
     };
     const tasks = tasksForFlight(flight);
