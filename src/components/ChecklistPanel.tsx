@@ -18,6 +18,11 @@ export interface ChecklistPanelProps {
 
 type StateOverride = Record<string, TaskState>;
 
+const DIRECTION_LABELS: Record<ChecklistTask["direction"], string> = {
+  ARRIVAL: "Llegada",
+  DEPARTURE: "Salida",
+};
+
 function keyOf(task: { direction: string; type: string }): string {
   return `${task.direction}:${task.type}`;
 }
@@ -131,6 +136,25 @@ export function ChecklistPanel({ flight, posts, readOnly, onChanged }: Checklist
   const distinctPosts = Array.from(new Set(tasks.map((t) => t.post)));
   const groupByPost = distinctPosts.length > 1;
 
+  const renderPills = (list: ChecklistTask[]) => (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {list.map((t) => (
+        <TaskRow
+          key={keyOf(t)}
+          task={t}
+          readOnly={readOnly}
+          busy={busyKey === keyOf(t)}
+          onToggle={() => void toggle(t)}
+        />
+      ))}
+    </div>
+  );
+
+  // En modo de un solo puesto, agrupamos por dirección (Llegada/Salida) sólo si
+  // hay tareas de ambas direcciones; si no, mostramos las pills sin cabecera.
+  const distinctDirections = Array.from(new Set(tasks.map((t) => t.direction)));
+  const groupByDirection = distinctDirections.length > 1;
+
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between">
@@ -146,33 +170,20 @@ export function ChecklistPanel({ flight, posts, readOnly, onChanged }: Checklist
             <span className="text-[10px] font-semibold uppercase tracking-wide text-ink-3">
               {SHIFT_POST_LABELS[post]}
             </span>
-            <div className="flex flex-wrap items-center gap-1.5">
-              {tasks
-                .filter((t) => t.post === post)
-                .map((t) => (
-                  <TaskRow
-                    key={keyOf(t)}
-                    task={t}
-                    readOnly={readOnly}
-                    busy={busyKey === keyOf(t)}
-                    onToggle={() => void toggle(t)}
-                  />
-                ))}
-            </div>
+            {renderPills(tasks.filter((t) => t.post === post))}
+          </div>
+        ))
+      ) : groupByDirection ? (
+        distinctDirections.map((direction) => (
+          <div key={direction} className="flex flex-col gap-1">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-ink-3">
+              {DIRECTION_LABELS[direction]}
+            </span>
+            {renderPills(tasks.filter((t) => t.direction === direction))}
           </div>
         ))
       ) : (
-        <div className="flex flex-wrap items-center gap-1.5">
-          {tasks.map((t) => (
-            <TaskRow
-              key={keyOf(t)}
-              task={t}
-              readOnly={readOnly}
-              busy={busyKey === keyOf(t)}
-              onToggle={() => void toggle(t)}
-            />
-          ))}
-        </div>
+        renderPills(tasks)
       )}
     </div>
   );
