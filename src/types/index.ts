@@ -334,13 +334,16 @@ export const TASK_TYPES = [
   "SECURITY_CREW",    // seguridad validó tripulación
   "CATERING_LOADED",  // catering subido a bordo
   "PETS_DEPARTURE",   // mascotas a bordo
-  // Rampa (físico durante la estancia)
-  "GPU",              // GPU conectado
-  "WATER",            // agua potable
-  "CLEANING",         // limpieza de cabina
-  "STAIRS",           // escalera de pasajeros
-  "ASU",              // air start unit
-  "PUSHBACK",         // pushback / remolque
+  // Rampa — flujo de llegada
+  "IN_POSITION",
+  "PAX_OFF",
+  "BAGS_OFF",
+  // Rampa — estancia
+  "CREW_PICKUP",
+  // Rampa — flujo de salida
+  "BAGS_ON",
+  "PAX_ON",
+  "PUSHBACK",
 ] as const;
 export type TaskType = (typeof TASK_TYPES)[number];
 
@@ -353,11 +356,12 @@ export const TASK_LABELS: Record<TaskType, string> = {
   SECURITY_CREW: "Seguridad crew",
   CATERING_LOADED: "Catering a bordo",
   PETS_DEPARTURE: "Mascotas",
-  GPU: "GPU",
-  WATER: "Agua",
-  CLEANING: "Limpieza",
-  STAIRS: "Escalera",
-  ASU: "ASU",
+  IN_POSITION: "En posición",
+  PAX_OFF: "Pax recogidos",
+  BAGS_OFF: "Maletas recogidas",
+  CREW_PICKUP: "Recogida crew",
+  BAGS_ON: "Maletas entregadas",
+  PAX_ON: "Pax embarcados",
   PUSHBACK: "Pushback",
 };
 

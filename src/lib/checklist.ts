@@ -8,6 +8,7 @@ export interface ChecklistFlight {
   paxDeparture?: number;
   crewArrival?: number;
   crewDeparture?: number;
+  isOvernight?: boolean;
   arrivalMovementId?: string | null;
   departureMovementId?: string | null;
   services?: { type: string; state: string }[];
@@ -83,34 +84,40 @@ export const CHECKLIST_CATALOG: TaskDef[] = [
     applies: (f) => (f.petCount ?? 0) > 0,
   },
   {
-    type: "GPU",
+    type: "IN_POSITION",
     post: "RAMP",
-    direction: "DEPARTURE",
+    direction: "ARRIVAL",
     applies: () => true,
   },
   {
-    type: "WATER",
+    type: "PAX_OFF",
     post: "RAMP",
-    direction: "DEPARTURE",
-    applies: () => true,
+    direction: "ARRIVAL",
+    applies: (f) => (f.paxArrival ?? 0) > 0,
   },
   {
-    type: "CLEANING",
+    type: "BAGS_OFF",
     post: "RAMP",
-    direction: "DEPARTURE",
-    applies: () => true,
+    direction: "ARRIVAL",
+    applies: (f) => (f.paxArrival ?? 0) > 0,
   },
   {
-    type: "STAIRS",
+    type: "CREW_PICKUP",
     post: "RAMP",
-    direction: "DEPARTURE",
-    applies: () => true,
+    direction: "ARRIVAL",
+    applies: (f) => f.isOvernight === true,
   },
   {
-    type: "ASU",
+    type: "BAGS_ON",
     post: "RAMP",
     direction: "DEPARTURE",
-    applies: () => true,
+    applies: (f) => (f.paxDeparture ?? 0) > 0,
+  },
+  {
+    type: "PAX_ON",
+    post: "RAMP",
+    direction: "DEPARTURE",
+    applies: (f) => (f.paxDeparture ?? 0) > 0,
   },
   {
     type: "PUSHBACK",
