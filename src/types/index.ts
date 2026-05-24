@@ -338,21 +338,27 @@ export const TASK_TYPES = [
   "GPU",              // GPU conectado
   "WATER",            // agua potable
   "CLEANING",         // limpieza de cabina
+  "STAIRS",           // escalera de pasajeros
+  "ASU",              // air start unit
+  "PUSHBACK",         // pushback / remolque
 ] as const;
 export type TaskType = (typeof TASK_TYPES)[number];
 
 export const TASK_LABELS: Record<TaskType, string> = {
-  PAX_COUNTED: "Pax reales contados",
-  CREW_RECEIVED: "Tripulación recibida",
-  POLICE_NOTIFIED: "Policía / G. Civil avisados",
-  PETS_ARRIVAL: "Mascotas gestionadas",
-  SECURITY_PAX: "Seguridad validó IDs pax",
-  SECURITY_CREW: "Seguridad validó tripulación",
+  PAX_COUNTED: "Pax contados",
+  CREW_RECEIVED: "Crew recibida",
+  POLICE_NOTIFIED: "Policía avisada",
+  PETS_ARRIVAL: "Mascotas",
+  SECURITY_PAX: "Seguridad pax",
+  SECURITY_CREW: "Seguridad crew",
   CATERING_LOADED: "Catering a bordo",
-  PETS_DEPARTURE: "Mascotas a bordo",
-  GPU: "GPU conectado",
-  WATER: "Agua potable",
-  CLEANING: "Limpieza de cabina",
+  PETS_DEPARTURE: "Mascotas",
+  GPU: "GPU",
+  WATER: "Agua",
+  CLEANING: "Limpieza",
+  STAIRS: "Escalera",
+  ASU: "ASU",
+  PUSHBACK: "Pushback",
 };
 
 export const TASK_STATES = ["PENDING", "DONE", "NA"] as const;

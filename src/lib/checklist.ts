@@ -100,6 +100,24 @@ export const CHECKLIST_CATALOG: TaskDef[] = [
     direction: "DEPARTURE",
     applies: () => true,
   },
+  {
+    type: "STAIRS",
+    post: "RAMP",
+    direction: "DEPARTURE",
+    applies: () => true,
+  },
+  {
+    type: "ASU",
+    post: "RAMP",
+    direction: "DEPARTURE",
+    applies: () => true,
+  },
+  {
+    type: "PUSHBACK",
+    post: "RAMP",
+    direction: "DEPARTURE",
+    applies: () => true,
+  },
 ];
 
 function legExists(flight: ChecklistFlight, direction: "ARRIVAL" | "DEPARTURE"): boolean {

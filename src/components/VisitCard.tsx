@@ -32,7 +32,8 @@ import { CategoryPill } from "@/components/helix/CategoryPill";
 import { RqstChip } from "@/components/helix/RqstChip";
 import { PetCount } from "@/components/helix/PetCount";
 import { PassportField } from "@/components/helix/PassportField";
-import { ChevronDown, ChevronUp, StickyNote } from "lucide-react";
+import { ChevronDown, ChevronUp, StickyNote, ListChecks, Package } from "lucide-react";
+import { tasksForFlight, checklistProgress } from "@/lib/checklist";
 import { LostItemIcon } from "@/components/Icons";
 import { TurnaroundCountdown } from "@/components/TurnaroundCountdown";
 import { useLiveCountdown } from "@/hooks/useLiveCountdown";
@@ -153,6 +154,7 @@ export const VisitCard = memo(function VisitCard({
   readOnly = false,
 }: VisitCardProps) {
   const [expanded, setExpanded] = useState(false);
+  const [workOpen, setWorkOpen] = useState(false);
   const [showServicePicker, setShowServicePicker] = useState(false);
   const [newLostDesc, setNewLostDesc] = useState("");
   const [newLostLoc, setNewLostLoc] = useState<LostItemLocation>("AIRCRAFT");
@@ -194,6 +196,16 @@ export const VisitCard = memo(function VisitCard({
     () => crew.filter((c) => c.direction !== "ARRIVAL"),
     [crew]
   );
+
+  // Resumen de trabajo (checklist + inventario) para la fila colapsada.
+  const work = useMemo(() => {
+    if (isCancelled) return { done: 0, total: 0, inv: 0, invTotal: 0, hasWork: false };
+    const tasks = tasksForFlight(flight, shiftPosts ? { posts: shiftPosts } : undefined);
+    const { done, total } = checklistProgress(tasks);
+    const crewItems = flight.crewItems || [];
+    const inv = crewItems.filter((i) => i.state !== "RETURNED").length;
+    return { done, total, inv, invTotal: crewItems.length, hasWork: total > 0 || crewItems.length > 0 };
+  }, [flight, shiftPosts, isCancelled]);
 
   // Urgency outline — refleja getFlightClock + useLiveCountdown
   const clock = getFlightClock({ state: flight.state, eta: flight.eta, etd: flight.etd });
@@ -345,10 +357,36 @@ export const VisitCard = memo(function VisitCard({
         readOnly={readOnly}
       />
 
-      {/* ─── Inventario de crew (guardado en llegada → devuelto en salida) ─── */}
-      <div onClick={(e) => e.stopPropagation()}>
-        <CrewInventory visitId={flight.id} items={flight.crewItems || []} readOnly={readOnly} />
-      </div>
+      {/* ─── Resumen de trabajo (colapsado) + detalle bajo demanda ─── */}
+      {!readOnly && work.hasWork && (
+        <>
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); setWorkOpen((o) => !o); }}
+            className="flex items-center gap-2 self-start rounded-hx-md px-1.5 py-1 text-xs text-ink-3 hover:bg-bg-muted"
+            aria-expanded={workOpen}
+          >
+            {work.total > 0 ? (
+              <span className={`inline-flex items-center gap-1 [font-variant-numeric:tabular-nums] ${work.done === work.total ? "text-success-strong" : ""}`}>
+                <ListChecks size={13} aria-hidden /> {work.done}/{work.total}
+              </span>
+            ) : null}
+            {work.invTotal > 0 ? (
+              <span className="inline-flex items-center gap-1 [font-variant-numeric:tabular-nums]" title="Inventario crew por devolver">
+                <Package size={13} aria-hidden /> {work.inv}
+              </span>
+            ) : null}
+            {workOpen ? <ChevronUp size={13} aria-hidden /> : <ChevronDown size={13} aria-hidden />}
+          </button>
+
+          {workOpen ? (
+            <div onClick={(e) => e.stopPropagation()} className="flex flex-col gap-2">
+              <ChecklistPanel flight={flight} posts={shiftPosts} readOnly={readOnly} />
+              <CrewInventory visitId={flight.id} items={flight.crewItems || []} readOnly={readOnly} />
+            </div>
+          ) : null}
+        </>
+      )}
 
       {/* ─── Checklist de turno (tareas adaptadas al vuelo, filtradas por puesto) ─── */}
       <div onClick={(e) => e.stopPropagation()}>
