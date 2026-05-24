@@ -32,6 +32,9 @@ export const SERVICE_TYPES = [
   "WATER",
   "GPU",
   "ICE",
+  "CLEANING",
+  "STAIRS",
+  "ASU",
   "CUSTOM",
 ] as const;
 export type ServiceType = (typeof SERVICE_TYPES)[number];
@@ -47,6 +50,9 @@ export const SERVICE_LABELS: Record<ServiceType, string> = {
   WATER: "Agua potable",
   GPU: "GPU",
   ICE: "Hielo",
+  CLEANING: "Limpieza",
+  STAIRS: "Escalera",
+  ASU: "ASU",
   CUSTOM: "Extra",
 };
 
@@ -71,6 +77,9 @@ export const SERVICE_TYPE_DEFAULT_PHASE: Record<ServiceType, ServicePhase> = {
   WATER: "ARRIVAL",
   GPU: "ARRIVAL",
   ICE: "ARRIVAL",
+  CLEANING: "DEPARTURE",
+  STAIRS: "ARRIVAL",
+  ASU: "DEPARTURE",
   CUSTOM: "DEPARTURE",
 };
 

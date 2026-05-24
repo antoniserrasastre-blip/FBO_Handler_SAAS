@@ -10,6 +10,8 @@ import {
   Droplet,
   Plug,
   IceCreamCone,
+  Wind,
+  StretchHorizontal,
   ChevronUp,
   ChevronDown,
   ChevronLeft,
@@ -39,6 +41,9 @@ const SERVICE_ICON_MAP: Record<ServiceType, React.FC<LucideProps>> = {
   WATER: Droplet,
   GPU: Plug,
   ICE: IceCreamCone,
+  CLEANING: Sparkles,
+  STAIRS: StretchHorizontal,
+  ASU: Wind,
   CUSTOM: Sparkles,
 };
 
