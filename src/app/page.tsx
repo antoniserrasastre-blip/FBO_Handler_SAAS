@@ -29,6 +29,7 @@ import { isFlightPending } from "@/lib/pendingFilter";
 import { flightWithinHours } from "@/lib/timeWindow";
 import { isServiceOverdue } from "@/lib/overdue";
 import { visibleForPosts } from "@/lib/shiftView";
+import { deriveFocus } from "@/lib/postFocus";
 import { SHIFT_POST_LABELS } from "@/types";
 import { useShift, type ShiftDTO } from "@/hooks/useShift";
 import { useIsMobile } from "@/hooks/useMediaQuery";
@@ -468,6 +469,17 @@ function HomePageInner() {
     if (hideCancelled) xs = xs.filter((f) => f.flightCategory !== "CANCELLED");
     if (myShift && shiftQueueActive && isToday && myShift.posts.length > 0) {
       xs = visibleForPosts(xs, { posts: myShift.posts, currentUserId: session?.user?.id ?? null });
+      // Ordena la cola por la hora relevante del puesto: Llegadas → ETA,
+      // Salidas → ETD. La tarjeta destaca ese mismo leg, así que la hora grande
+      // de cada tarjeta crece de arriba a abajo y la cola no parece desordenada.
+      // En puestos "anchos" (Rampa/Coordinador → FULL) mantenemos el orden
+      // cronológico que ya trae la API.
+      const focus = deriveFocus(myShift.posts);
+      if (focus === "ARRIVAL" || focus === "DEPARTURE") {
+        const keyTime = (f: FlightWithRelations) =>
+          (focus === "ARRIVAL" ? f.eta || f.etd : f.etd || f.eta) || "99:99";
+        xs = [...xs].sort((a, b) => keyTime(a).localeCompare(keyTime(b)));
+      }
     }
     // "Mis vuelos": solo se aplica mientras el chip es visible (cola activa hoy
     // + sesión). Si el turno acaba, la condición desaparece y el filtro deja de
