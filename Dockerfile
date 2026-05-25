@@ -67,6 +67,9 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
+# Belt-and-suspenders: the overdue logic uses Intl (TZ-independent) but
+# setting TZ avoids surprises from any code that still uses getHours().
+ENV TZ=Europe/Madrid
 
 USER nextjs
 

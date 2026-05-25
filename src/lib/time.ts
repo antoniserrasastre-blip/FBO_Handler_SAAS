@@ -53,3 +53,24 @@ export function getZuluNow() {
     totalMinutes: now.getUTCHours() * 60 + now.getUTCMinutes()
   };
 }
+
+/**
+ * Returns the Madrid wall-clock time as total minutes (hour*60 + minute)
+ * for the given instant, computed via Intl — independent of the process TZ.
+ *
+ * Per CLAUDE.md: extras/catering times are in Madrid peninsular local time.
+ * Use this instead of getHours()/getMinutes() so the result is correct even
+ * when the container runs under TZ=UTC.
+ */
+export function madridWallMinutes(instant: Date): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Europe/Madrid",
+    hour: "numeric",
+    minute: "numeric",
+    hourCycle: "h23",
+  }).formatToParts(instant);
+  const getPart = (type: string) => parts.find((p) => p.type === type)?.value ?? "0";
+  const hour = parseInt(getPart("hour"), 10);
+  const minute = parseInt(getPart("minute"), 10);
+  return hour * 60 + minute;
+}

@@ -11,6 +11,9 @@
 
 import "./pdfPolyfills";
 import { parseCybermaxPdf as parseV2 } from "./pdfParserV2";
+import type { ParseWarning } from "./pdfParserV2";
+
+export type { ParseWarning };
 
 export interface ParsedFlight {
   callsign: string;
@@ -34,6 +37,10 @@ export interface ParseResult {
   date: string;
   flights: ParsedFlight[];
   errors: string[];
+  /** Soft warnings: rows that were parsed but may be incomplete or contain
+   *  items that fell outside known column boundaries. Unlike `errors`, these
+   *  do not abort the import — they surface for operator review. */
+  warnings: ParseWarning[];
 }
 
 function toInt(s: string): number {
@@ -44,7 +51,7 @@ function toInt(s: string): number {
 export async function parseCybermaxPdf(buffer: Buffer): Promise<ParseResult> {
   if (process.env.PDF_PARSER === "safe-mode") {
     console.warn("[pdfParser] SAFE_MODE active — returning empty result. Imports are paused.");
-    return { date: "", flights: [], errors: [] };
+    return { date: "", flights: [], errors: [], warnings: [] };
   }
 
   const v2 = await parseV2(buffer);
@@ -66,7 +73,7 @@ export async function parseCybermaxPdf(buffer: Buffer): Promise<ParseResult> {
     etd: f.depTime,
   }));
 
-  return { date: v2.sheetDate, flights, errors: v2.errors ?? [] };
+  return { date: v2.sheetDate, flights, errors: v2.errors ?? [], warnings: v2.warnings ?? [] };
 }
 
 /** Convert a DD/MM/YY date string to a JS Date at midnight UTC */

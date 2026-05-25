@@ -18,8 +18,7 @@
 //   PDF_MICROSERVICE_AUTH  — optional bearer token
 
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { requireWriter } from "@/lib/roles";
 import { prisma } from "@/lib/db";
 import { palmaDayUtc } from "@/lib/time";
 import { validateUpload, validateContentLength } from "@/lib/uploadValidation";
@@ -106,8 +105,8 @@ function normaliseReg(raw: string | null | undefined): string | null {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { session, error } = await requireWriter();
+  if (error) return error;
 
   const lenCheck = validateContentLength(req.headers.get("content-length"), "pdf");
   if (!lenCheck.ok) return NextResponse.json({ error: lenCheck.message }, { status: lenCheck.status });
@@ -180,7 +179,7 @@ export async function POST(req: NextRequest) {
         callsignForOperator: fl.callSign,
       });
 
-      const visit = await upsertVisit({
+      const { record: visit } = await upsertVisit({
         aircraftId: aircraft.id,
         palmaDay,
         operatorId,
@@ -208,7 +207,7 @@ export async function POST(req: NextRequest) {
         await prisma.movement.update({ where: { id: movement.id }, data: movementData });
         movementsMatched++;
       } else {
-        movement = await upsertMovement({
+        const { record: upserted } = await upsertMovement({
           visitId: visit.id,
           direction: "DEPARTURE",
           callsign: fl.callSign || "",
@@ -222,6 +221,7 @@ export async function POST(req: NextRequest) {
             modifiedFlag: movementData.modifiedFlag,
           },
         });
+        movement = upserted;
         movementsCreated++;
       }
 

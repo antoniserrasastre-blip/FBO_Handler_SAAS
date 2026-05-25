@@ -114,7 +114,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       visitId: id,
       movementId,
       userId: session!.user.id,
-      action: `Pasajero anadido: ${fullName}`,
+      action: `Pasajero #${passenger.id} añadido`,
       details: `${direction} — ${body.status || "CONFIRMED"}`,
     },
   });
@@ -124,7 +124,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     flightId: id,
     userId: session!.user.id,
     userName: session!.user.name || undefined,
-    detail: `Pasajero: ${fullName}`,
+    detail: `Pasajero #${passenger.id} añadido`,
     timestamp: new Date().toISOString(),
   });
 

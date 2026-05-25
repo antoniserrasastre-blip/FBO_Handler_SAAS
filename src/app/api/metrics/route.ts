@@ -65,24 +65,72 @@ export async function GET(req: NextRequest) {
 
   // KPIs
   const totalFlights = flights.length;
-  const totalPax = flights.reduce((s, f) => s + f.paxArrival + f.paxDeparture, 0);
+
+  /** Prefer handler-confirmed count; fall back to import estimate. */
+  function movementPax(m: { paxCountReal?: number | null; paxCount: number }): number {
+    return m.paxCountReal ?? m.paxCount ?? 0;
+  }
+
+  const paxArrival = visits.reduce(
+    (sum, v) =>
+      sum +
+      v.movements
+        .filter((m) => m.direction === "ARRIVAL")
+        .reduce((s2, m) => s2 + movementPax(m), 0),
+    0
+  );
+  const paxDeparture = visits.reduce(
+    (sum, v) =>
+      sum +
+      v.movements
+        .filter((m) => m.direction === "DEPARTURE")
+        .reduce((s2, m) => s2 + movementPax(m), 0),
+    0
+  );
+  // Total combinado (llegada + salida) para el delta comparativo y el forecast.
+  const totalPax = paxArrival + paxDeparture;
+
   const totalServices = allServices.length;
   const servicesDelivered = allServices.filter((s) => s.state === "DELIVERED").length;
   const servicesPending = allServices.filter((s) => s.state === "PENDING").length;
   const overnightFlights = flights.filter((f) => f.isOvernight).length;
 
-  // Group visits by palmaDay
+  // Group visits (raw) and flights (FlightView) by palmaDay for daily stats
   const byDay = new Map<string, typeof flights>();
+  const visitsByDay = new Map<string, typeof visits>();
   for (const f of flights) {
     const key = f.daySheetId.slice(0, 10);
     if (!byDay.has(key)) byDay.set(key, []);
     byDay.get(key)!.push(f);
   }
-  const dailyStats = Array.from(byDay.entries())
-    .map(([key, list]) => ({
+  for (const v of visits) {
+    const key = v.palmaDay.toISOString().slice(0, 10);
+    if (!visitsByDay.has(key)) visitsByDay.set(key, []);
+    visitsByDay.get(key)!.push(v);
+  }
+  const dailyStats = Array.from(byDay.entries()).map(([key, list]) => {
+    const rawList = visitsByDay.get(key) ?? [];
+    const dayPaxArrival = rawList.reduce(
+      (sum, v) =>
+        sum +
+        v.movements
+          .filter((m) => m.direction === "ARRIVAL")
+          .reduce((s2, m) => s2 + movementPax(m), 0),
+      0
+    );
+    const dayPaxDeparture = rawList.reduce(
+      (sum, v) =>
+        sum +
+        v.movements
+          .filter((m) => m.direction === "DEPARTURE")
+          .reduce((s2, m) => s2 + movementPax(m), 0),
+      0
+    );
+    return {
       date: new Date(key),
       flights: list.length,
-      paxTotal: list.reduce((s, f) => s + f.paxArrival + f.paxDeparture, 0),
+      paxArrival: dayPaxArrival,
+      paxDeparture: dayPaxDeparture,
       servicesTotal: list.reduce((s, f) => s + (f.services?.length || 0), 0),
       servicesDelivered: list.reduce(
         (s, f) =>
@@ -90,8 +138,8 @@ export async function GET(req: NextRequest) {
           (((f.services as unknown[]) || []).filter((sv) => (sv as { state?: string }).state === "DELIVERED").length),
         0
       ),
-    }))
-    .sort((a, b) => a.date.getTime() - b.date.getTime());
+    };
+  }).sort((a, b) => a.date.getTime() - b.date.getTime());
 
   const avgFlightsPerDay = byDay.size > 0 ? (totalFlights / byDay.size).toFixed(1) : "0";
   const serviceDeliveryRate = totalServices > 0 ? ((servicesDelivered / totalServices) * 100).toFixed(1) : "0";
@@ -303,13 +351,20 @@ export async function GET(req: NextRequest) {
   };
 
   // ---- Estimación próximos 7 días ----
-  const forecast = computeForecast(dailyStats, byDay.size);
+  // El forecast trabaja sobre el total de pax por día; la respuesta de la API
+  // mantiene llegada/salida separadas (sin paxTotal), así que derivamos el total
+  // solo aquí, al alimentar el modelo.
+  const forecast = computeForecast(
+    dailyStats.map((d) => ({ date: d.date, flights: d.flights, paxTotal: d.paxArrival + d.paxDeparture })),
+    byDay.size
+  );
 
   return NextResponse.json({
     range,
     daysWithData: byDay.size,
     totalFlights,
-    totalPax,
+    paxArrival,
+    paxDeparture,
     totalServices,
     servicesDelivered,
     servicesPending,

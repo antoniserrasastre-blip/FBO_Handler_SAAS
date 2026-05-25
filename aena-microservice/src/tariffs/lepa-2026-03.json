@@ -1,0 +1,110 @@
+{
+  "version": "lepa-2026-03",
+  "effectiveFrom": "2026-03-01",
+  "source": "Guía de Tarifas AENA, Edición marzo 2026 (publicada 24-feb-2026)",
+  "airport": {
+    "icao": "LEPA",
+    "iata": "PMI",
+    "name": "Palma de Mallorca",
+    "timezone": "Europe/Madrid",
+    "operationalHours24": true,
+    "noiseSurchargeApplies": true
+  },
+  "currency": "EUR",
+  "cnmcSurchargePct": 0.12,
+  "balearesIcao": ["LEPA", "LEIB", "LEMH", "LESJ", "LESB"],
+  "peninsularSpanishPrefixes": ["LE"],
+  "peninsularSpanishExclusions": ["LEPA", "LEIB", "LEMH", "LESJ", "LESB"],
+  "eeaIcaoPrefixes": [
+    "LE", "LF", "LI", "ED", "ET", "LO", "EH", "EB", "EL", "LP",
+    "LG", "EK", "ES", "EF", "EN", "BI", "EP", "LK", "LZ", "LJ",
+    "LH", "EE", "EV", "EY", "LM", "LD", "LR", "LB", "LC", "EI"
+  ],
+  "landing": {
+    "eee_international": { "ratePerTm": 8.140706, "minPerOperation": 110.66 },
+    "with_peninsula":    { "ratePerTm": 6.919600, "minPerOperation":  94.06 },
+    "interislands":      { "ratePerTm": 2.442212, "minPerOperation":  33.20 },
+    "training":          { "ratePerTm": 5.779364, "minPerOperation": null },
+    "privateUses": "eee_international"
+  },
+  "transit": {
+    "eee_international": { "ratePerTm": 3.185764, "minPerOperation": 47.47 },
+    "with_peninsula":    { "ratePerTm": 3.185764, "minPerOperation": 47.47 },
+    "interislands":      { "ratePerTm": 3.185764, "minPerOperation": 47.47 },
+    "training":          { "ratePerTm": 3.538617, "minPerOperation": null },
+    "afisReductionPct": 60,
+    "privateUses": "eee_international"
+  },
+  "noise": {
+    "eligibility": {
+      "appliesToSubsonicJet": true,
+      "minMtowKgOrPaxCapacity": { "mtowKg": 34000, "paxCapacity": 19 },
+      "excludedNoiseChapters": ["10"]
+    },
+    "dayWindowLocal":   { "startHHMM": "07:00", "endHHMM": "23:00" },
+    "nightWindowLocal": { "startHHMM": "23:00", "endHHMM": "07:00" },
+    "categories": {
+      "cat_1": { "cumMarginMaxExclusive": 5,  "dayPctOnT1": 70, "nightPctOnT1": 140 },
+      "cat_2": { "cumMarginMaxExclusive": 10, "dayPctOnT1": 20, "nightPctOnT1":  40 },
+      "cat_3": { "cumMarginMaxExclusive": 15, "dayPctOnT1":  0, "nightPctOnT1":   0 },
+      "cat_4": { "cumMarginMaxExclusive": null, "dayPctOnT1": 0, "nightPctOnT1":  0 }
+    }
+  },
+  "parking": {
+    "ratePerTmPer15min": 0.166644,
+    "rounding": "ceil_15min",
+    "freezeWindowLocal": { "startHHMM": "00:00", "endHHMM": "06:00" },
+    "courtesyMinutesAfterLanding": 0,
+    "maxFirst24h": 2227.74,
+    "maxPer24hAfterSecondDay": 1214.18
+  },
+  "pax": {
+    "exemptIfPrivateAndMtowKgBelow": 5000,
+    "eee":               5.85,
+    "international":     8.79,
+    "with_peninsula":    4.97,
+    "interislands":      1.76,
+    "privateUses":       "eee_or_international_by_destination",
+    "connectionDiscountPct": 40,
+    "winterBalearesDiscountPct": 20,
+    "winterMonths": [11, 12, 1, 2, 3]
+  },
+  "pmr": {
+    "exemptIfPrivateAndMtowKgBelow": 5000,
+    "eee":            0.87,
+    "international":  0.87,
+    "with_peninsula": 0.74,
+    "interislands":   0.26,
+    "privateUses":    "eee"
+  },
+  "securityAena": {
+    "exemptIfPrivateAndMtowKgBelow": 5000,
+    "eee":            3.99,
+    "international":  3.99,
+    "with_peninsula": 3.39,
+    "interislands":   0.60,
+    "privateUses":    "eee",
+    "connectionDiscountPct": 40,
+    "winterBalearesDiscountPct": 20,
+    "winterMonths": [11, 12, 1, 2, 3]
+  },
+  "securityAesa": {
+    "exemptIfPrivateAndMtowKgBelow": 5000,
+    "eee":            0.63,
+    "international":  0.63,
+    "with_peninsula": 0.54,
+    "interislands":   0.18,
+    "privateUses":    "eee",
+    "connectionDiscountPct": 40
+  },
+  "exemptions": {
+    "fullExemptionWhen": ["operator.isStateAircraft === true"],
+    "noExemptionFor": [
+      "AMBULANCE_CIVIL",
+      "HUMANITARIAN_CIVIL",
+      "FERRY",
+      "TRAINING",
+      "EXECUTIVE_PRIVATE"
+    ]
+  }
+}

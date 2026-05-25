@@ -585,15 +585,6 @@ export const VisitCard = memo(function VisitCard({
                 stopPropagation
               />
             </label>
-            <label className="edit-field">
-              <span className="edit-field-label">TOBT</span>
-              <InlineTextEdit
-                value={flight.tobt || ""}
-                onSave={(v) => onUpdate(flight.id, { tobt: v || null })}
-                placeholder="HH:MM"
-                stopPropagation
-              />
-            </label>
             <label className="edit-field edit-field-wide">
               <span className="edit-field-label">Notas</span>
               <InlineTextEdit

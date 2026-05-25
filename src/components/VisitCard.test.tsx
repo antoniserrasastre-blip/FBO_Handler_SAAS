@@ -296,10 +296,10 @@ describe("VisitCard signal pills + indicators", () => {
   });
 
   it("marks an overdue service pip with the overdue modifier class", () => {
-    // isServiceOverdue compara contra `new Date()` local; fijamos la hora
-    // para que el test no dependa del reloj del runner.
+    // Fixed clock: overdue detection must be deterministic, not tied to wall time.
+    // 10:00Z = 12:00 Europe/Madrid (CEST), so a 00:01 service is well past the 15-min threshold.
     vi.useFakeTimers();
-    vi.setSystemTime(new Date("2025-01-01T10:00:00Z"));
+    vi.setSystemTime(new Date("2026-05-24T10:00:00Z"));
     try {
       const services = [
         makeService({ id: "s1", type: "CATERING", state: "PENDING", scheduledAt: "00:01" }),
@@ -688,18 +688,6 @@ describe("VisitCard inline edits — counts", () => {
     await userEvent.type(input, "P-7");
     await userEvent.tab();
     expect(onUpdate).toHaveBeenCalledWith("v-1", { parking: "P-7" });
-  });
-
-  it("allows editing TOBT inline", async () => {
-    const onUpdate = vi.fn();
-    render(<VisitCard flight={makeFlight({ id: "v-1", tobt: null })} onUpdate={onUpdate} />);
-    await userEvent.click(screen.getByText(/\d+ pax · \d+ crew/i));
-    const row = screen.getByText(/^tobt$/i).closest("label")!;
-    await userEvent.click(within(row).getByTitle(/click para editar/i));
-    const input = within(row).getByRole("textbox");
-    await userEvent.type(input, "10:45");
-    await userEvent.tab();
-    expect(onUpdate).toHaveBeenCalledWith("v-1", { tobt: "10:45" });
   });
 
   it("propagates ETA edits from the ARR movement row to onUpdate", async () => {

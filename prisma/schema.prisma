@@ -1,5 +1,5 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
   binaryTargets = ["native", "debian-openssl-3.0.x", "linux-musl-openssl-3.0.x"]
 }
 
@@ -56,7 +56,7 @@ model Shift {
 
 model DaySheet {
   id        String   @id @default(cuid())
-  date      DateTime @unique  // UTC midnight of Palma-local date
+  date      DateTime @unique // UTC midnight of Palma-local date
   notes     String?
   closed    Boolean  @default(false)
   createdAt DateTime @default(now())
@@ -70,9 +70,15 @@ model DaySheet {
 // ============================================================================
 
 model Operator {
-  id          String       @id @default(cuid())
-  icaoCode    String       @unique           // "NJE", "VJT", "EJU", …
-  name        String
+  id       String @id @default(cuid())
+  icaoCode String @unique // "NJE", "VJT", "EJU", …
+  name     String
+
+  // AENA fees: true if this is a state aircraft operator (Spanish state,
+  // CCAA in non-commercial public service, foreign state with reciprocity).
+  // Full exemption from PPP per Ley 21/2003 art.68.4.
+  isStateAircraft Boolean @default(false)
+
   aircraft    Aircraft[]
   visits      Visit[]
   crewMembers CrewMember[]
@@ -81,31 +87,42 @@ model Operator {
 }
 
 model Aircraft {
-  id                 String    @id @default(cuid())
-  registration       String    @unique         // "EC-MIL", "CS-PHF"
-  aircraftType       String?
-  currentOperatorId  String?
-  currentOperator    Operator? @relation(fields: [currentOperatorId], references: [id])
-  baseAirport        String?
-  visits             Visit[]
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+  id                String    @id @default(cuid())
+  registration      String    @unique // "EC-MIL", "CS-PHF"
+  aircraftType      String?
+  currentOperatorId String?
+  currentOperator   Operator? @relation(fields: [currentOperatorId], references: [id])
+  baseAirport       String?
+
+  // AENA fee calculation — technical data for the airframe.
+  // Source of truth lives here; the aena-microservice mirrors it locally.
+  mtowKg                    Int?
+  noiseChapter              String? // ICAO Annex 16: "3" | "4" | "14" | "10" (turboprop)
+  cumulativeMarginEpndb     Float? // null for turboprops (not subject to AENA noise surcharge)
+  paxCapacityCertified      Int? // for noise-surcharge eligibility (>19 → applies)
+  aircraftDataConfirmed     Boolean   @default(false)
+  aircraftDataConfirmedById String?
+  aircraftDataConfirmedAt   DateTime?
+
+  visits    Visit[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([currentOperatorId])
 }
 
 model Visit {
-  id            String   @id @default(cuid())
-  aircraftId    String
-  aircraft      Aircraft @relation(fields: [aircraftId], references: [id], onDelete: Cascade)
-  operatorId    String?
-  operator      Operator? @relation(fields: [operatorId], references: [id])
+  id         String    @id @default(cuid())
+  aircraftId String
+  aircraft   Aircraft  @relation(fields: [aircraftId], references: [id], onDelete: Cascade)
+  operatorId String?
+  operator   Operator? @relation(fields: [operatorId], references: [id])
 
   // The Palma operating day this visit belongs to (UTC midnight of Palma-local date).
   // For OVERNIGHT visits this is the arrival day; the departure can fall on a later day.
-  palmaDay      DateTime
+  palmaDay DateTime
 
-  type          String?  // TURNAROUND | OVERNIGHT | null when not yet known
+  type          String? // TURNAROUND | OVERNIGHT | null when not yet known
   arrivalDate   DateTime? // UTC date of actual arrival (nullable: orphan visits from extras-first import)
   departureDate DateTime? // UTC date of actual departure
   notes         String?
@@ -120,9 +137,10 @@ model Visit {
   crewItems   CrewItem[]
   eventLogs   EventLog[]
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
+  @@unique([aircraftId, palmaDay])
   @@index([aircraftId])
   @@index([palmaDay])
   @@index([operatorId])
@@ -130,55 +148,60 @@ model Visit {
 }
 
 model Movement {
-  id          String   @id @default(cuid())
-  visitId     String
-  visit       Visit    @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  id      String @id @default(cuid())
+  visitId String
+  visit   Visit  @relation(fields: [visitId], references: [id], onDelete: Cascade)
 
-  direction   String   // ARRIVAL | DEPARTURE
+  direction   String // ARRIVAL | DEPARTURE
   callsign    String
-  origin      String?  // ARRIVAL: from-airport ; DEPARTURE: null
-  destination String?  // DEPARTURE: to-airport ; ARRIVAL: null
+  origin      String? // ARRIVAL: from-airport ; DEPARTURE: null
+  destination String? // DEPARTURE: to-airport ; ARRIVAL: null
 
   // Scheduled date (UTC midnight of Palma-local date) for this leg.
   // ARRIVAL.scheduledDate may differ from DEPARTURE.scheduledDate (overnight).
   scheduledDate DateTime
 
   // Zulu (UTC) times as HH:MM (kept as string for parity with current PDF format)
-  eta         String?  // only on ARRIVAL
-  etd         String?  // only on DEPARTURE
-  ata         String?  // actual time of arrival (handler override, HH:MM Zulu)
-  atd         String?  // actual time of departure (handler override, HH:MM Zulu)
+  eta String? // only on ARRIVAL
+  etd String? // only on DEPARTURE
+  ata String? // actual time of arrival (handler override, HH:MM Zulu)
+  atd String? // actual time of departure (handler override, HH:MM Zulu)
 
-  parking     String?
-  tobt        String?
-  state       String   @default("EXPECTED") // EXPECTED | ON_BLOCKS | PARKED | TURNAROUND | BOARDING | OFF_BLOCKS
+  parking String?
+  tobt    String?
+  state   String  @default("EXPECTED") // EXPECTED | ON_BLOCKS | PARKED | TURNAROUND | BOARDING | OFF_BLOCKS
 
   // Counts (estimated from import, real from handler)
-  paxCount         Int  @default(0)
-  paxCountReal     Int?
-  crewCount        Int  @default(0)
-  crewCountReal    Int?
+  paxCount      Int  @default(0)
+  paxCountReal  Int?
+  crewCount     Int  @default(0)
+  crewCountReal Int?
 
   // Pax flow
-  paxState         String   @default("IN_AIRCRAFT")    // ARRIVAL: IN_AIRCRAFT|IN_LOUNGE|COMPLETED ; DEPARTURE: NOT_ARRIVED|IN_LOUNGE|BOARDED
-  bagsState        String   @default("IN_AIRCRAFT")    // ARRIVAL: IN_AIRCRAFT|UNLOADED|DELIVERED ; DEPARTURE: NOT_ARRIVED|TAGGED|SENT_TO_AIRCRAFT
-  bagsChecked      Int      @default(0)
-  bagsCabin        Int      @default(0)
-  transportType    String   @default("UNDEFINED")
-  transportState   String   @default("PENDING")
-  crewLocation     String   @default("IN_AIRCRAFT")
+  paxState       String @default("IN_AIRCRAFT") // ARRIVAL: IN_AIRCRAFT|IN_LOUNGE|COMPLETED ; DEPARTURE: NOT_ARRIVED|IN_LOUNGE|BOARDED
+  bagsState      String @default("IN_AIRCRAFT") // ARRIVAL: IN_AIRCRAFT|UNLOADED|DELIVERED ; DEPARTURE: NOT_ARRIVED|TAGGED|SENT_TO_AIRCRAFT
+  bagsChecked    Int    @default(0)
+  bagsCabin      Int    @default(0)
+  transportType  String @default("UNDEFINED")
+  transportState String @default("PENDING")
+  crewLocation   String @default("IN_AIRCRAFT")
 
   // NetJets ALS metadata (also general external ref)
-  rqstNumber       String?                              // "12297037" — for idempotent re-import
-  flightCategory   String   @default("COMMERCIAL")      // COMMERCIAL | FERRY | CANCELLED
-  modifiedFlag     Boolean  @default(false)
-  petCount         Int      @default(0)
+  rqstNumber     String? // "12297037" — for idempotent re-import
+  flightCategory String  @default("COMMERCIAL") // COMMERCIAL | FERRY | CANCELLED
+  modifiedFlag   Boolean @default(false)
+  petCount       Int     @default(0)
+
+  // AENA fees: true if this leg is a commercial regulated flight (airline-style),
+  // false if it's private/executive aviation. Drives route-tariff selection:
+  // privates always pay tarifa 2.1.1 (EEE/International) regardless of route.
+  commercialFlag Boolean @default(false)
 
   // Fuel / Toilet on the DEPARTURE leg
-  fuelState        String   @default("NOT_REQUESTED")   // NOT_REQUESTED | REQUESTED | SERVED
-  fuelRequestedAt  String?
-  fuelServedAt     String?
-  toiletState      String   @default("NOT_REQUESTED")   // NOT_REQUESTED | REQUESTED | COMPLETED
+  fuelState         String  @default("NOT_REQUESTED") // NOT_REQUESTED | REQUESTED | SERVED
+  fuelRequestedAt   String?
+  fuelServedAt      String?
+  toiletState       String  @default("NOT_REQUESTED") // NOT_REQUESTED | REQUESTED | COMPLETED
   toiletRequestedAt String?
   toiletCompletedAt String?
 
@@ -198,7 +221,7 @@ model Movement {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  @@unique([visitId, direction])  // 1 ARRIVAL + 1 DEPARTURE max per visit
+  @@unique([visitId, direction]) // 1 ARRIVAL + 1 DEPARTURE max per visit
   @@index([rqstNumber])
   @@index([scheduledDate])
   @@index([liveIcao24])
@@ -209,9 +232,9 @@ model Movement {
 // ============================================================================
 
 model Service {
-  id              String   @id @default(cuid())
-  visitId         String
-  visit           Visit    @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  id      String @id @default(cuid())
+  visitId String
+  visit   Visit  @relation(fields: [visitId], references: [id], onDelete: Cascade)
 
   type            String   // CATERING | DISHES | COOLER_BAG | STORAGE_BAG | LAUNDRY | THERMOS | NEWSPAPERS | WATER | GPU | ICE | CUSTOM
   direction       String   @default("DEPARTURE") // ARRIVAL | DEPARTURE | BOTH
@@ -225,8 +248,8 @@ model Service {
   arrivedAt       String?
   deliveredAt     String?
 
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([visitId])
 }
@@ -236,75 +259,75 @@ model Service {
 // ============================================================================
 
 model Passenger {
-  id               String   @id @default(cuid())
-  movementId       String
-  movement         Movement @relation(fields: [movementId], references: [id], onDelete: Cascade)
+  id         String   @id @default(cuid())
+  movementId String
+  movement   Movement @relation(fields: [movementId], references: [id], onDelete: Cascade)
 
-  givenNames       String?
-  surname          String?
-  fullNameHash     String?              // SHA-256 for idempotent upsert (movementId + hash)
+  givenNames   String?
+  surname      String?
+  fullNameHash String? // SHA-256 for idempotent upsert (movementId + hash)
 
-  passportEncrypted String?             // AES-256-GCM
-  passportHash     String?              // SHA-256 — lookup / dedupe
-  passportType     String?              // NID | PP
-  passportCountry  String?
-  passportExpiry   String?              // yyyy-mm-dd
+  passportEncrypted String? // AES-256-GCM
+  passportHash      String? // SHA-256 — lookup / dedupe
+  passportType      String? // NID | PP
+  passportCountry   String?
+  passportExpiry    String? // yyyy-mm-dd
 
-  dobEncrypted     String?
-  gender           String?              // M | F
-  nationality      String?
+  dobEncrypted String?
+  gender       String? // M | F
+  nationality  String?
 
-  status           String   @default("CONFIRMED") // CONFIRMED | NO_SHOW | ADDED
-  unmatched        Boolean  @default(false)       // NetJets parser flag
-  verified         Boolean  @default(false)
-  source           String   @default("MANUAL")    // NETJETS | VISTAJET | EJU | GENDEC_PASTE | MANUAL
-  corrections      String?
+  status      String  @default("CONFIRMED") // CONFIRMED | NO_SHOW | ADDED
+  unmatched   Boolean @default(false) // NetJets parser flag
+  verified    Boolean @default(false)
+  source      String  @default("MANUAL") // NETJETS | VISTAJET | EJU | GENDEC_PASTE | MANUAL
+  corrections String?
 
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([movementId])
   @@index([movementId, passportHash])
 }
 
 model CrewMember {
-  id                String   @id @default(cuid())
-  operatorId        String
-  operator          Operator @relation(fields: [operatorId], references: [id], onDelete: Cascade)
+  id         String   @id @default(cuid())
+  operatorId String
+  operator   Operator @relation(fields: [operatorId], references: [id], onDelete: Cascade)
 
-  givenNames        String?
-  surname           String?
-  fullName          String
+  givenNames String?
+  surname    String?
+  fullName   String
 
-  passportEncrypted String?              // AES-256-GCM
-  passportHash      String?              // SHA-256
+  passportEncrypted String? // AES-256-GCM
+  passportHash      String? // SHA-256
 
-  passportType      String?              // NID | PP
-  passportCountry   String?
-  passportExpiry    String?
+  passportType    String? // NID | PP
+  passportCountry String?
+  passportExpiry  String?
 
-  dobEncrypted      String?
-  gender            String?
-  nationality       String?
-  role              String   @default("OTHER") // CAPTAIN | FIRST_OFFICER | CABIN_CREW | OTHER
-  active            Boolean  @default(true)
+  dobEncrypted String?
+  gender       String?
+  nationality  String?
+  role         String  @default("OTHER") // CAPTAIN | FIRST_OFFICER | CABIN_CREW | OTHER
+  active       Boolean @default(true)
 
-  assignments       CrewAssignment[]
+  assignments CrewAssignment[]
 
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([operatorId, passportHash])
   @@index([operatorId])
 }
 
 model CrewAssignment {
-  movementId    String
-  movement      Movement   @relation(fields: [movementId], references: [id], onDelete: Cascade)
-  crewMemberId  String
-  crewMember    CrewMember @relation(fields: [crewMemberId], references: [id], onDelete: Cascade)
-  roleOnFlight  String     @default("OTHER") // CAPTAIN | FIRST_OFFICER | CABIN_CREW | OTHER
-  createdAt     DateTime   @default(now())
+  movementId   String
+  movement     Movement   @relation(fields: [movementId], references: [id], onDelete: Cascade)
+  crewMemberId String
+  crewMember   CrewMember @relation(fields: [crewMemberId], references: [id], onDelete: Cascade)
+  roleOnFlight String     @default("OTHER") // CAPTAIN | FIRST_OFFICER | CABIN_CREW | OTHER
+  createdAt    DateTime   @default(now())
 
   @@id([movementId, crewMemberId])
   @@index([crewMemberId])
@@ -382,7 +405,7 @@ model LostItem {
   visitId     String
   visit       Visit    @relation(fields: [visitId], references: [id], onDelete: Cascade)
   description String
-  location    String   // AIRCRAFT | LOUNGE | RAMP
+  location    String // AIRCRAFT | LOUNGE | RAMP
   state       String   @default("FOUND") // FOUND | CLAIMED | DELIVERED
   foundAt     String?
   claimedAt   String?
@@ -394,16 +417,16 @@ model LostItem {
 }
 
 model EventLog {
-  id          String    @id @default(cuid())
-  visitId     String?
-  visit       Visit?    @relation(fields: [visitId], references: [id], onDelete: Cascade)
-  movementId  String?
-  movement    Movement? @relation(fields: [movementId], references: [id], onDelete: Cascade)
-  userId      String?
-  user        User?     @relation(fields: [userId], references: [id])
-  action      String
-  details     String?
-  timestamp   DateTime  @default(now())
+  id         String    @id @default(cuid())
+  visitId    String?
+  visit      Visit?    @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  movementId String?
+  movement   Movement? @relation(fields: [movementId], references: [id], onDelete: Cascade)
+  userId     String?
+  user       User?     @relation(fields: [userId], references: [id])
+  action     String
+  details    String?
+  timestamp  DateTime  @default(now())
 
   @@index([visitId])
   @@index([movementId])

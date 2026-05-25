@@ -31,7 +31,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     data.givenNames = givenNames || null;
     data.surname = rest.join(" ") || null;
     data.fullNameHash = hashPII(fullName);
-    changes.push(`fullName: ${fullName}`);
+    changes.push("cambió fullName");
   }
 
   if (body.gender !== undefined && body.gender !== existing.gender) {
@@ -75,8 +75,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const updated = await prisma.passenger.update({ where: { id }, data });
 
-  const fullName = [updated.givenNames, updated.surname].filter(Boolean).join(" ") || "";
-
   // visitId from the movement
   const visitId = existing.movement.visitId;
 
@@ -85,7 +83,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       visitId,
       movementId: existing.movementId,
       userId: session!.user.id,
-      action: `Pasajero ${fullName}: ${changes.join(", ")}`,
+      action: `Pasajero #${id} actualizado: ${changes.join(", ")}`,
     },
   });
 
@@ -116,7 +114,6 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 
   await prisma.passenger.delete({ where: { id } });
 
-  const fullName = [existing.givenNames, existing.surname].filter(Boolean).join(" ") || "";
   const visitId = existing.movement.visitId;
 
   await prisma.eventLog.create({
@@ -124,7 +121,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
       visitId,
       movementId: existing.movementId,
       userId: session!.user.id,
-      action: `Pasajero eliminado: ${fullName}`,
+      action: `Pasajero #${id} eliminado`,
     },
   });
 
@@ -133,7 +130,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     flightId: visitId,
     userId: session!.user.id,
     userName: session!.user.name || undefined,
-    detail: `Eliminado: ${fullName}`,
+    detail: `Pasajero #${id} eliminado`,
     timestamp: new Date().toISOString(),
   });
 

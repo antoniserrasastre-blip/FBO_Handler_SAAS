@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { PlaneLanding, PlaneTakeoff } from "lucide-react";
 import { palmaDayUtc } from "@/lib/time";
 import { HelixButton, HelixPill } from "@/components/helix";
 
@@ -10,7 +11,8 @@ interface DaySheetSummary {
   date: string;
   totalFlights: number;
   dispatched: number;
-  totalPax: number;
+  paxArrival: number;
+  paxDeparture: number;
   totalServices: number;
   deliveredServices: number;
   notes?: string | null;
@@ -160,8 +162,13 @@ export default function HistoricoPage() {
                       <span>
                         <span className="font-semibold text-success-strong">{ds.dispatched}</span> despachados
                       </span>
-                      <span>
-                        <span className="font-semibold text-ink-1">{ds.totalPax}</span> pax salida
+                      <span className="inline-flex items-center gap-1">
+                        <PlaneLanding size={11} className="text-fbo-approach" />
+                        <span className="font-semibold text-ink-1">{ds.paxArrival}</span>
+                      </span>
+                      <span className="inline-flex items-center gap-1">
+                        <PlaneTakeoff size={11} className="text-fbo-board" />
+                        <span className="font-semibold text-ink-1">{ds.paxDeparture}</span>
                       </span>
                       <span>
                         <span className="font-semibold text-ink-1">

@@ -33,10 +33,38 @@ const V1_DROPS = [
 ];
 
 const V2_TABLES = [
+  // User is preserved across migrations (never dropped). Ensure it exists here
+  // in case this script runs on a fresh DB.
+  `CREATE TABLE IF NOT EXISTS "User" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "email" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "password" TEXT NOT NULL,
+    "role" TEXT NOT NULL DEFAULT 'HANDLER',
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "User_email_key" ON "User"("email")`,
+
+  // DaySheet — V2 version (opt-in day rows with notes + closed flag).
+  // The old V1 DaySheet (no notes/closed) is dropped above in V1_DROPS;
+  // we recreate it here with the correct V2 schema.
+  `CREATE TABLE IF NOT EXISTS "DaySheet" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "date" DATETIME NOT NULL,
+    "notes" TEXT,
+    "closed" INTEGER NOT NULL DEFAULT 0,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "DaySheet_date_key" ON "DaySheet"("date")`,
+  `CREATE INDEX IF NOT EXISTS "DaySheet_date_idx" ON "DaySheet"("date")`,
+
   `CREATE TABLE IF NOT EXISTS "Operator" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "icaoCode" TEXT NOT NULL,
     "name" TEXT NOT NULL,
+    "isStateAircraft" INTEGER NOT NULL DEFAULT 0,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" DATETIME NOT NULL
   )`,
@@ -48,6 +76,13 @@ const V2_TABLES = [
     "aircraftType" TEXT,
     "currentOperatorId" TEXT,
     "baseAirport" TEXT,
+    "mtowKg" INTEGER,
+    "noiseChapter" TEXT,
+    "cumulativeMarginEpndb" REAL,
+    "paxCapacityCertified" INTEGER,
+    "aircraftDataConfirmed" INTEGER NOT NULL DEFAULT 0,
+    "aircraftDataConfirmedById" TEXT,
+    "aircraftDataConfirmedAt" DATETIME,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" DATETIME NOT NULL,
     CONSTRAINT "Aircraft_currentOperatorId_fkey" FOREIGN KEY ("currentOperatorId") REFERENCES "Operator" ("id") ON DELETE SET NULL ON UPDATE CASCADE
@@ -72,6 +107,7 @@ const V2_TABLES = [
   `CREATE INDEX IF NOT EXISTS "Visit_aircraftId_idx" ON "Visit"("aircraftId")`,
   `CREATE INDEX IF NOT EXISTS "Visit_palmaDay_idx" ON "Visit"("palmaDay")`,
   `CREATE INDEX IF NOT EXISTS "Visit_operatorId_idx" ON "Visit"("operatorId")`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "Visit_aircraftId_palmaDay_key" ON "Visit"("aircraftId","palmaDay")`,
 
   `CREATE TABLE IF NOT EXISTS "Movement" (
     "id" TEXT NOT NULL PRIMARY KEY,
@@ -83,6 +119,8 @@ const V2_TABLES = [
     "scheduledDate" DATETIME NOT NULL,
     "eta" TEXT,
     "etd" TEXT,
+    "ata" TEXT,
+    "atd" TEXT,
     "parking" TEXT,
     "tobt" TEXT,
     "state" TEXT NOT NULL DEFAULT 'EXPECTED',
@@ -101,6 +139,7 @@ const V2_TABLES = [
     "flightCategory" TEXT NOT NULL DEFAULT 'COMMERCIAL',
     "modifiedFlag" INTEGER NOT NULL DEFAULT 0,
     "petCount" INTEGER NOT NULL DEFAULT 0,
+    "commercialFlag" INTEGER NOT NULL DEFAULT 0,
     "fuelState" TEXT NOT NULL DEFAULT 'NOT_REQUESTED',
     "fuelRequestedAt" TEXT,
     "fuelServedAt" TEXT,
@@ -238,15 +277,63 @@ const V2_TABLES = [
   `CREATE INDEX IF NOT EXISTS "CustomServicePreset_createdById_idx" ON "CustomServicePreset"("createdById")`,
 ];
 
+// ---------------------------------------------------------------------------
+// Idempotent ALTER TABLE statements for DBs that were created by an earlier
+// version of this script and are missing the new columns. Each ALTER is
+// wrapped in a try/catch: "duplicate column name" means the column already
+// exists and can be safely ignored.  Any other error is re-thrown.
+// ---------------------------------------------------------------------------
+const V2_ALTERS = [
+  // DaySheet — notes and closed added in V2 (V1 had neither)
+  `ALTER TABLE "DaySheet" ADD COLUMN "notes" TEXT`,
+  `ALTER TABLE "DaySheet" ADD COLUMN "closed" INTEGER NOT NULL DEFAULT 0`,
+
+  // Operator — AENA state-aircraft exemption flag
+  `ALTER TABLE "Operator" ADD COLUMN "isStateAircraft" INTEGER NOT NULL DEFAULT 0`,
+
+  // Aircraft — AENA technical data fields
+  `ALTER TABLE "Aircraft" ADD COLUMN "mtowKg" INTEGER`,
+  `ALTER TABLE "Aircraft" ADD COLUMN "noiseChapter" TEXT`,
+  `ALTER TABLE "Aircraft" ADD COLUMN "cumulativeMarginEpndb" REAL`,
+  `ALTER TABLE "Aircraft" ADD COLUMN "paxCapacityCertified" INTEGER`,
+  `ALTER TABLE "Aircraft" ADD COLUMN "aircraftDataConfirmed" INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE "Aircraft" ADD COLUMN "aircraftDataConfirmedById" TEXT`,
+  `ALTER TABLE "Aircraft" ADD COLUMN "aircraftDataConfirmedAt" DATETIME`,
+
+  // Movement — actual time fields + commercial flag
+  `ALTER TABLE "Movement" ADD COLUMN "ata" TEXT`,
+  `ALTER TABLE "Movement" ADD COLUMN "atd" TEXT`,
+  `ALTER TABLE "Movement" ADD COLUMN "commercialFlag" INTEGER NOT NULL DEFAULT 0`,
+
+  // Movement — OpenSky live-tracking snapshot (last seen). All nullable.
+  `ALTER TABLE "Movement" ADD COLUMN "liveIcao24" TEXT`,
+  `ALTER TABLE "Movement" ADD COLUMN "livePhase" TEXT`,
+  `ALTER TABLE "Movement" ADD COLUMN "liveLastSeenAt" DATETIME`,
+  `ALTER TABLE "Movement" ADD COLUMN "liveOnGround" INTEGER`,
+  `ALTER TABLE "Movement" ADD COLUMN "liveAltitudeM" REAL`,
+  `ALTER TABLE "Movement" ADD COLUMN "liveVelocityMs" REAL`,
+
+  // Visit — Rampa: el coordinador asigna el vuelo entero a un handler de turno.
+  `ALTER TABLE "Visit" ADD COLUMN "assignedToId" TEXT`,
+];
+
 async function main() {
   console.log("→ Connecting to Turso...");
   const ping = await client.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name");
   console.log("Existing tables BEFORE:", ping.rows.map(r => r.name).join(", ") || "(none)");
 
-  console.log("\n→ Dropping legacy V1 tables (User preserved)...");
-  for (const sql of V1_DROPS) {
-    await client.execute(sql);
-    console.log("  ✓", sql);
+  // V1_DROPS is DESTRUCTIVE: several dropped names (EventLog, Service, Passenger,
+  // CrewMember, LostItem, DaySheet) are also V2 table names, so running it wipes
+  // their rows. Gate it behind MIGRATE_RESET=v1 so normal deploys never destroy
+  // data — they rely on CREATE TABLE IF NOT EXISTS + V2_ALTERS (non-destructive).
+  if (process.env.MIGRATE_RESET === "v1") {
+    console.log("\n→ MIGRATE_RESET=v1 → dropping legacy V1 tables (User preserved)...");
+    for (const sql of V1_DROPS) {
+      await client.execute(sql);
+      console.log("  ✓", sql);
+    }
+  } else {
+    console.log("\n→ Skipping V1 drops (set MIGRATE_RESET=v1 to force a destructive V1→V2 reset).");
   }
 
   console.log("\n→ Creating V2 tables...");
@@ -258,6 +345,42 @@ async function main() {
       console.log(`  ✓ ${kind}: ${name}`);
     } catch (e) {
       console.error(`  ✗ ${kind}: ${name} — ${e.message}`);
+      throw e;
+    }
+  }
+
+  console.log("\n→ Applying idempotent column additions...");
+  for (const sql of V2_ALTERS) {
+    try {
+      await client.execute(sql);
+      console.log(`  ✓ ${sql.slice(0, 80)}`);
+    } catch (e) {
+      if (e.message?.includes("duplicate column name") || e.message?.includes("already exists")) {
+        console.log(`  ⊘ skipped (already exists): ${sql.slice(0, 80)}`);
+      } else {
+        console.error(`  ✗ ALTER failed: ${e.message}`);
+        throw e;
+      }
+    }
+  }
+
+  // Unique index on Visit(aircraftId, palmaDay) — idempotent via IF NOT EXISTS.
+  // NOTE: If the live DB already has duplicate (aircraftId, palmaDay) rows this
+  // will fail with "UNIQUE constraint failed". Deduplicate first by running:
+  //   DELETE FROM Visit WHERE id NOT IN (
+  //     SELECT MIN(id) FROM Visit GROUP BY aircraftId, palmaDay
+  //   );
+  console.log("\n→ Ensuring Visit unique index...");
+  try {
+    await client.execute(
+      `CREATE UNIQUE INDEX IF NOT EXISTS "Visit_aircraftId_palmaDay_key" ON "Visit"("aircraftId","palmaDay")`
+    );
+    console.log("  ✓ Visit_aircraftId_palmaDay_key");
+  } catch (e) {
+    if (e.message?.includes("already exists")) {
+      console.log("  ⊘ skipped (already exists): Visit_aircraftId_palmaDay_key");
+    } else {
+      console.error(`  ✗ Visit unique index failed: ${e.message}`);
       throw e;
     }
   }

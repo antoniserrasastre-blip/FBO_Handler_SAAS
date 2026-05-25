@@ -31,7 +31,7 @@ export function ShiftHandover({ isOpen, onClose, flights, date }: ShiftHandoverP
       (f.services || []).filter((s) => s.state !== "DELIVERED").map((s) => ({ flight: f, service: s }))
     );
     const overdueServices = flights.flatMap((f) =>
-      (f.services || []).filter(isServiceOverdue).map((s) => ({ flight: f, service: s }))
+      (f.services || []).filter((s) => isServiceOverdue(s)).map((s) => ({ flight: f, service: s }))
     );
     const openLostItems = flights.flatMap((f) =>
       (f.lostItems || []).filter((li) => li.state !== "DELIVERED").map((li) => ({ flight: f, item: li }))

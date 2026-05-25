@@ -173,7 +173,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       visitId: id,
       movementId: movement.id,
       userId: session!.user.id,
-      action: `Tripulante anadido: ${body.fullName}`,
+      action: `Tripulante #${crewMember.id} añadido`,
       details: `${direction} — ${body.role || "OTHER"}`,
     },
   });
@@ -183,7 +183,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     flightId: id,
     userId: session!.user.id,
     userName: session!.user.name || undefined,
-    detail: `Tripulante: ${body.fullName}`,
+    detail: `Tripulante #${crewMember.id} añadido`,
     timestamp: new Date().toISOString(),
   });
 

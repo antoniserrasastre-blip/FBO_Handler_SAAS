@@ -16,7 +16,6 @@ export default function NewFlightPage() {
     destination: "",
     etd: "",
     parking: "",
-    tobt: "",
     crewArrival: 0,
     paxArrival: 0,
     crewDeparture: 0,
@@ -139,7 +138,7 @@ export default function NewFlightPage() {
             <legend className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-400">
               Salida
             </legend>
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2">
               <FormInput
                 label="Destino (ICAO)"
                 placeholder="GMME"
@@ -151,12 +150,6 @@ export default function NewFlightPage() {
                 placeholder="14:00"
                 value={form.etd}
                 onChange={(v) => updateField("etd", v)}
-              />
-              <FormInput
-                label="TOBT"
-                placeholder="13:50"
-                value={form.tobt}
-                onChange={(v) => updateField("tobt", v)}
               />
             </div>
             <div className="mt-4 grid gap-4 sm:grid-cols-2">

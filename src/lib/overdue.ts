@@ -5,6 +5,8 @@
 // v2 uses structural typing so callers can pass v2 Service rows or any
 // matching shape.
 
+import { madridWallMinutes } from "./time";
+
 export interface OverdueServiceLike {
   state: string;
   scheduledAt?: string | null;
@@ -12,24 +14,32 @@ export interface OverdueServiceLike {
   rawDescription?: string | null;
 }
 
-export function isServiceOverdue(service: OverdueServiceLike, thresholdMinutes = 15): boolean {
+export function isServiceOverdue(
+  service: OverdueServiceLike,
+  thresholdMinutes = 15,
+  now: Date = new Date(),
+): boolean {
   if (service.state === "DELIVERED") return false;
 
   const explicit = service.scheduledAt && service.scheduledAt.match(/^(\d{1,2}):(\d{2})$/);
   if (explicit) {
-    return checkOverdue(parseInt(explicit[1]), parseInt(explicit[2]), thresholdMinutes);
+    return checkOverdue(parseInt(explicit[1]), parseInt(explicit[2]), thresholdMinutes, now);
   }
 
   // Fallback: time embedded in customName or rawDescription ("Catering Aire 08:00")
   const embedded = (service.customName || service.rawDescription || "").match(/(\d{1,2}):(\d{2})/);
   if (!embedded) return false;
-  return checkOverdue(parseInt(embedded[1]), parseInt(embedded[2]), thresholdMinutes);
+  return checkOverdue(parseInt(embedded[1]), parseInt(embedded[2]), thresholdMinutes, now);
 }
 
-function checkOverdue(hours: number, minutes: number, thresholdMinutes: number): boolean {
-  const now = new Date();
+function checkOverdue(
+  hours: number,
+  minutes: number,
+  thresholdMinutes: number,
+  now: Date = new Date(),
+): boolean {
   const scheduledMinutes = hours * 60 + minutes;
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const currentMinutes = madridWallMinutes(now);
   return currentMinutes > scheduledMinutes + thresholdMinutes;
 }
 

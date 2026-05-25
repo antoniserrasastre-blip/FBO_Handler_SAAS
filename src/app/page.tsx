@@ -773,7 +773,7 @@ function HomePageInner() {
                   tone="alert"
                   onClick={() => {
                     const overdue = flights.find((f) =>
-                      (f.services || []).some(isServiceOverdue),
+                      (f.services || []).some((s) => isServiceOverdue(s)),
                     );
                     if (overdue) focusFlight(overdue.id);
                   }}

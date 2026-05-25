@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { requireWriter } from "@/lib/roles";
 import { prisma } from "@/lib/db";
 import { eventBus } from "@/lib/events";
 import { palmaDayUtc, getSpainToday } from "@/lib/time";
@@ -123,8 +124,8 @@ export async function GET(req: NextRequest) {
 
 // POST /api/flights — create a new visit + departure movement
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { session, error } = await requireWriter();
+  if (error) return error;
 
   const body = await req.json();
   const { date: dateParam, ...flightData } = body;
@@ -147,14 +148,14 @@ export async function POST(req: NextRequest) {
     callsignForOperator: flightData.callsign,
   });
 
-  const visit = await upsertVisit({
+  const { record: visit } = await upsertVisit({
     aircraftId: aircraft.id,
     palmaDay,
     operatorId,
   });
 
   // Create DEPARTURE movement (manual quick-adds typically capture the departure leg)
-  const depMovement = await upsertMovement({
+  const { record: depMovement } = await upsertMovement({
     visitId: visit.id,
     direction: "DEPARTURE",
     callsign: flightData.callsign,

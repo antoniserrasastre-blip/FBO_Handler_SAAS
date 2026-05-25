@@ -19,11 +19,17 @@ interface ToCancelEntry {
   destination: string | null;
 }
 
+interface ParseWarning {
+  row: number;
+  reason: string;
+}
+
 interface ParseResult {
   date: string;
   flights: ParsedFlight[];
   errors: string[];
   toCancel?: ToCancelEntry[];
+  warnings?: ParseWarning[];
 }
 
 interface ParsedService {
@@ -163,6 +169,7 @@ function PdfImportTab() {
 
       {error && <ErrorBanner message={error} />}
       {result?.errors.length ? <WarningBanner items={result.errors} /> : null}
+      {result?.warnings?.length ? <ParseWarningsBanner warnings={result.warnings} /> : null}
 
       {result && result.flights.length > 0 && !saveResult && (
         <div className="mt-6">
@@ -472,6 +479,21 @@ function WarningBanner({ items }: { items: string[] }) {
   return (
     <div className="mt-4 rounded-hx-md border border-warning-strong bg-warning-bg px-4 py-3">
       {items.map((e, i) => <p key={i} className="text-xs text-warning-strong">{e}</p>)}
+    </div>
+  );
+}
+
+function ParseWarningsBanner({ warnings }: { warnings: ParseWarning[] }) {
+  return (
+    <div className="mt-4 rounded-hx-md border border-warning-strong bg-warning-bg px-4 py-3" data-testid="parse-warnings-banner">
+      <p className="mb-1.5 text-xs font-semibold text-warning-strong">
+        Avisos del parseo — {warnings.length} {warnings.length === 1 ? "fila con problema" : "filas con problemas"} (no bloquean la importación)
+      </p>
+      {warnings.map((w, i) => (
+        <p key={i} className="text-xs text-warning-strong">
+          Fila {w.row}: {w.reason}
+        </p>
+      ))}
     </div>
   );
 }

@@ -37,6 +37,8 @@ next-env.d.ts
 # prisma
 prisma/dev.db
 prisma/dev.db-journal
+prisma/prisma/
+*.db
 
 # parser comparator output
 parser-comparison.json

@@ -22,11 +22,37 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@libsql/client";
 
 const V2_TABLES = [
+  // User — preserved across migrations but ensured on fresh DBs
+  `CREATE TABLE IF NOT EXISTS "User" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "email" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "password" TEXT NOT NULL,
+    "role" TEXT NOT NULL DEFAULT 'HANDLER',
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "User_email_key" ON "User"("email")`,
+
+  // DaySheet — V2 version (opt-in day rows with notes + closed flag).
+  // The old V1 DaySheet (no notes/closed) is dropped in V1_DROPS; recreated here.
+  `CREATE TABLE IF NOT EXISTS "DaySheet" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "date" DATETIME NOT NULL,
+    "notes" TEXT,
+    "closed" INTEGER NOT NULL DEFAULT 0,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "DaySheet_date_key" ON "DaySheet"("date")`,
+  `CREATE INDEX IF NOT EXISTS "DaySheet_date_idx" ON "DaySheet"("date")`,
+
   // Operator
   `CREATE TABLE IF NOT EXISTS "Operator" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "icaoCode" TEXT NOT NULL,
     "name" TEXT NOT NULL,
+    "isStateAircraft" INTEGER NOT NULL DEFAULT 0,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" DATETIME NOT NULL
   )`,
@@ -39,6 +65,13 @@ const V2_TABLES = [
     "aircraftType" TEXT,
     "currentOperatorId" TEXT,
     "baseAirport" TEXT,
+    "mtowKg" INTEGER,
+    "noiseChapter" TEXT,
+    "cumulativeMarginEpndb" REAL,
+    "paxCapacityCertified" INTEGER,
+    "aircraftDataConfirmed" INTEGER NOT NULL DEFAULT 0,
+    "aircraftDataConfirmedById" TEXT,
+    "aircraftDataConfirmedAt" DATETIME,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" DATETIME NOT NULL,
     CONSTRAINT "Aircraft_currentOperatorId_fkey" FOREIGN KEY ("currentOperatorId") REFERENCES "Operator" ("id") ON DELETE SET NULL ON UPDATE CASCADE
@@ -64,6 +97,7 @@ const V2_TABLES = [
   `CREATE INDEX IF NOT EXISTS "Visit_aircraftId_idx" ON "Visit"("aircraftId")`,
   `CREATE INDEX IF NOT EXISTS "Visit_palmaDay_idx" ON "Visit"("palmaDay")`,
   `CREATE INDEX IF NOT EXISTS "Visit_operatorId_idx" ON "Visit"("operatorId")`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "Visit_aircraftId_palmaDay_key" ON "Visit"("aircraftId","palmaDay")`,
 
   // Movement
   `CREATE TABLE IF NOT EXISTS "Movement" (
@@ -76,6 +110,8 @@ const V2_TABLES = [
     "scheduledDate" DATETIME NOT NULL,
     "eta" TEXT,
     "etd" TEXT,
+    "ata" TEXT,
+    "atd" TEXT,
     "parking" TEXT,
     "tobt" TEXT,
     "state" TEXT NOT NULL DEFAULT 'EXPECTED',
@@ -94,6 +130,7 @@ const V2_TABLES = [
     "flightCategory" TEXT NOT NULL DEFAULT 'COMMERCIAL',
     "modifiedFlag" INTEGER NOT NULL DEFAULT 0,
     "petCount" INTEGER NOT NULL DEFAULT 0,
+    "commercialFlag" INTEGER NOT NULL DEFAULT 0,
     "fuelState" TEXT NOT NULL DEFAULT 'NOT_REQUESTED',
     "fuelRequestedAt" TEXT,
     "fuelServedAt" TEXT,
@@ -226,6 +263,34 @@ const V2_TABLES = [
   `CREATE INDEX IF NOT EXISTS "EventLog_userId_idx" ON "EventLog"("userId")`,
 ];
 
+// ---------------------------------------------------------------------------
+// Idempotent ALTER TABLE statements for DBs that were created by an earlier
+// version of this script and are missing the new columns.
+// "duplicate column name" / "already exists" errors are silently swallowed.
+// ---------------------------------------------------------------------------
+const V2_ALTERS = [
+  // DaySheet — notes and closed added in V2 (V1 had neither)
+  `ALTER TABLE "DaySheet" ADD COLUMN "notes" TEXT`,
+  `ALTER TABLE "DaySheet" ADD COLUMN "closed" INTEGER NOT NULL DEFAULT 0`,
+
+  // Operator — AENA state-aircraft exemption flag
+  `ALTER TABLE "Operator" ADD COLUMN "isStateAircraft" INTEGER NOT NULL DEFAULT 0`,
+
+  // Aircraft — AENA technical data fields
+  `ALTER TABLE "Aircraft" ADD COLUMN "mtowKg" INTEGER`,
+  `ALTER TABLE "Aircraft" ADD COLUMN "noiseChapter" TEXT`,
+  `ALTER TABLE "Aircraft" ADD COLUMN "cumulativeMarginEpndb" REAL`,
+  `ALTER TABLE "Aircraft" ADD COLUMN "paxCapacityCertified" INTEGER`,
+  `ALTER TABLE "Aircraft" ADD COLUMN "aircraftDataConfirmed" INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE "Aircraft" ADD COLUMN "aircraftDataConfirmedById" TEXT`,
+  `ALTER TABLE "Aircraft" ADD COLUMN "aircraftDataConfirmedAt" DATETIME`,
+
+  // Movement — actual time fields + commercial flag
+  `ALTER TABLE "Movement" ADD COLUMN "ata" TEXT`,
+  `ALTER TABLE "Movement" ADD COLUMN "atd" TEXT`,
+  `ALTER TABLE "Movement" ADD COLUMN "commercialFlag" INTEGER NOT NULL DEFAULT 0`,
+];
+
 // Tables that exist in V1 with incompatible FKs (point to Flight, which no
 // longer exists in the V2 code). DROP order respects FK dependencies.
 const V1_DROPS = [
@@ -289,6 +354,50 @@ async function runMigration(req: NextRequest) {
         return NextResponse.json(
           {
             error: `Migration failed on ${name}: ${msg}. If this is a legacy V1 table with FKs to Flight, re-run with ?reset=v1 to drop and recreate.`,
+            log,
+          },
+          { status: 409 },
+        );
+      }
+    }
+
+    log.push("== ALTER existing tables (idempotent column additions) ==");
+    for (const sql of V2_ALTERS) {
+      try {
+        await client.execute(sql);
+        log.push(`  ✓ ${sql.slice(0, 80)}`);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (msg.includes("duplicate column name") || msg.includes("already exists")) {
+          log.push(`  ⊘ skipped (already exists): ${sql.slice(0, 80)}`);
+        } else {
+          log.push(`  ✗ ALTER failed: ${msg}`);
+          return NextResponse.json({ error: `ALTER failed: ${msg}`, log }, { status: 500 });
+        }
+      }
+    }
+
+    // Visit unique index — idempotent. Fails only if duplicate rows exist.
+    // NOTE: If the live DB has duplicate (aircraftId, palmaDay) rows, this will
+    // return a 409. Deduplicate first:
+    //   DELETE FROM Visit WHERE id NOT IN (
+    //     SELECT MIN(id) FROM Visit GROUP BY aircraftId, palmaDay
+    //   );
+    log.push("== Visit unique index ==");
+    try {
+      await client.execute(
+        `CREATE UNIQUE INDEX IF NOT EXISTS "Visit_aircraftId_palmaDay_key" ON "Visit"("aircraftId","palmaDay")`
+      );
+      log.push("  ✓ Visit_aircraftId_palmaDay_key");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.includes("already exists")) {
+        log.push("  ⊘ skipped (already exists): Visit_aircraftId_palmaDay_key");
+      } else {
+        log.push(`  ✗ Visit unique index failed: ${msg}`);
+        return NextResponse.json(
+          {
+            error: `Visit unique index failed (likely duplicate rows): ${msg}. Deduplicate with: DELETE FROM Visit WHERE id NOT IN (SELECT MIN(id) FROM Visit GROUP BY aircraftId, palmaDay)`,
             log,
           },
           { status: 409 },

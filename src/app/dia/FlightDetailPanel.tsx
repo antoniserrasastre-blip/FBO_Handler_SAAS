@@ -482,9 +482,6 @@ function FlightFieldsPanel({
         <FormRow label="Parking">
           <InlineTextEdit value={flight.parking || ""} onSave={(v) => patchFlight({ parking: v || null })} placeholder="tbd" />
         </FormRow>
-        <FormRow label="TOBT">
-          <QuickTimeEdit value={flight.tobt} onSave={(v) => patchFlight({ tobt: v || null })} />
-        </FormRow>
         <FormRow label="Estado">
           <InlineSelect
             value={normalizeFlightState(flight.state)}

@@ -76,7 +76,7 @@ export function QuickTimeEdit({ value, onSave, placeholder = "--:--", className 
         setLocal(value || "");
         setEditing(true);
       }}
-      className={`cursor-text rounded px-1 hover:bg-brand-tint ${className}`}
+      className={`inline-block cursor-text whitespace-nowrap rounded px-1 hover:bg-brand-tint ${className}`}
       title="Click para editar (escribe 4 dígitos)"
     >
       {value || placeholder}

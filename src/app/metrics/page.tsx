@@ -10,7 +10,8 @@ interface Metrics {
   range: number;
   daysWithData: number;
   totalFlights: number;
-  totalPax: number;
+  paxArrival: number;
+  paxDeparture: number;
   totalServices: number;
   servicesDelivered: number;
   servicesPending: number;
@@ -19,7 +20,7 @@ interface Metrics {
   overnightFlights: number;
   avgTurnaround: number;
   tightTurnarounds: number;
-  dailyStats: { date: string; flights: number; paxTotal: number; servicesTotal: number; servicesDelivered: number }[];
+  dailyStats: { date: string; flights: number; paxArrival: number; paxDeparture: number; servicesTotal: number; servicesDelivered: number }[];
   topOperators: { icao: string; name: string; flights: number; pax: number }[];
   hourBuckets: { hour: number; arrivals: number; departures: number }[];
   weekdayCounts: { day: string; flights: number; pax: number }[];
@@ -118,9 +119,13 @@ export default function MetricsPage() {
   const maxWeekday = Math.max(...metrics.weekdayCounts.map((w) => w.flights), 1);
 
   const flightSpark = metrics.dailyStats.map((d) => d.flights);
-  const paxSpark = metrics.dailyStats.map((d) => d.paxTotal);
+  const paxSpark = metrics.dailyStats.map((d) => d.paxArrival + d.paxDeparture);
 
-  const trendHistory = metrics.dailyStats.map((d) => ({ date: d.date, value: d.flights, pax: d.paxTotal }));
+  const trendHistory = metrics.dailyStats.map((d) => ({
+    date: d.date,
+    value: d.flights,
+    pax: d.paxArrival + d.paxDeparture,
+  }));
   const trendForecast = metrics.forecast.enough
     ? metrics.forecast.days.map((d) => ({ date: d.date, value: d.flights, pax: d.pax }))
     : [];
@@ -149,7 +154,7 @@ export default function MetricsPage() {
         </div>
 
         {/* ---- KPIs principales (con delta y sparkline) ---- */}
-        <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <Kpi
             label="Total vuelos"
             value={metrics.totalFlights}
@@ -158,11 +163,15 @@ export default function MetricsPage() {
             spark={flightSpark}
           />
           <Kpi
-            label="Total pasajeros"
-            value={metrics.totalPax}
-            delta={{ value: metrics.deltas.pax, unit: "%", goodWhenUp: true }}
+            label="Pax llegada"
+            value={metrics.paxArrival}
             spark={paxSpark}
             sparkColor="var(--c-state-departed)"
+          />
+          <Kpi
+            label="Pax salida"
+            value={metrics.paxDeparture}
+            delta={{ value: metrics.deltas.pax, unit: "%", goodWhenUp: true }}
           />
           <Kpi
             label="Servicios entregados"

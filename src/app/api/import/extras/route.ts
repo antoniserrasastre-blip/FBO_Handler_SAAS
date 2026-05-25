@@ -6,8 +6,7 @@
 // PDF later imports.
 
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { requireWriter } from "@/lib/roles";
 import { prisma } from "@/lib/db";
 import { parseExtrasExcel } from "@/lib/excelParser";
 import { palmaDayUtc } from "@/lib/time";
@@ -23,8 +22,8 @@ const ORIGIN_MAP: Record<string, string> = {
 };
 
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { error } = await requireWriter();
+  if (error) return error;
 
   const lenCheck = validateContentLength(req.headers.get("content-length"), "xlsx");
   if (!lenCheck.ok) return NextResponse.json({ error: lenCheck.message }, { status: lenCheck.status });
@@ -62,8 +61,8 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { session, error } = await requireWriter();
+  if (error) return error;
 
   const body = await req.json();
   const { extras, date: globalDate } = body;
@@ -122,12 +121,16 @@ export async function PUT(req: NextRequest) {
       if (!visit) {
         // Orphan: create Aircraft + Visit, no Movements yet.
         const aircraft = await upsertAircraft({ registration: extra.registration });
-        visit = await upsertVisit({ aircraftId: aircraft.id, palmaDay });
+        const { record: orphanVisit } = await upsertVisit({ aircraftId: aircraft.id, palmaDay });
+        // The orphan visit has only the base fields; cast to the map's key type
+        // (only .id is used within this loop body).
+        const slimVisit: { id: string; aircraftId: string } = orphanVisit;
+        visit = slimVisit;
         pendingCreated.push(extra.registration);
-        visitByReg.set(reg, visit);
+        visitByReg.set(reg, slimVisit);
         await prisma.eventLog.create({
           data: {
-            visitId: visit.id,
+            visitId: orphanVisit.id,
             userId: session.user.id,
             action: "Visit creada desde extras (matricula no encontrada en orden del dia)",
           },

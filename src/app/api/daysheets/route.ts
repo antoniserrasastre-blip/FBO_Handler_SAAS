@@ -19,7 +19,7 @@ export async function GET() {
   const [visits, daySheets] = await Promise.all([
     prisma.visit.findMany({
       include: {
-        movements: { select: { paxCount: true, state: true } },
+        movements: { select: { paxCount: true, paxCountReal: true, direction: true, state: true } },
         services: { select: { state: true } },
       },
     }),
@@ -51,10 +51,20 @@ export async function GET() {
       const dispatched = list.filter((v) =>
         v.movements.some((m) => m.state === "OFF_BLOCKS")
       ).length;
-      const totalPax = list.reduce(
+      const paxArrival = list.reduce(
         (sum, v) =>
           sum +
-          v.movements.reduce((s2, m) => s2 + (m.paxCount || 0), 0),
+          v.movements
+            .filter((m) => m.direction === "ARRIVAL")
+            .reduce((s2, m) => s2 + (m.paxCountReal ?? m.paxCount ?? 0), 0),
+        0
+      );
+      const paxDeparture = list.reduce(
+        (sum, v) =>
+          sum +
+          v.movements
+            .filter((m) => m.direction === "DEPARTURE")
+            .reduce((s2, m) => s2 + (m.paxCountReal ?? m.paxCount ?? 0), 0),
         0
       );
       const totalServices = list.reduce((sum, v) => sum + v.services.length, 0);
@@ -68,7 +78,8 @@ export async function GET() {
         date,
         totalFlights,
         dispatched,
-        totalPax,
+        paxArrival,
+        paxDeparture,
         totalServices,
         deliveredServices,
         notes: ds?.notes ?? null,

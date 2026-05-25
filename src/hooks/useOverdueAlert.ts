@@ -34,7 +34,7 @@ export function useOverdueAlert(services: Service[], soundEnabled: boolean) {
   const [overdueCount, setOverdueCount] = useState(0);
 
   useEffect(() => {
-    const currentOverdue = services.filter(isServiceOverdue);
+    const currentOverdue = services.filter((s) => isServiceOverdue(s));
     const currentIds = new Set(currentOverdue.map((s) => s.id));
 
     // Check for newly overdue services

@@ -39,7 +39,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   if (body.fullName !== undefined && body.fullName !== assignment.crewMember.fullName) {
     crewData.fullName = body.fullName;
-    changes.push(`fullName: ${body.fullName}`);
+    changes.push("cambió fullName");
   }
   if (body.nationality !== undefined && body.nationality !== assignment.crewMember.nationality) {
     crewData.nationality = body.nationality;
@@ -85,7 +85,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       visitId,
       movementId: assignment.movementId,
       userId: session!.user.id,
-      action: `Tripulante ${assignment.crewMember.fullName}: ${changes.join(", ")}`,
+      action: `Tripulante #${assignment.crewMemberId} actualizado: ${changes.join(", ")}`,
     },
   });
 
@@ -125,7 +125,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
       visitId,
       movementId: assignment.movementId,
       userId: session!.user.id,
-      action: `Tripulante eliminado: ${assignment.crewMember.fullName}`,
+      action: `Tripulante #${assignment.crewMemberId} eliminado`,
     },
   });
 
@@ -134,7 +134,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     flightId: visitId,
     userId: session!.user.id,
     userName: session!.user.name || undefined,
-    detail: `Eliminado: ${assignment.crewMember.fullName}`,
+    detail: `Tripulante #${assignment.crewMemberId} eliminado`,
     timestamp: new Date().toISOString(),
   });
 

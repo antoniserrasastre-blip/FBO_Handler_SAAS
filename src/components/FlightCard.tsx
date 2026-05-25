@@ -456,9 +456,8 @@ export const FlightCard = memo(function FlightCard({
                     <TextField label="Matricula" value={flight.registration} onChange={(v) => onUpdate(flight.id, { registration: v })} />
                     <TextField label="Tipo" value={flight.aircraftType} onChange={(v) => onUpdate(flight.id, { aircraftType: v })} />
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 gap-2">
                     <TextField label="Parking" value={flight.parking || ""} onChange={(v) => onUpdate(flight.id, { parking: v })} />
-                    <TextField label="TOBT" value={flight.tobt || ""} onChange={(v) => onUpdate(flight.id, { tobt: v })} placeholder="HH:MM" />
                   </div>
                 </div>
               </Section>

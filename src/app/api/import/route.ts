@@ -5,19 +5,20 @@
 
 import "@/lib/pdfPolyfills";
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { requireWriter } from "@/lib/roles";
 import { prisma } from "@/lib/db";
 import { parseCybermaxPdf, parseDate } from "@/lib/pdfParser";
+import type { ParseWarning } from "@/lib/pdfParser";
 import { eventBus } from "@/lib/events";
 import { validateUpload, validateContentLength } from "@/lib/uploadValidation";
 import { upsertAircraft, upsertVisit, upsertMovement, upsertOperator } from "@/lib/v2/upsert";
+import { resolveImportState } from "@/lib/v2/resolveImportState";
 import { findOperator } from "@/lib/operators";
 
 // POST — preview
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { error } = await requireWriter();
+  if (error) return error;
 
   const lenCheck = validateContentLength(req.headers.get("content-length"), "pdf");
   if (!lenCheck.ok) return NextResponse.json({ error: lenCheck.message }, { status: lenCheck.status });
@@ -33,6 +34,7 @@ export async function POST(req: NextRequest) {
 
   const allFlights: Awaited<ReturnType<typeof parseCybermaxPdf>>["flights"] = [];
   const allErrors: string[] = [];
+  const allWarnings: ParseWarning[] = [];
   let date = "";
 
   for (const file of files) {
@@ -42,6 +44,11 @@ export async function POST(req: NextRequest) {
       if (!date && result.date) date = result.date;
       allFlights.push(...result.flights);
       if (result.errors?.length) allErrors.push(...result.errors.map((e) => `[${file.name}] ${e}`));
+      if (result.warnings?.length) {
+        allWarnings.push(
+          ...result.warnings.map((w) => ({ row: w.row, reason: `[${file.name}] ${w.reason}` }))
+        );
+      }
     } catch (error) {
       const msg = error instanceof Error ? error.message : "Error procesando PDF";
       allErrors.push(`[${file.name}] ${msg}`);
@@ -49,7 +56,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (!allFlights.length && allErrors.length) {
-    return NextResponse.json({ error: allErrors.join("; "), flights: [], errors: allErrors }, { status: 500 });
+    return NextResponse.json({ error: allErrors.join("; "), flights: [], errors: allErrors, warnings: allWarnings }, { status: 500 });
   }
 
   // Reconciliación: vuelos en DB con movimientos en el día del PDF que ya no
@@ -89,13 +96,13 @@ export async function POST(req: NextRequest) {
       });
   }
 
-  return NextResponse.json({ date, flights: allFlights, errors: allErrors, toCancel });
+  return NextResponse.json({ date, flights: allFlights, errors: allErrors, warnings: allWarnings, toCancel });
 }
 
 // PUT — persist
 export async function PUT(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { session, error } = await requireWriter();
+  if (error) return error;
 
   type ParsedFlightInput = Awaited<ReturnType<typeof parseCybermaxPdf>>["flights"][number];
   const body = await req.json();
@@ -117,11 +124,18 @@ export async function PUT(req: NextRequest) {
   for (const f of flights) {
     const callsign: string = f.callsign;
     const registration: string = f.registration;
-    const arrDate = f.arrivalDate ? parseDate(f.arrivalDate) : targetDate;
+
+    // Derive all state/date decisions from the pure helper (BUG-2 + BUG-3 fix).
+    const {
+      isOvernight,
+      arrivalState,
+      departureState,
+      visitDay,
+      visitType,
+    } = resolveImportState(f.arrivalDate, f.departureDate, targetDate);
+
+    const arrDate = visitDay; // arrival day (= palmaDay for the Visit)
     const depDate = f.departureDate ? parseDate(f.departureDate) : targetDate;
-    const isOvernight = Boolean(
-      f.arrivalDate && f.departureDate && f.arrivalDate !== f.departureDate,
-    );
 
     // Operator
     let operatorId: string | null = null;
@@ -141,24 +155,25 @@ export async function PUT(req: NextRequest) {
     // Visit keyed by aircraft + arrival palmaDay. If arrived earlier (pernocta),
     // the visit lives in the arrival's day; the departure leg refers to the same
     // Visit even though it's "on" the target sheet.
-    const visit = await upsertVisit({
+    const { record: visit, wasCreated: visitWasCreated } = await upsertVisit({
       aircraftId: aircraft.id,
       palmaDay: arrDate,
       operatorId,
     });
 
-    const isUpdate = visit.createdAt.getTime() !== visit.updatedAt.getTime();
-
+    // Visit plan fields (type, arrivalDate, departureDate) are always updated —
+    // these are PDF plan data, not handler-editable operational fields.
     await prisma.visit.update({
       where: { id: visit.id },
       data: {
-        type: isOvernight ? "OVERNIGHT" : "TURNAROUND",
+        type: visitType,
         arrivalDate: arrDate,
         departureDate: depDate,
       },
     });
 
-    // ARRIVAL movement
+    // ARRIVAL movement — state is operational (PARKED for overnight, EXPECTED otherwise).
+    // On re-import the state is preserved by upsertMovement's plan-only update policy.
     await upsertMovement({
       visitId: visit.id,
       direction: "ARRIVAL",
@@ -167,15 +182,16 @@ export async function PUT(req: NextRequest) {
       data: {
         origin: f.origin || null,
         eta: f.eta || null,
-        parking: f.parking || null,
         paxCount: f.paxArrival || 0,
         crewCount: f.crewArrival || 0,
-        // pernocta arrived in the past → already on the ground
-        state: isOvernight && arrDate.getTime() < targetDate.getTime() ? "PARKED" : "EXPECTED",
+        parking: f.parking || null,
+        // state is operational — only set on create, never overwritten on update
+        state: arrivalState,
       },
     });
 
-    // DEPARTURE movement
+    // DEPARTURE movement — always starts EXPECTED (BUG-2 fix: was using arrivalState
+    // for both, which left overnight departures as PARKED).
     await upsertMovement({
       visitId: visit.id,
       direction: "DEPARTURE",
@@ -184,12 +200,17 @@ export async function PUT(req: NextRequest) {
       data: {
         destination: f.destination || null,
         etd: f.etd || null,
-        parking: f.parking || null,
         paxCount: f.paxDeparture || 0,
         crewCount: f.crewDeparture || 0,
-        state: isOvernight && arrDate.getTime() < targetDate.getTime() ? "PARKED" : "EXPECTED",
+        parking: f.parking || null,
+        // state is operational — always EXPECTED for departure on create
+        state: departureState,
       },
     });
+
+    // Use wasCreated from upsertVisit for accurate EventLog labelling (BUG-6 fix).
+    // The old heuristic (createdAt !== updatedAt) gave false positives after backfill updates.
+    const isUpdate = !visitWasCreated;
 
     await prisma.eventLog.create({
       data: {

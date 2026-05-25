@@ -251,11 +251,11 @@ export function parseExtrasExcel(buffer: Buffer): ExcelParseResult {
         } else {
           const ref = refMatch[1];
 
-          // Parse reg: "CSPHF / P" or "CSPHF/C"
-          const regTypeMatch = njeRegRaw.match(/^([A-Z0-9]+)\s*\/?\s*([PC])?$/i);
-          if (!regTypeMatch) {
-            errors.push(`Fila ${i + 1}: catering NetJets con ref "${njeRefRaw}" / reg "${njeRegRaw}" no parseable`);
-          } else {
+          // Parse reg: "CSPHF / P", "CSPHF/C", or leg suffix "CSTZZ/1", "OEHCY/2".
+          // Group 1 = registration base. Group 2 = P|C if present; numeric suffixes
+          // (/1, /2, …) are accepted and treated as leg markers with no PAX/CREW target.
+          const regTypeMatch = njeRegRaw.match(/^([A-Z0-9]+)\s*(?:\/\s*([PC])|\s*\/\s*\d+)?\s*$/i);
+          if (regTypeMatch) {
             const reg = cleanReg(regTypeMatch[1]);
             const target = regTypeMatch[2]?.toUpperCase() === "C" ? "CREW"
               : regTypeMatch[2]?.toUpperCase() === "P" ? "PAX"
@@ -300,25 +300,36 @@ export function parseExtrasExcel(buffer: Buffer): ExcelParseResult {
     const mainServices = data.descriptions.flatMap(desc => categorizeService(desc));
     const specialServices = data.services;
 
-    // Deduplicate: if a special section (Catering Aire / NJE) provides a detailed
-    // catering entry with origin/time, drop the generic "CATERING" from the main section.
-    const hasDetailedCatering = specialServices.some(s => s.type === "CATERING");
-    const filtered = hasDetailedCatering
-      ? mainServices.filter(s => s.type !== "CATERING")
-      : mainServices;
+    // Deduplicate: each detailed NJE/Catering-Aire entry covers exactly ONE leg's
+    // generic "CATERING" from the main section. Suppress one generic CATERING per
+    // special catering entry (count-based, per-leg), not all of them globally.
+    // This preserves a second leg's generic CATERING when only the first leg has NJE.
+    const specialCateringCount = specialServices.filter(s => s.type === "CATERING").length;
 
-    // Deduplicate only generic main-section entries that appear more than once
-    // (e.g., "CATERING" listed twice because the aircraft has two legs)
-    // Keep special-section entries even if identical — two legs = two caterings
-    const mainSeen = new Set<string>();
-    const dedupedMain = filtered.filter((s) => {
+    // Suppress up to specialCateringCount generic CATERING entries from main section.
+    // CATERING entries are NOT deduplicated before this step — each leg is independent.
+    // Non-CATERING entries are deduplicated by exact key to remove repeated descriptions.
+    let suppressedCount = 0;
+    const nonCateringMainSeen = new Set<string>();
+    const filtered = mainServices.filter((s) => {
+      if (s.type === "CATERING") {
+        // Each CATERING in main section is an independent leg; suppress only those
+        // that are covered 1-for-1 by a special (NJE/Catering Aire) entry.
+        if (suppressedCount < specialCateringCount) {
+          suppressedCount++;
+          return false;
+        }
+        return true;
+      }
+      // For non-CATERING types, deduplicate identical entries (e.g., same THERMOS
+      // description appearing on both legs of a turnaround).
       const key = `${s.type}|${s.name}`;
-      if (mainSeen.has(key)) return false;
-      mainSeen.add(key);
+      if (nonCateringMainSeen.has(key)) return false;
+      nonCateringMainSeen.add(key);
       return true;
     });
 
-    const finalServices = [...dedupedMain, ...specialServices];
+    const finalServices = [...filtered, ...specialServices];
     if (finalServices.length > 0) {
       extras.push({
         registration,
