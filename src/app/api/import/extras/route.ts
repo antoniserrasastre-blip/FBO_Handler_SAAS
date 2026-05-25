@@ -4,6 +4,25 @@
 // Palma operating day. If no Visit exists yet (Excel arrived before the
 // Cybermax PDF), an orphan Visit is created — it will be enriched when the
 // PDF later imports.
+//
+// RECONCILIATION POLICY — additive-only, never destructive:
+//
+//   The import only ADDS services that are not already present.  It NEVER
+//   deletes or modifies services that already exist (whether added manually
+//   via the web UI or by a previous import).
+//
+//   EQUIVALENCE KEY (what "already present" means):
+//     • When `reference` is non-null (NJE orders): same visitId + type + reference.
+//       Two NJE rows with different references are different services.
+//       Same reference on the same visit → skip (idempotent).
+//     • When `reference` is null: same visitId + type + direction + target + customName.
+//       This covers Catering Aire, MCR newspapers, THERMOS, DISHES, etc.
+//       CUSTOM services include customName in the key so two distinct custom
+//       descriptions are not collapsed.
+//     • For quantity-expanded services (e.g. "2 TERMOS"), count existing rows
+//       that match the key.  If existingCount >= quantityNeeded, skip entirely.
+//       If existingCount < quantityNeeded, create only the missing (quantity - existingCount).
+//       Conservative default: when in doubt, do NOT create (avoids duplicates).
 
 import { NextRequest, NextResponse } from "next/server";
 import { requireWriter } from "@/lib/roles";
@@ -14,6 +33,45 @@ import { validateUpload, validateContentLength } from "@/lib/uploadValidation";
 import { eventBus } from "@/lib/events";
 import { SERVICE_TYPE_DEFAULT_PHASE, type ServiceType } from "@/types";
 import { upsertAircraft, upsertVisit } from "@/lib/v2/upsert";
+
+// --- Equivalence key helpers ---
+
+/** A minimal representation of an existing Service row used for dedup checks. */
+interface ExistingService {
+  type: string;
+  direction: string;
+  target: string | null;
+  reference: string | null;
+  customName: string | null;
+}
+
+/**
+ * Build the deduplication key for an incoming Excel service.
+ * This must mirror `existingServiceKey()` so the two sides can be compared.
+ *
+ * Key shape:
+ *   With reference (NJE):   "type|REF:<reference>"
+ *   Without reference:      "type|<direction>|<target>|<customName>"
+ *
+ * CUSTOM services always include customName; other types include it only when
+ * it differs from the type label (i.e. it carries actual information).
+ */
+function incomingServiceKey(
+  type: string,
+  direction: string,
+  target: string | null | undefined,
+  reference: string | null | undefined,
+  customName: string | null | undefined,
+): string {
+  if (reference) return `${type}|REF:${reference}`;
+  return `${type}|${direction}|${target ?? ""}|${customName ?? ""}`;
+}
+
+/** Same key formula applied to an existing DB row. */
+function existingServiceKey(svc: ExistingService): string {
+  if (svc.reference) return `${svc.type}|REF:${svc.reference}`;
+  return `${svc.type}|${svc.direction}|${svc.target ?? ""}|${svc.customName ?? ""}`;
+}
 
 const ORIGIN_MAP: Record<string, string> = {
   NetJets: "NETJETS",
@@ -113,6 +171,25 @@ export async function PUT(req: NextRequest) {
       if (!visitByReg.has(reg.replace(/-/g, ""))) visitByReg.set(reg.replace(/-/g, ""), v);
     }
 
+    // Cache of existing services per visit (loaded on first access for that visit).
+    // Key: visitId → Map<equivalenceKey, count>
+    const existingByVisit = new Map<string, Map<string, number>>();
+
+    async function getExistingKeyCounts(visitId: string): Promise<Map<string, number>> {
+      if (existingByVisit.has(visitId)) return existingByVisit.get(visitId)!;
+      const rows = await prisma.service.findMany({
+        where: { visitId },
+        select: { type: true, direction: true, target: true, reference: true, customName: true },
+      });
+      const counts = new Map<string, number>();
+      for (const row of rows) {
+        const k = existingServiceKey(row);
+        counts.set(k, (counts.get(k) ?? 0) + 1);
+      }
+      existingByVisit.set(visitId, counts);
+      return counts;
+    }
+
     for (const extra of dateExtras) {
       const reg = extra.registration.toUpperCase();
       const regNoDash = reg.replace(/-/g, "");
@@ -139,24 +216,47 @@ export async function PUT(req: NextRequest) {
 
       matched++;
 
+      // Load existing services for this visit to drive the dedup check.
+      const existingCounts = await getExistingKeyCounts(visit.id);
+      let servicesCreatedForThisExtra = 0;
+
       for (const svc of extra.services) {
         if (!svc.name || svc.name.length < 2) continue;
-        for (let i = 0; i < (svc.quantity || 1); i++) {
+
+        const direction = SERVICE_TYPE_DEFAULT_PHASE[svc.type as ServiceType] ?? "DEPARTURE";
+        const reference = svc.reference || null;
+        const target = svc.target || null;
+        const customName = svc.type === "CUSTOM"
+          ? svc.name
+          : (svc.name !== svc.type ? svc.name : null);
+
+        const eqKey = incomingServiceKey(svc.type, direction, target, reference, customName);
+
+        // How many of this key already exist in the visit?
+        const alreadyPresent = existingCounts.get(eqKey) ?? 0;
+        const wantedTotal = svc.quantity || 1;
+        const toCreate = Math.max(0, wantedTotal - alreadyPresent);
+
+        for (let i = 0; i < toCreate; i++) {
           await prisma.service.create({
             data: {
               visitId: visit.id,
               type: svc.type,
-              direction: SERVICE_TYPE_DEFAULT_PHASE[svc.type as ServiceType] ?? "DEPARTURE",
-              customName: svc.type === "CUSTOM" ? svc.name : (svc.name !== svc.type ? svc.name : null),
+              direction,
+              customName,
               state: "PENDING",
-              reference: svc.reference || null,
-              target: svc.target || null,
+              reference,
+              target,
               origin: svc.origin ? (ORIGIN_MAP[svc.origin] || "OTHER") : null,
               rawDescription: svc.name,
               quantity: 1,
             },
           });
           servicesCreated++;
+          servicesCreatedForThisExtra++;
+          // Keep the in-memory count up to date so subsequent passes within
+          // the same import run stay consistent.
+          existingCounts.set(eqKey, (existingCounts.get(eqKey) ?? 0) + 1);
         }
       }
 
@@ -164,7 +264,7 @@ export async function PUT(req: NextRequest) {
         data: {
           visitId: visit.id,
           userId: session.user.id,
-          action: `Extras importados desde Excel (${extra.services.length})`,
+          action: `Extras importados desde Excel (${servicesCreatedForThisExtra} nuevos de ${extra.services.length} en Excel)`,
         },
       });
     }
