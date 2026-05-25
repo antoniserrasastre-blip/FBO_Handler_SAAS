@@ -719,7 +719,7 @@ describe("VisitCard inline edits — counts", () => {
       (async () => new Response(JSON.stringify({ presets: [] }), { status: 200 })) as typeof window.fetch
     );
     const onAddService = vi.fn();
-    render(
+    const { container } = render(
       <VisitCard
         flight={makeFlight({ id: "v-1" })}
         onUpdate={vi.fn()}
@@ -727,7 +727,9 @@ describe("VisitCard inline edits — counts", () => {
       />
     );
     await userEvent.click(screen.getByText(/\d+ pax · \d+ crew/i));
-    await userEvent.click(screen.getByRole("button", { name: /añadir servicio/i }));
+    // Click the "Añadir servicio" button inside the edit-strip (not the inline touch button)
+    const editStrip = container.querySelector(".edit-service-add") as HTMLElement;
+    await userEvent.click(within(editStrip).getByRole("button", { name: /añadir servicio/i }));
     // Choose CATERING from the picker
     await userEvent.click(screen.getByRole("button", { name: /^catering$/i }));
     expect(onAddService).toHaveBeenCalledWith("v-1", "CATERING");
@@ -943,5 +945,136 @@ describe("VisitCard mobile edit routing", () => {
     await userEvent.click(screen.getByText(/\d+ pax · \d+ crew/i));
     // The heavy edit fields must not appear inline on mobile.
     expect(screen.queryByText(/pax salida/i)).toBeNull();
+  });
+});
+
+// ─── "+ Añadir servicio" touch-accessible picker ──────────────────────────
+
+describe("VisitCard inline service picker (touch)", () => {
+  afterEach(() => {
+    delete (window as unknown as { matchMedia?: unknown }).matchMedia;
+  });
+
+  it("shows the '+ Añadir' button even on mobile without needing to expand", () => {
+    installMatchMedia(true);
+    render(
+      <VisitCard
+        flight={makeFlight({ id: "v-1" })}
+        onAddService={vi.fn()}
+      />
+    );
+    // Must be reachable without expanding — does not depend on isMobile gating
+    expect(
+      screen.getByRole("button", { name: /añadir servicio al vuelo/i })
+    ).toBeTruthy();
+  });
+
+  it("does not show the '+ Añadir' button in readOnly mode", () => {
+    render(
+      <VisitCard
+        flight={makeFlight({ id: "v-1" })}
+        onAddService={vi.fn()}
+        readOnly
+      />
+    );
+    expect(
+      screen.queryByRole("button", { name: /añadir servicio al vuelo/i })
+    ).toBeNull();
+  });
+
+  it("opens the AddServicePicker when '+ Añadir' is clicked", async () => {
+    const fetchSpy = vi.spyOn(window, "fetch").mockImplementation(
+      (async () => new Response(JSON.stringify({ presets: [] }), { status: 200 })) as typeof window.fetch
+    );
+    try {
+      render(
+        <VisitCard
+          flight={makeFlight({ id: "v-1" })}
+          onAddService={vi.fn()}
+        />
+      );
+      await userEvent.click(
+        screen.getByRole("button", { name: /añadir servicio al vuelo/i })
+      );
+      // The picker dialog should appear
+      expect(screen.getByRole("dialog", { name: /añadir servicio al vuelo/i })).toBeTruthy();
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it("calls onAddService with flightId and type when a built-in chip is clicked", async () => {
+    const fetchSpy = vi.spyOn(window, "fetch").mockImplementation(
+      (async () => new Response(JSON.stringify({ presets: [] }), { status: 200 })) as typeof window.fetch
+    );
+    const onAddService = vi.fn();
+    try {
+      render(
+        <VisitCard
+          flight={makeFlight({ id: "v-1" })}
+          onAddService={onAddService}
+        />
+      );
+      // Open picker
+      await userEvent.click(
+        screen.getByRole("button", { name: /añadir servicio al vuelo/i })
+      );
+      // Click a built-in chip (CATERING)
+      await userEvent.click(screen.getByRole("button", { name: /^catering$/i }));
+      expect(onAddService).toHaveBeenCalledWith("v-1", "CATERING");
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it("calls onAddService with customName and target when a preset chip is clicked", async () => {
+    const onAddService = vi.fn();
+    const presets = [
+      { id: "p-1", name: "Champán", defaultTarget: "CREW", createdAt: "2026-01-01T00:00:00Z" },
+    ];
+    const fetchSpy = vi.spyOn(window, "fetch").mockImplementation(
+      (async () => new Response(JSON.stringify({ presets }), { status: 200 })) as typeof window.fetch
+    );
+    try {
+      render(
+        <VisitCard
+          flight={makeFlight({ id: "v-1" })}
+          onAddService={onAddService}
+        />
+      );
+      // Open picker
+      await userEvent.click(
+        screen.getByRole("button", { name: /añadir servicio al vuelo/i })
+      );
+      // Wait for the preset to load and click it
+      const presetBtn = await screen.findByRole("button", { name: /champán/i });
+      await userEvent.click(presetBtn);
+      expect(onAddService).toHaveBeenCalledWith("v-1", "CUSTOM", "Champán", undefined, "CREW");
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it("is reachable on mobile without expanding (no expanded/isMobile gating)", async () => {
+    installMatchMedia(true);
+    const fetchSpy = vi.spyOn(window, "fetch").mockImplementation(
+      (async () => new Response(JSON.stringify({ presets: [] }), { status: 200 })) as typeof window.fetch
+    );
+    const onAddService = vi.fn();
+    try {
+      render(
+        <VisitCard
+          flight={makeFlight({ id: "v-1" })}
+          onAddService={onAddService}
+        />
+      );
+      // Without any expand click, the button must already be present
+      const addBtn = screen.getByRole("button", { name: /añadir servicio al vuelo/i });
+      await userEvent.click(addBtn);
+      await userEvent.click(screen.getByRole("button", { name: /^gpu$/i }));
+      expect(onAddService).toHaveBeenCalledWith("v-1", "GPU");
+    } finally {
+      fetchSpy.mockRestore();
+    }
   });
 });

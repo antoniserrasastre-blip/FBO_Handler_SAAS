@@ -19,7 +19,7 @@
 
 "use client";
 
-import { useMemo, useState, memo } from "react";
+import { useMemo, useState, memo, useRef, useEffect } from "react";
 import type { Flight, Service, LostItem, EventLog } from "@/types/compat";
 import type { FlightCategory } from "@/types/v2";
 import { normalizeFlightState, type ShiftPost } from "@/types";
@@ -32,7 +32,7 @@ import { CategoryPill } from "@/components/helix/CategoryPill";
 import { RqstChip } from "@/components/helix/RqstChip";
 import { PetCount } from "@/components/helix/PetCount";
 import { PassportField } from "@/components/helix/PassportField";
-import { ChevronDown, ChevronUp, StickyNote, ListChecks, Package, User, MoreHorizontal, Check, ArrowRight } from "lucide-react";
+import { ChevronDown, ChevronUp, StickyNote, ListChecks, User, MoreHorizontal, Check, ArrowRight } from "lucide-react";
 import { tasksForFlight, checklistProgress } from "@/lib/checklist";
 import {
   deriveFocus,
@@ -48,7 +48,6 @@ import { getFlightClock } from "@/lib/flightUrgency";
 import { LastModifiedBadge } from "@/components/LastModifiedBadge";
 import { OpsToggleStrip } from "@/components/OpsToggleStrip";
 import { ServiceChipRow } from "@/components/ServiceChipRow";
-import { CrewInventory } from "@/components/CrewInventory";
 import { ChecklistPanel } from "@/components/ChecklistPanel";
 import { AddServicePicker } from "@/components/AddServicePicker";
 import { StateStepper } from "@/components/StateStepper";
@@ -172,6 +171,27 @@ export const VisitCard = memo(function VisitCard({
   const [expanded, setExpanded] = useState(false);
   const [workOpen, setWorkOpen] = useState(false);
   const [showServicePicker, setShowServicePicker] = useState(false);
+  // Picker táctil de "Añadir servicio" — disponible en todos los dispositivos,
+  // sin necesidad de expandir ni estar en escritorio.
+  const [showInlineServicePicker, setShowInlineServicePicker] = useState(false);
+  const inlinePickerRef = useRef<HTMLDivElement | null>(null);
+
+  // Cerrar el picker inline si el usuario toca fuera de él.
+  useEffect(() => {
+    if (!showInlineServicePicker) return;
+    const handler = (e: MouseEvent | TouchEvent) => {
+      if (inlinePickerRef.current && !inlinePickerRef.current.contains(e.target as Node)) {
+        setShowInlineServicePicker(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    document.addEventListener("touchstart", handler);
+    return () => {
+      document.removeEventListener("mousedown", handler);
+      document.removeEventListener("touchstart", handler);
+    };
+  }, [showInlineServicePicker]);
+
   const [newLostDesc, setNewLostDesc] = useState("");
   const [newLostLoc, setNewLostLoc] = useState<LostItemLocation>("AIRCRAFT");
   const lostItems = flight.lostItems || [];
@@ -223,18 +243,18 @@ export const VisitCard = memo(function VisitCard({
   const legsOrdered = useMemo(() => legOrder(focus), [focus]);
   const secondaryDimmed = hasSecondaryLeg(focus);
 
-  // Resumen de trabajo (checklist + inventario) para la fila colapsada.
+  // Resumen de trabajo (checklist) para la fila colapsada.
   // `tasks` se reutiliza para resolver la acción primaria de la tarjeta.
+  // Los crew items ya se muestran en la banda de servicios unificada (origin="CREW"),
+  // por lo que no se cuentan aquí por separado.
   const { work, tasks } = useMemo(() => {
     if (isCancelled) {
-      return { work: { done: 0, total: 0, inv: 0, invTotal: 0, hasWork: false }, tasks: [] };
+      return { work: { done: 0, total: 0, hasWork: false }, tasks: [] };
     }
     const tasks = tasksForFlight(flight, shiftPosts ? { posts: shiftPosts } : undefined);
     const { done, total } = checklistProgress(tasks);
-    const crewItems = flight.crewItems || [];
-    const inv = crewItems.filter((i) => i.state !== "RETURNED").length;
     return {
-      work: { done, total, inv, invTotal: crewItems.length, hasWork: total > 0 || crewItems.length > 0 },
+      work: { done, total, hasWork: total > 0 },
       tasks,
     };
   }, [flight, shiftPosts, isCancelled]);
@@ -416,12 +436,24 @@ export const VisitCard = memo(function VisitCard({
       {/* ─── SERVICES focus (runner): la banda de servicios manda y va
             antes que los legs, que quedan compactos abajo. ─────────────── */}
       {focus === "SERVICES" ? (
-        <ServiceChipRow
-          services={services}
-          onToggle={onServiceToggle}
-          readOnly={readOnly}
-          posts={shiftPosts}
-        />
+        <>
+          <ServiceChipRow
+            services={services}
+            onToggle={onServiceToggle}
+            readOnly={readOnly}
+            posts={shiftPosts}
+          />
+          {!readOnly && onAddService ? (
+            <AddServiceInlineButton
+              flightId={flight.id}
+              onAddService={onAddService}
+              open={showInlineServicePicker}
+              pickerRef={inlinePickerRef}
+              onToggle={(e) => { e.stopPropagation(); setShowInlineServicePicker((x) => !x); }}
+              onClose={() => setShowInlineServicePicker(false)}
+            />
+          ) : null}
+        </>
       ) : null}
 
       {/* ─── Body: two MovementRow, reordenadas según el foco del puesto ─ */}
@@ -486,12 +518,24 @@ export const VisitCard = memo(function VisitCard({
       {/* ─── Services strip (chips touch-friendly) ───────────────────── */}
       {/* En SERVICES focus la banda ya se pintó arriba; no duplicar. */}
       {focus !== "SERVICES" ? (
-        <ServiceChipRow
-          services={services}
-          onToggle={onServiceToggle}
-          readOnly={readOnly}
-          posts={shiftPosts}
-        />
+        <>
+          <ServiceChipRow
+            services={services}
+            onToggle={onServiceToggle}
+            readOnly={readOnly}
+            posts={shiftPosts}
+          />
+          {!readOnly && onAddService ? (
+            <AddServiceInlineButton
+              flightId={flight.id}
+              onAddService={onAddService}
+              open={showInlineServicePicker}
+              pickerRef={inlinePickerRef}
+              onToggle={(e) => { e.stopPropagation(); setShowInlineServicePicker((x) => !x); }}
+              onClose={() => setShowInlineServicePicker(false)}
+            />
+          ) : null}
+        </>
       ) : null}
 
       {/* ─── Resumen de trabajo (colapsado) + detalle bajo demanda ─── */}
@@ -508,18 +552,12 @@ export const VisitCard = memo(function VisitCard({
                 <ListChecks size={13} aria-hidden /> {work.done}/{work.total}
               </span>
             ) : null}
-            {work.invTotal > 0 ? (
-              <span className="inline-flex items-center gap-1 [font-variant-numeric:tabular-nums]" title="Inventario crew por devolver">
-                <Package size={13} aria-hidden /> {work.inv}
-              </span>
-            ) : null}
             {workOpen ? <ChevronUp size={13} aria-hidden /> : <ChevronDown size={13} aria-hidden />}
           </button>
 
           {workOpen ? (
             <div onClick={(e) => e.stopPropagation()} className="flex flex-col gap-2">
               <ChecklistPanel flight={flight} posts={shiftPosts} readOnly={readOnly} />
-              <CrewInventory visitId={flight.id} items={flight.crewItems || []} readOnly={readOnly} />
             </div>
           ) : null}
         </>
@@ -798,6 +836,62 @@ export const VisitCard = memo(function VisitCard({
     </article>
   );
 });
+
+// ─── AddServiceInlineButton ────────────────────────────────────────────────
+// Botón táctil "+ Añadir" que despliega el AddServicePicker existente como
+// un popover inline anclado justo debajo del botón. Visible en móvil y
+// escritorio, sin depender de `expanded` ni de `isMobile`.
+interface AddServiceInlineButtonProps {
+  flightId: string;
+  onAddService: (flightId: string, type: string, customName?: string, reference?: string, target?: string) => void;
+  open: boolean;
+  pickerRef: React.RefObject<HTMLDivElement | null>;
+  onToggle: (e: React.MouseEvent) => void;
+  onClose: () => void;
+}
+
+function AddServiceInlineButton({
+  flightId,
+  onAddService,
+  open,
+  pickerRef,
+  onToggle,
+  onClose,
+}: AddServiceInlineButtonProps) {
+  return (
+    <div
+      className="relative px-2 py-1"
+      ref={pickerRef}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <button
+        type="button"
+        className="hx-btn hx-btn-ghost hx-btn-sm min-h-[44px] gap-1.5 text-sm font-semibold"
+        aria-label="Añadir servicio al vuelo"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={onToggle}
+        style={{ touchAction: "manipulation" }}
+      >
+        <Plus size={15} aria-hidden /> Añadir
+      </button>
+
+      {open ? (
+        <div
+          role="dialog"
+          aria-label="Añadir servicio al vuelo"
+          className="absolute left-0 top-full z-20 mt-1 w-max max-w-[min(360px,90vw)] rounded-hx-md border border-line bg-bg p-3 shadow-hx-lg"
+        >
+          <AddServicePicker
+            flightId={flightId}
+            onAddService={onAddService}
+            onClose={onClose}
+          />
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 function roleLabel(role: string): string {
   if (role === "CAPTAIN") return "PIC";
