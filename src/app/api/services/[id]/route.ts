@@ -10,6 +10,7 @@ import { requireWriter } from "@/lib/roles";
 import { suggestNextState } from "@/lib/flightUrgency";
 import { FLIGHT_STATE_CONFIG, type FlightState } from "@/types";
 import { toFlightView } from "@/lib/flightView";
+import { crewItemToService } from "@/lib/crewItemMigration";
 
 const ALLOWED_SERVICE_PATCH_FIELDS = new Set([
   "type", "customName", "reference",
@@ -25,6 +26,49 @@ function pickAllowed(body: Record<string, unknown>, allowed: Set<string>): Recor
     if (allowed.has(key)) out[key] = body[key];
   }
   return out;
+}
+
+/**
+ * Resolves a Service row for the given id, performing lazy materialization when
+ * the id has the sentinel "ci_<crewItemId>" prefix and the Service mirror does
+ * not yet exist in the DB.
+ *
+ * Flow:
+ *   1. Try prisma.service.findUnique(id) — happy path (mirror already exists).
+ *   2. If null AND id starts with "ci_": look up the source CrewItem.
+ *      - If found: upsert the Service mirror (idempotent for races) and return it.
+ *      - If not found: return null → caller returns 404.
+ *   3. If not a "ci_" id and findUnique returned null: return null → caller returns 404.
+ */
+async function resolveService(id: string) {
+  const existing = await prisma.service.findUnique({ where: { id } });
+  if (existing) return existing;
+
+  // Not found — check if this is a sentinel crew-item id
+  if (!id.startsWith("ci_")) return null;
+
+  const crewItemId = id.slice("ci_".length);
+  const crewItem = await prisma.crewItem.findUnique({ where: { id: crewItemId } });
+  if (!crewItem) return null;
+
+  // Lazy-materialize the Service mirror. Use upsert to be race-safe.
+  const mapped = crewItemToService(crewItem);
+  return prisma.service.upsert({
+    where: { id: mapped.id },
+    create: {
+      id: mapped.id,
+      visitId: mapped.visitId,
+      type: mapped.type,
+      customName: mapped.customName,
+      quantity: mapped.quantity,
+      state: mapped.state,
+      direction: mapped.direction,
+      origin: mapped.origin,
+      target: mapped.target,
+      rawDescription: mapped.rawDescription,
+    },
+    update: {},  // no-op if it races into existence between findUnique and here
+  });
 }
 
 export async function PATCH(
@@ -44,7 +88,7 @@ export async function PATCH(
     delete body.phase;
   }
 
-  const existing = await prisma.service.findUnique({ where: { id } });
+  const existing = await resolveService(id);
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const now = new Date().toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
@@ -131,7 +175,7 @@ export async function DELETE(
   if (error) return error;
 
   const { id } = await params;
-  const service = await prisma.service.findUnique({ where: { id } });
+  const service = await resolveService(id);
   if (!service) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   await prisma.service.delete({ where: { id } });

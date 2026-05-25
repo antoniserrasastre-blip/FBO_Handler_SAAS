@@ -1,4 +1,12 @@
 // /api/flights/[id]/crew-items — inventario de crew. `[id]` is the Visit id.
+//
+// Backward-compat path: the old CrewInventory UI still calls this endpoint.
+// On POST, we create both:
+//   1. A `CrewItem` row (so the existing UI reads still work).
+//   2. A parallel `Service` row with origin="CREW" and a deterministic id
+//      ("ci_" + crewItemId) — this is the new unified source of truth.
+//      The migration script (POST /api/admin/migrate-crew-items) is idempotent
+//      for these new entries because it uses the same deterministic id.
 
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
@@ -7,6 +15,7 @@ import { prisma } from "@/lib/db";
 import { requireWriter } from "@/lib/roles";
 import { eventBus } from "@/lib/events";
 import { CREW_ITEM_TYPES, CREW_ITEM_LABELS, type CrewItemType } from "@/types";
+import { crewItemServiceId } from "@/lib/crewItemMigration";
 
 function labelFor(type: string, customName?: string | null): string {
   if (type === "CUSTOM") return customName || CREW_ITEM_LABELS.CUSTOM;
@@ -55,6 +64,25 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       notes: body.notes ?? null,
       storedById: session!.user.id,
     },
+  });
+
+  // New unified path: also create a parallel Service with origin="CREW".
+  // Uses the deterministic id so the migration script remains idempotent.
+  await prisma.service.upsert({
+    where: { id: crewItemServiceId(item.id) },
+    create: {
+      id: crewItemServiceId(item.id),
+      visitId: id,
+      type: body.type,
+      direction: "BOTH",
+      customName: body.customName ?? null,
+      quantity,
+      state: "PENDING",
+      origin: "CREW",
+      target: "CREW",
+      rawDescription: body.notes ?? null,
+    },
+    update: {},
   });
 
   await prisma.eventLog.create({

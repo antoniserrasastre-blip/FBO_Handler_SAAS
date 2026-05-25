@@ -230,3 +230,279 @@ describe("PATCH /api/services/[id] — auth guards", () => {
     expect(res.status).toBe(403);
   });
 });
+
+// ─── ci_ lazy materialization tests ──────────────────────────────────────────
+
+/**
+ * Build a minimal CrewItem row as returned by prisma.crewItem.findUnique.
+ */
+function buildCrewItem(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "crew-1",
+    visitId: "v1",
+    type: "THERMOS",
+    customName: null,
+    quantity: 1,
+    state: "STORED",
+    notes: null,
+    storedAt: new Date(),
+    storedById: null,
+    returnedAt: null,
+    returnedById: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    ...overrides,
+  };
+}
+
+/**
+ * Build a mock prisma where:
+ *  - service.findUnique returns `serviceMock` (null = not found)
+ *  - crewItem.findUnique returns `crewItemMock` (null = not found)
+ *  - service.upsert materializes and returns the Service mirror
+ *  - service.update returns the patched service
+ *  - service.delete succeeds
+ */
+function mockPrismaForCi({
+  serviceMock,
+  crewItemMock,
+}: {
+  serviceMock: Record<string, unknown> | null;
+  crewItemMock: Record<string, unknown> | null;
+}) {
+  serviceUpdateMock.mockReset();
+  movementUpdateMock.mockReset().mockResolvedValue({});
+  eventLogCreateMock.mockReset().mockResolvedValue({});
+  emitMock.mockReset();
+
+  const serviceUpsertMock = vi.fn(async () => {
+    // Returns the materialized mirror
+    if (!crewItemMock) throw new Error("no crewItem");
+    return {
+      id: `ci_${crewItemMock.id}`,
+      visitId: crewItemMock.visitId,
+      type: crewItemMock.type,
+      customName: crewItemMock.customName ?? null,
+      quantity: crewItemMock.quantity,
+      state: crewItemMock.state === "RETURNED" ? "DELIVERED" : "PENDING",
+      direction: "BOTH",
+      origin: "CREW",
+      target: "CREW",
+      rawDescription: crewItemMock.notes ?? null,
+      arrivedAt: null,
+      deliveredAt: null,
+      reference: null,
+    };
+  });
+
+  const serviceDeleteMock = vi.fn(async () => ({}));
+
+  serviceUpdateMock.mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({
+    id: `ci_${(crewItemMock ?? { id: "x" }).id}`,
+    visitId: "v1",
+    type: "THERMOS",
+    state: "PENDING",
+    direction: "BOTH",
+    arrivedAt: null,
+    deliveredAt: null,
+    customName: null,
+    reference: null,
+    target: "CREW",
+    quantity: 1,
+    ...data,
+  }));
+
+  vi.doMock("@/lib/db", () => ({
+    prisma: {
+      service: {
+        findUnique: vi.fn(async () => serviceMock),
+        upsert: serviceUpsertMock,
+        update: serviceUpdateMock,
+        delete: serviceDeleteMock,
+      },
+      crewItem: {
+        findUnique: vi.fn(async () => crewItemMock),
+      },
+      visit: {
+        findUnique: vi.fn(async () => null), // auto-transition skipped (suggestNextState returns null)
+      },
+      movement: { update: movementUpdateMock },
+      eventLog: { create: eventLogCreateMock },
+    },
+  }));
+  vi.doMock("@/lib/events", () => ({ eventBus: { emit: emitMock } }));
+  vi.doMock("@/lib/flightUrgency", () => ({ suggestNextState: () => null }));
+
+  return { serviceUpsertMock, serviceDeleteMock };
+}
+
+describe("PATCH /api/services/[id] — ci_ lazy materialization", () => {
+  afterEach(() => {
+    resetSessionMock();
+    vi.doUnmock("@/lib/db");
+    vi.doUnmock("@/lib/events");
+    vi.doUnmock("@/lib/flightUrgency");
+  });
+
+  it("PATCH ci_<id> when Service mirror does NOT exist but CrewItem DOES — materializes and applies change (not 404)", async () => {
+    vi.resetModules();
+    const crewItem = buildCrewItem(); // id="crew-1", state="STORED"
+    const { serviceUpsertMock } = mockPrismaForCi({
+      serviceMock: null,        // Service not yet in DB
+      crewItemMock: crewItem,   // CrewItem exists
+    });
+    mockSession("HANDLER");
+
+    const ciId = `ci_${crewItem.id}`;
+    const { PATCH } = await import("./route");
+    const req = new NextRequest(`http://localhost/api/services/${ciId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ state: "DELIVERED" }),
+      headers: { "content-type": "application/json" },
+    });
+    const res = await PATCH(req, { params: Promise.resolve({ id: ciId }) });
+
+    // Must NOT be 404
+    expect(res.status).toBe(200);
+    // The mirror must have been materialized via upsert
+    expect(serviceUpsertMock).toHaveBeenCalledTimes(1);
+    // The update must have been called with the new state
+    expect(serviceUpdateMock).toHaveBeenCalledTimes(1);
+    const updateArgs = serviceUpdateMock.mock.calls[0][0];
+    expect(updateArgs.where.id).toBe(ciId);
+    expect(updateArgs.data.state).toBe("DELIVERED");
+  });
+
+  it("PATCH ci_<id> when Service mirror DOES exist — works as a normal service (no upsert)", async () => {
+    vi.resetModules();
+    const crewItem = buildCrewItem();
+    const ciId = `ci_${crewItem.id}`;
+    // Mirror already exists — findUnique returns it directly
+    const existingMirror = {
+      id: ciId,
+      visitId: "v1",
+      type: "THERMOS",
+      state: "PENDING",
+      direction: "BOTH",
+      arrivedAt: null,
+      deliveredAt: null,
+      customName: null,
+      reference: null,
+      target: "CREW",
+      quantity: 1,
+    };
+    const { serviceUpsertMock } = mockPrismaForCi({
+      serviceMock: existingMirror,
+      crewItemMock: crewItem,
+    });
+    mockSession("HANDLER");
+
+    const { PATCH } = await import("./route");
+    const req = new NextRequest(`http://localhost/api/services/${ciId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ state: "DELIVERED" }),
+      headers: { "content-type": "application/json" },
+    });
+    const res = await PATCH(req, { params: Promise.resolve({ id: ciId }) });
+
+    expect(res.status).toBe(200);
+    // No materialization needed — mirror already existed
+    expect(serviceUpsertMock).not.toHaveBeenCalled();
+    // Update still applied
+    expect(serviceUpdateMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("PATCH ci_<id> when neither Service nor CrewItem exist — returns 404", async () => {
+    vi.resetModules();
+    mockPrismaForCi({
+      serviceMock: null,
+      crewItemMock: null,   // no CrewItem either
+    });
+    mockSession("HANDLER");
+
+    const ciId = "ci_nonexistent";
+    const { PATCH } = await import("./route");
+    const req = new NextRequest(`http://localhost/api/services/${ciId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ state: "DELIVERED" }),
+      headers: { "content-type": "application/json" },
+    });
+    const res = await PATCH(req, { params: Promise.resolve({ id: ciId }) });
+
+    expect(res.status).toBe(404);
+    expect(serviceUpdateMock).not.toHaveBeenCalled();
+  });
+
+  it("DELETE ci_<id> when Service mirror does NOT exist but CrewItem DOES — materializes and deletes (not 404)", async () => {
+    vi.resetModules();
+    const crewItem = buildCrewItem();
+    const { serviceUpsertMock, serviceDeleteMock } = mockPrismaForCi({
+      serviceMock: null,
+      crewItemMock: crewItem,
+    });
+    mockSession("HANDLER");
+
+    const ciId = `ci_${crewItem.id}`;
+    const { DELETE } = await import("./route");
+    const req = new NextRequest(`http://localhost/api/services/${ciId}`, {
+      method: "DELETE",
+    });
+    const res = await DELETE(req, { params: Promise.resolve({ id: ciId }) });
+
+    expect(res.status).toBe(200);
+    // Mirror materialized before delete
+    expect(serviceUpsertMock).toHaveBeenCalledTimes(1);
+    // Then deleted
+    expect(serviceDeleteMock).toHaveBeenCalledTimes(1);
+    const deleteCall = (serviceDeleteMock.mock.calls[0] as unknown) as [{ where: { id: string } }];
+    expect(deleteCall[0].where.id).toBe(ciId);
+  });
+
+  it("DELETE ci_<id> when neither Service nor CrewItem exist — returns 404", async () => {
+    vi.resetModules();
+    const { serviceUpsertMock, serviceDeleteMock } = mockPrismaForCi({
+      serviceMock: null,
+      crewItemMock: null,
+    });
+    mockSession("HANDLER");
+
+    const ciId = "ci_ghost";
+    const { DELETE } = await import("./route");
+    const req = new NextRequest(`http://localhost/api/services/${ciId}`, {
+      method: "DELETE",
+    });
+    const res = await DELETE(req, { params: Promise.resolve({ id: ciId }) });
+
+    expect(res.status).toBe(404);
+    expect(serviceUpsertMock).not.toHaveBeenCalled();
+    expect(serviceDeleteMock).not.toHaveBeenCalled();
+  });
+
+  it("materialized Service starts with correct direction=BOTH and state=PENDING for a STORED CrewItem", async () => {
+    vi.resetModules();
+    const crewItem = buildCrewItem({ state: "STORED", type: "THERMOS" });
+    const { serviceUpsertMock } = mockPrismaForCi({
+      serviceMock: null,
+      crewItemMock: crewItem,
+    });
+    mockSession("HANDLER");
+
+    const ciId = `ci_${crewItem.id}`;
+    const { PATCH } = await import("./route");
+    const req = new NextRequest(`http://localhost/api/services/${ciId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ customName: "updated-name" }),
+      headers: { "content-type": "application/json" },
+    });
+    await PATCH(req, { params: Promise.resolve({ id: ciId }) });
+
+    // Inspect the create data passed to upsert
+    type UpsertArg = { create: { direction: string; state: string; origin: string; target: string } };
+    const upsertCalls = (serviceUpsertMock.mock.calls as unknown) as [UpsertArg][];
+    const upsertCall = upsertCalls[0]![0];
+    expect(upsertCall.create.direction).toBe("BOTH");
+    expect(upsertCall.create.state).toBe("PENDING");   // STORED → PENDING
+    expect(upsertCall.create.origin).toBe("CREW");
+    expect(upsertCall.create.target).toBe("CREW");
+  });
+});

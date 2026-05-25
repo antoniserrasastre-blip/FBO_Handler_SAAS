@@ -41,6 +41,7 @@ async function loadVisit(id: string) {
       movements: true,
       services: true,
       lostItems: true,
+      crewItems: { orderBy: { createdAt: "asc" } },
     },
   });
 }

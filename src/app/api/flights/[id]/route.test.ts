@@ -341,3 +341,149 @@ describe("PATCH /api/flights/[id] — auth guards", () => {
     expect(res.status).toBe(403);
   });
 });
+
+// ─── crewItems include in PATCH response ─────────────────────────────────────
+//
+// Regression guard: loadVisit must include crewItems so that toFlightView →
+// mergeCrewItemsIntoServices can project unmigrated crew items as services.
+// The endpoint of list (GET /api/flights) already includes crewItems — this
+// suite verifies the PATCH path (which re-reads via loadVisit) is consistent.
+
+describe("PATCH /api/flights/[id] — crewItems projected into services", () => {
+  afterEach(() => {
+    resetSessionMock();
+    vi.doUnmock("@/lib/db");
+    vi.doUnmock("@/lib/events");
+    vi.doUnmock("@/lib/flightUrgency");
+  });
+
+  it("includes crew-item-projected services in the PATCH response when crewItems are present and no mirror Service exists", async () => {
+    vi.resetModules();
+
+    const crewItem = {
+      id: "crew-42",
+      visitId: "v1",
+      type: "THERMOS",
+      customName: null,
+      quantity: 2,
+      state: "STORED",
+      notes: "handle with care",
+      storedAt: new Date(),
+      storedById: null,
+      returnedAt: null,
+      returnedById: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    // Build a visit that has an unmigrated CrewItem but NO matching Service mirror.
+    const visitWithCrewItem = buildVisit({
+      crewItems: [crewItem],
+      services: [],  // no mirror in the Service table
+    });
+
+    vi.doMock("@/lib/db", () => ({
+      prisma: {
+        visit: {
+          findUnique: vi.fn(async () => visitWithCrewItem),
+          update: visitUpdateMock.mockResolvedValue({}),
+          delete: vi.fn(async () => ({})),
+        },
+        movement: { update: movementUpdateMock.mockResolvedValue({}) },
+        aircraft: { update: aircraftUpdateMock.mockResolvedValue({}) },
+        eventLog: { create: eventLogCreateMock.mockResolvedValue({}) },
+      },
+    }));
+    vi.doMock("@/lib/events", () => ({ eventBus: { emit: emitMock } }));
+    vi.doMock("@/lib/flightUrgency", () => ({ suggestNextState: () => null }));
+
+    mockSession("HANDLER");
+
+    const res = await patch({ notes: "test" });
+    expect(res.status).toBe(200);
+
+    const body = await res.json();
+    // The projected crew-item service must appear in the services array
+    expect(Array.isArray(body.services)).toBe(true);
+    const projectedService = body.services.find(
+      (s: { id: string }) => s.id === `ci_${crewItem.id}`
+    );
+    expect(projectedService).toBeDefined();
+    expect(projectedService.type).toBe("THERMOS");
+    expect(projectedService.state).toBe("PENDING");   // STORED → PENDING
+    expect(projectedService.direction).toBe("BOTH");
+    expect(projectedService.origin).toBe("CREW");
+  });
+
+  it("does NOT duplicate a crew item whose Service mirror already exists", async () => {
+    vi.resetModules();
+
+    const crewItem = {
+      id: "crew-99",
+      visitId: "v1",
+      type: "THERMOS",
+      customName: null,
+      quantity: 1,
+      state: "STORED",
+      notes: null,
+      storedAt: new Date(),
+      storedById: null,
+      returnedAt: null,
+      returnedById: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    const mirrorService = {
+      id: `ci_${crewItem.id}`,
+      visitId: "v1",
+      type: "THERMOS",
+      state: "DELIVERED",  // manually updated after migration
+      direction: "BOTH",
+      origin: "CREW",
+      target: "CREW",
+      customName: null,
+      reference: null,
+      quantity: 1,
+      arrivedAt: null,
+      deliveredAt: "10:30",
+      rawDescription: null,
+      scheduledAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const visitWithBoth = buildVisit({
+      crewItems: [crewItem],
+      services: [mirrorService],
+    });
+
+    vi.doMock("@/lib/db", () => ({
+      prisma: {
+        visit: {
+          findUnique: vi.fn(async () => visitWithBoth),
+          update: visitUpdateMock.mockResolvedValue({}),
+          delete: vi.fn(async () => ({})),
+        },
+        movement: { update: movementUpdateMock.mockResolvedValue({}) },
+        aircraft: { update: aircraftUpdateMock.mockResolvedValue({}) },
+        eventLog: { create: eventLogCreateMock.mockResolvedValue({}) },
+      },
+    }));
+    vi.doMock("@/lib/events", () => ({ eventBus: { emit: emitMock } }));
+    vi.doMock("@/lib/flightUrgency", () => ({ suggestNextState: () => null }));
+
+    mockSession("HANDLER");
+
+    const res = await patch({ notes: "no-dupe" });
+    expect(res.status).toBe(200);
+
+    const body = await res.json();
+    // The mirror service must appear exactly once
+    const matching = body.services.filter(
+      (s: { id: string }) => s.id === `ci_${crewItem.id}`
+    );
+    expect(matching).toHaveLength(1);
+    // And it must reflect the DB row (DELIVERED), not the raw CrewItem (STORED → PENDING)
+    expect(matching[0].state).toBe("DELIVERED");
+  });
+});

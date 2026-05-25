@@ -7,9 +7,21 @@
 // When mutating direction-specific fields, callers use `resolveMovement()`
 // to find the right Movement row (ARRIVAL vs DEPARTURE) and map the legacy
 // field name to its v2 location.
+//
+// READ-MERGE (transition period)
+// --------------------------------
+// `mergeCrewItemsIntoServices` is applied inside `toFlightView()` so the
+// services list is the SINGLE unified source for the UI.  For every
+// CrewItem whose mirror Service (id = "ci_<crewItemId>") does NOT yet exist
+// in the Service table (migration not run, or dual-write missed), the
+// function projects the CrewItem in memory via `crewItemToService()`.
+// If the mirror Service IS already present it wins (the real DB row takes
+// precedence).  The result: each item appears exactly once, in stable order
+// (real services first, then unmigrated crew items appended).
 
 import type { FlightView, FlightViewService, FlightViewLostItem, FlightViewCrewItem, FlightViewTask } from "@/types/v2";
 import { resolveAirport } from "./airportsFallback";
+import { crewItemToService, crewItemServiceId, type CrewItemRecord } from "./crewItemMigration";
 
 type AnyRecord = Record<string, unknown>;
 
@@ -73,6 +85,64 @@ function combineInstant(date: Date | string | null | undefined, hhmm: string | n
   const out = new Date(base.getTime());
   out.setUTCHours(parseInt(m[1], 10), parseInt(m[2], 10), 0, 0);
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// Read-merge helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Merges a list of real `Service` rows with unmigrated `CrewItem` rows,
+ * producing a single deduplicated list of `FlightViewService` entries.
+ *
+ * Rules:
+ *  - A CrewItem whose mirror Service already exists (id = "ci_<crewItemId>")
+ *    is **skipped** — the real Service row takes precedence.
+ *  - CrewItems without a mirror are projected via `crewItemToService()` and
+ *    appended after the real services (stable order).
+ *  - No DB writes; purely in-memory projection.
+ *
+ * This is the single place where the merge is applied.  `toFlightView()`
+ * calls it so every consumer (GET /api/flights, GET /api/flights/[id], etc.)
+ * automatically gets the unified list without extra logic.
+ */
+export function mergeCrewItemsIntoServices(
+  services: FlightViewService[],
+  crewItems: CrewItemRecord[],
+): FlightViewService[] {
+  // Build a Set of Service ids that are already present.
+  const existingIds = new Set(services.map((s) => s.id));
+
+  const extras: FlightViewService[] = [];
+  for (const item of crewItems) {
+    const mirrorId = crewItemServiceId(item.id);
+    if (existingIds.has(mirrorId)) {
+      // Mirror Service already in the list — skip to avoid duplication.
+      continue;
+    }
+    const mapped = crewItemToService(item);
+    // Project to FlightViewService shape, filling optional time fields with null.
+    extras.push({
+      id: mapped.id,
+      visitId: mapped.visitId,
+      type: mapped.type,
+      direction: mapped.direction,
+      customName: mapped.customName,
+      reference: null,
+      target: mapped.target,
+      origin: mapped.origin,
+      quantity: mapped.quantity,
+      rawDescription: mapped.rawDescription,
+      state: mapped.state,
+      arrivedAt: null,
+      deliveredAt: null,
+      scheduledAt: null,
+      createdAt: new Date(0),  // sentinel: no real DB timestamp available
+      updatedAt: new Date(0),
+    });
+  }
+
+  return extras.length === 0 ? services : [...services, ...extras];
 }
 
 export function toFlightView(visit: VisitWithMovements): FlightView {
@@ -185,7 +255,10 @@ export function toFlightView(visit: VisitWithMovements): FlightView {
     modifiedFlag: Boolean(dep?.modifiedFlag || arr?.modifiedFlag),
     petCount: (dep?.petCount as number) ?? (arr?.petCount as number) ?? 0,
 
-    services: visit.services as FlightViewService[] | undefined,
+    services: mergeCrewItemsIntoServices(
+      (visit.services ?? []) as FlightViewService[],
+      (visit.crewItems ?? []) as CrewItemRecord[],
+    ),
     lostItems: visit.lostItems as FlightViewLostItem[] | undefined,
     crewItems: visit.crewItems as FlightViewCrewItem[] | undefined,
     tasks: collectTasks(arr, dep),
