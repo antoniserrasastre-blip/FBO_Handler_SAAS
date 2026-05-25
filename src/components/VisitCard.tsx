@@ -880,7 +880,7 @@ function AddServiceInlineButton({
         <div
           role="dialog"
           aria-label="Añadir servicio al vuelo"
-          className="absolute left-0 top-full z-20 mt-1 w-max max-w-[min(360px,90vw)] rounded-hx-md border border-line bg-bg p-3 shadow-hx-lg"
+          className="mt-1 w-full"
         >
           <AddServicePicker
             flightId={flightId}
