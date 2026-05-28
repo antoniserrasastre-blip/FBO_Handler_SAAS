@@ -16,10 +16,13 @@
  */
 
 import { describe, it, expect } from "vitest";
+import { existsSync } from "fs";
 import { readFileSync } from "fs";
 import path from "path";
 
 import { parseExtrasExcel, type ExcelParseResult, type ParsedExtra } from "./excelParser";
+
+const FIXTURES_AVAILABLE = existsSync(path.resolve(__dirname, "__fixtures__", "extras-13apr-fixture.xlsx"));
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -46,7 +49,7 @@ function findExtra(result: ExcelParseResult, reg: string): ParsedExtra | undefin
 //   NJE / Prensa, date parsing, service categorisation, deduplication.
 // ---------------------------------------------------------------------------
 
-describe("excelParser — extras-13apr-fixture.xlsx (golden structure)", () => {
+describe.skipIf(!FIXTURES_AVAILABLE)("excelParser — extras-13apr-fixture.xlsx (golden structure)", () => {
   // Parse once; individual tests read from the shared result.
   const result: ExcelParseResult = parseExtrasExcel(loadFixture("extras-13apr-fixture.xlsx"));
 

@@ -90,7 +90,7 @@ Para crear el admin inicial:
    curl -H "X-Setup-Secret: $SETUP_SECRET" https://<dominio-railway>/api/setup
    ```
 
-3. Login en la UI con `admin@mallorcair.com` y el password seedeado.
+3. Login en la UI con `admin@example.com` y el password seedeado.
 
 ## Notas
 

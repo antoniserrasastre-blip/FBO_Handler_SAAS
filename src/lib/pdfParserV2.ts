@@ -11,6 +11,9 @@
 const pdfjsLib = require('pdfjs-dist/legacy/build/pdf');
 pdfjsLib.GlobalWorkerOptions.workerSrc = '';
 
+// Company header text as it appears in the flight sheet PDF — override via FBO_COMPANY_NAME env var
+const FBO_HEADER = (process.env.FBO_COMPANY_NAME ?? 'FBO').toUpperCase();
+
 export type FlightType = 'HANDLING' | 'EXTERNAL_SERVICE' | 'LOUNGE_GUEST';
 
 export interface ParsedFlight {
@@ -189,7 +192,7 @@ export function parsePageItems(items: PdfItem[], isFirstPage: boolean, pageNum =
   for (const row of merged) {
     const arrCs = row.items.find(it => it.x >= 18 && it.x <= 35);
     if (!arrCs) continue;
-    if (/^(Vuelo|Origen|Avión|F\.Prev|Hora|LLEGADAS|SALIDAS|MALLORCAIR|Orden|Día|Page)/i.test(arrCs.text)) continue;
+    if (new RegExp(`^(Vuelo|Origen|Avión|F\.Prev|Hora|LLEGADAS|SALIDAS|${FBO_HEADER}|Orden|Día|Page)`, 'i').test(arrCs.text)) continue;
     if (/^\d{2}\/\d{2}\/\d{2}/.test(arrCs.text)) continue;
     rowIdx++;
 

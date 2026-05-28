@@ -790,7 +790,7 @@ function HomePageInner() {
 
       <main className="mx-auto max-w-7xl px-3 py-3 sm:px-4 sm:py-4">
         <div className="print-header">
-          MALLORCAIR FBO — Orden del dia {date.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+          FBO Handler — Orden del día {date.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
         </div>
 
         {/* Barra de turno — fichaje y puestos. Con turno activo, filtra la vista a tu cola. */}

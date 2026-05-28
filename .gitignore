@@ -49,3 +49,9 @@ docs/*.PDF
 docs/*.xlsx
 docs/*.doc
 docs/*.png
+
+# test fixtures with real operational data (keep locally, do not commit)
+pdf-microservice/src/parsers/__tests__/fixtures/*.pdf
+src/lib/__fixtures__/*.xlsx
+src/lib/__fixtures__/cybermax-*.json
+test/data/*.pdf

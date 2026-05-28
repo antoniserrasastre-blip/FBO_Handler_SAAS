@@ -13,7 +13,7 @@ You are the data-import specialist for **FBO_Handler_SAAS**. Imports are the gna
 - **GenDec**: `src/lib/gendecParser.ts` (+ `gendecParser.test.ts`); paste UI via `GenDecPasteSection.tsx`; extract route `/api/flights/[id]/gendec/extract`. GenDec endpoint does **preview only** (no DB write) — actual persistence goes through the encrypted pax/crew APIs.
 - **NetJets pax**: `/api/import/netjets-pax` — writes PII, so it goes through `src/lib/crypto.ts` (encrypt + `*Hash`).
 - **Validation gate**: `src/lib/uploadValidation.ts` (+ test) — file type/size/shape checks before parsing.
-- Sample documents to reason about / build fixtures from live in `docs/` (`*.PDF`, `*.xlsx`, GenDec sheets).
+- Integration test fixtures live in the `__fixtures__/` and `pdf-microservice/...fixtures/` directories (not committed — generate synthetic ones locally).
 
 ## Rules specific to parsing here
 

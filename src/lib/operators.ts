@@ -1,6 +1,5 @@
 // Registry of aviation operators by ICAO callsign prefix
-// Source: extracted from flight data at LEPA/PMI + research
-// Used for: operator identification, future billing/agreements, PDF branding
+// Source: ICAO callsign data for general aviation operators
 
 export interface Operator {
   icao: string;          // ICAO callsign prefix (e.g. "NJE")
@@ -14,7 +13,7 @@ export interface Operator {
 
 export const OPERATORS: Operator[] = [
   // === HIGH FREQUENCY (5+ flights) ===
-  { icao: "NJE", name: "NetJets Europe", country: "Portugal", regPrefix: "CS-", type: "fractional", flights: 44, notes: "Catering NJE con referencia, prensa STR, acuerdo handling" },
+  { icao: "NJE", name: "NetJets Europe", country: "Portugal", regPrefix: "CS-", type: "fractional", flights: 44 },
   { icao: "VJT", name: "VistaJet", country: "Malta", regPrefix: "9H-", type: "charter", flights: 19, notes: "Flota 9H- Malta, subsidiary VJH en Alemania" },
   { icao: "JFA", name: "Jetfly Aviation", country: "Luxemburgo", regPrefix: "LX-", type: "fractional", flights: 15 },
   { icao: "PTN", name: "Platoon Aviation", country: "Alemania", regPrefix: "D-", type: "charter", flights: 7, notes: "Flota PC-24, base Hamburg" },
