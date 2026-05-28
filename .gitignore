@@ -42,3 +42,10 @@ prisma/prisma/
 
 # parser comparator output
 parser-comparison.json
+
+# operational docs (sensitive — keep locally, do not commit)
+docs/*.pdf
+docs/*.PDF
+docs/*.xlsx
+docs/*.doc
+docs/*.png
