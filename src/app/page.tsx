@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Flight, Service, EventLog, LostItem } from "@/types/compat";
 import { DaySummary } from "@/components/DaySummary";
 import { VisitCard } from "@/components/VisitCard";
+import { CompactFlightGrid } from "@/components/CompactFlightGrid";
 import { TurnaroundAlerts } from "@/components/TurnaroundAlert";
 import { ToastContainer, ToastMessage } from "@/components/Toast";
 import { useEventStream } from "@/hooks/useEventStream";
@@ -34,6 +35,7 @@ import { SHIFT_POST_LABELS } from "@/types";
 import { useShift, type ShiftDTO } from "@/hooks/useShift";
 import { useIsMobile } from "@/hooks/useMediaQuery";
 import { ChevronDown, ChevronUp } from "@/components/Icons";
+import { X } from "lucide-react";
 
 const PENDING_ONLY_KEY = "fbo:filters:pendingOnly";
 // `NEXT_HOURS_KEY` reemplaza la antigua `NEXT_8H_KEY` ("1"/"0"). El chip ahora
@@ -79,6 +81,8 @@ function HomePageInner() {
   const [filteredFlights, setFilteredFlights] = useState<FlightWithRelations[]>([]);
   const [people, setPeople] = useState<PeopleByVisit>({});
   const [selectedFlightId, setSelectedFlightId] = useState<string | null>(null);
+  // Vuelo cuya VisitCard se muestra en el modal (al pulsar una tarjeta de la rejilla).
+  const [detailFlightId, setDetailFlightId] = useState<string | null>(null);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -569,12 +573,20 @@ function HomePageInner() {
     const handler = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      // Con el detalle abierto, las teclas de la lista se pausan (manda el modal).
+      if (detailFlightId) return;
 
       const list = visibleFlights;
       const idx = list.findIndex((f) => f.id === selectedFlightId);
       const selected = idx >= 0 ? list[idx] : null;
 
       switch (e.key) {
+        case "Enter":
+          if (selected) {
+            e.preventDefault();
+            setDetailFlightId(selected.id);
+          }
+          break;
         case "ArrowDown":
           e.preventDefault();
           if (list.length > 0) {
@@ -645,7 +657,17 @@ function HomePageInner() {
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visibleFlights, selectedFlightId]);
+  }, [visibleFlights, selectedFlightId, detailFlightId]);
+
+  // Escape cierra el detalle (también si el foco está en un input del modal).
+  useEffect(() => {
+    if (!detailFlightId) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setDetailFlightId(null);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [detailFlightId]);
 
   const handleExport = (type: "flights" | "services") => {
     const dateStr = date.toISOString().slice(0, 10);
@@ -895,18 +917,50 @@ function HomePageInner() {
             </p>
           </div>
         ) : (
-          <div className="space-y-3">
-            {visibleFlights.map((flight) => {
-              const ppl = people[flight.id];
-              return (
-                <div key={flight.id} id={`flight-${flight.id}`}>
+          <CompactFlightGrid
+            flights={visibleFlights}
+            sheetDdMm={shortDate(date)}
+            selectedId={selectedFlightId}
+            onOpen={(id) => {
+              setSelectedFlightId(id);
+              setDetailFlightId(id);
+            }}
+          />
+        )}
+      </main>
+
+      {/* Detalle: VisitCard completa (acciones reales) al pulsar una tarjeta. */}
+      {detailFlightId
+        ? (() => {
+            const flight = flights.find((f) => f.id === detailFlightId);
+            if (!flight) return null;
+            const ppl = people[flight.id];
+            return (
+              <div
+                className="fixed inset-0 z-40 flex items-end justify-center bg-black/50 sm:items-center"
+                onClick={() => setDetailFlightId(null)}
+                role="dialog"
+                aria-modal="true"
+              >
+                <div
+                  className="relative max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-t-2xl bg-bg p-3 shadow-xl sm:rounded-2xl"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setDetailFlightId(null)}
+                    className="absolute right-2 top-2 z-10 rounded-full bg-bg-muted p-1.5 text-ink-2 hover:bg-bg-sunken"
+                    aria-label="Cerrar"
+                  >
+                    <X size={18} />
+                  </button>
                   <VisitCard
                     flight={flight}
                     sheetDate={shortDate(date)}
                     passengers={ppl?.passengers || []}
                     crew={ppl?.crew || []}
                     paxSource={ppl?.paxSource || null}
-                    isSelected={selectedFlightId === flight.id}
+                    isSelected
                     onSelect={setSelectedFlightId}
                     onUpdate={handleFlightUpdate}
                     onServiceToggle={handleServiceToggle}
@@ -915,8 +969,14 @@ function HomePageInner() {
                     onAddLostItem={handleAddLostItem}
                     onLostItemToggle={handleLostItemToggle}
                     onDeleteLostItem={handleDeleteLostItem}
-                    onDelete={handleDeleteFlight}
-                    onBadgeClick={setSearchQuery}
+                    onDelete={(id) => {
+                      handleDeleteFlight(id);
+                      setDetailFlightId(null);
+                    }}
+                    onBadgeClick={(term) => {
+                      setSearchQuery(term);
+                      setDetailFlightId(null);
+                    }}
                     onOpenDetail={(id) => router.push(`/dia?flight=${id}`)}
                     onOpenPeople={(visitId, direction) => setPeopleModal({ visitId, direction })}
                     shiftPosts={myShift && shiftQueueActive && isToday ? myShift.posts : undefined}
@@ -926,11 +986,10 @@ function HomePageInner() {
                     readOnly={false}
                   />
                 </div>
-              );
-            })}
-          </div>
-        )}
-      </main>
+              </div>
+            );
+          })()
+        : null}
 
       <ShortcutsHelp isOpen={showShortcuts} onClose={() => setShowShortcuts(false)} />
       <ShiftHandover isOpen={showHandover} onClose={() => setShowHandover(false)} flights={flights} date={date} />
