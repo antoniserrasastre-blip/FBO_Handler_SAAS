@@ -328,8 +328,9 @@ function PrototypeSwitcher({ current }: { current: Variant }) {
     return () => document.removeEventListener("keydown", handler);
   }, [go]);
 
-  if (process.env.NODE_ENV === "production") return null;
-
+  // Prototipo: barra visible también en producción a propósito — la ruta es
+  // oculta (/prototype/compact-grid) y solo-dev sin usuarios. Se borra junto
+  // con la carpeta cuando gane una variante.
   return (
     <div className="fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full bg-ink-1 px-2 py-1.5 text-white shadow-xl ring-1 ring-black/20">
       <button onClick={() => go(-1)} className="rounded-full p-1.5 hover:bg-white/15" aria-label="Variante anterior">
