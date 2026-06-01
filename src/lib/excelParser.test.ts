@@ -15,7 +15,7 @@
  * The TZ=Europe/Madrid is set globally by src/test/setup-palma-tz.ts.
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeAll } from "vitest";
 import { existsSync } from "fs";
 import { readFileSync } from "fs";
 import path from "path";
@@ -50,8 +50,10 @@ function findExtra(result: ExcelParseResult, reg: string): ParsedExtra | undefin
 // ---------------------------------------------------------------------------
 
 describe.skipIf(!FIXTURES_AVAILABLE)("excelParser — extras-13apr-fixture.xlsx (golden structure)", () => {
-  // Parse once; individual tests read from the shared result.
-  const result: ExcelParseResult = parseExtrasExcel(loadFixture("extras-13apr-fixture.xlsx"));
+  // Parse once; individual tests read from the shared result. Loaded in
+  // beforeAll (not at collection) so a missing gitignored fixture skips cleanly.
+  let result: ExcelParseResult;
+  beforeAll(() => { result = parseExtrasExcel(loadFixture("extras-13apr-fixture.xlsx")); });
 
   it("parses the date from a single-cell FECHA header", () => {
     // Fixture row 0 col G: 'FECHA:  13APR'
@@ -217,8 +219,9 @@ describe.skipIf(!FIXTURES_AVAILABLE)("excelParser — extras-13apr-fixture.xlsx 
 //   matrícula join: turnarounds, prefix coverage, padded strings, /N suffixes.
 // ---------------------------------------------------------------------------
 
-describe("excelParser — extras-03apr-edge-cases.xlsx (registration normalisation)", () => {
-  const result: ExcelParseResult = parseExtrasExcel(loadFixture("extras-03apr-edge-cases.xlsx"));
+describe.skipIf(!FIXTURES_AVAILABLE)("excelParser — extras-03apr-edge-cases.xlsx (registration normalisation)", () => {
+  let result: ExcelParseResult;
+  beforeAll(() => { result = parseExtrasExcel(loadFixture("extras-03apr-edge-cases.xlsx")); });
 
   it("parses the date from a two-cell split FECHA header", () => {
     // Row 0 col F = 'FECHA: ', col G = '03APR'
@@ -315,8 +318,9 @@ describe("excelParser — extras-03apr-edge-cases.xlsx (registration normalisati
 // These tests document the guarantee expected by the join layer.
 // ---------------------------------------------------------------------------
 
-describe("excelParser — registration normalisation symmetry (join contract)", () => {
-  const fixture = loadFixture("extras-13apr-fixture.xlsx");
+describe.skipIf(!FIXTURES_AVAILABLE)("excelParser — registration normalisation symmetry (join contract)", () => {
+  let fixture: Buffer;
+  beforeAll(() => { fixture = loadFixture("extras-13apr-fixture.xlsx"); });
 
   it("parser output always has a dash for two-char-prefix registrations (no-dash input)", () => {
     const result = parseExtrasExcel(fixture);
@@ -383,8 +387,9 @@ describe("excelParser — registration normalisation symmetry (join contract)", 
 //     -> BUG-2 fix: both NJE entries must be created
 // ---------------------------------------------------------------------------
 
-describe("excelParser — extras-nje-legs.xlsx (BUG-2 + BUG-3 real-pattern fixtures)", () => {
-  const result: ExcelParseResult = parseExtrasExcel(loadFixture("extras-nje-legs.xlsx"));
+describe.skipIf(!FIXTURES_AVAILABLE)("excelParser — extras-nje-legs.xlsx (BUG-2 + BUG-3 real-pattern fixtures)", () => {
+  let result: ExcelParseResult;
+  beforeAll(() => { result = parseExtrasExcel(loadFixture("extras-nje-legs.xlsx")); });
 
   it("parses the date from header (FECHA: 24MAY26)", () => {
     expect(result.date).toBe("2026-05-24");
@@ -477,8 +482,9 @@ describe("excelParser — extras-nje-legs.xlsx (BUG-2 + BUG-3 real-pattern fixtu
 //   After fix, ref 12278795 must appear alongside 12231641 in CS-TZZ services.
 // ---------------------------------------------------------------------------
 
-describe("excelParser — BUG-2 regression (extras-03apr-edge-cases.xlsx, CSTZZ/1)", () => {
-  const result: ExcelParseResult = parseExtrasExcel(loadFixture("extras-03apr-edge-cases.xlsx"));
+describe.skipIf(!FIXTURES_AVAILABLE)("excelParser — BUG-2 regression (extras-03apr-edge-cases.xlsx, CSTZZ/1)", () => {
+  let result: ExcelParseResult;
+  beforeAll(() => { result = parseExtrasExcel(loadFixture("extras-03apr-edge-cases.xlsx")); });
 
   it("BUG-2 fixed: CSTZZ/1 NJE entry (ref 12278795) is not silently dropped", () => {
     const cstzz = findExtra(result, "CS-TZZ")!;
@@ -509,8 +515,9 @@ describe("excelParser — BUG-2 regression (extras-03apr-edge-cases.xlsx, CSTZZ/
 // fix is visible as a diff. BUG-1 and BUG-4 are not being fixed in this pass.
 // ---------------------------------------------------------------------------
 
-describe("excelParser — known bugs (behaviour locked, NOT fixed here)", () => {
-  const fixture1 = loadFixture("extras-13apr-fixture.xlsx");
+describe.skipIf(!FIXTURES_AVAILABLE)("excelParser — known bugs (behaviour locked, NOT fixed here)", () => {
+  let fixture1: Buffer;
+  beforeAll(() => { fixture1 = loadFixture("extras-13apr-fixture.xlsx"); });
 
   // BUG-1: isRegistration() rejects dashes in main-section colA / colE
   //

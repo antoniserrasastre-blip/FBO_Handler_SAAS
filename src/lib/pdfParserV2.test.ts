@@ -21,12 +21,23 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
 import { parsePageItems, PdfItem, type ParseWarning } from './pdfParserV2';
-import fixtureData from './__fixtures__/cybermax-13apr.items.json';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+// The golden fixture is anonymised but kept local-only (gitignored, see
+// .gitignore: src/lib/__fixtures__/cybermax-*.json). Load it at runtime instead
+// of `import`ing it so `tsc --noEmit` / CI don't require the file; the golden
+// blocks below skip when it's absent. Synthetic column-boundary tests still run.
+const FIXTURE_PATH = path.resolve(__dirname, '__fixtures__', 'cybermax-13apr.items.json');
+const FIXTURE_AVAILABLE = existsSync(FIXTURE_PATH);
+const fixtureData: { pages: PdfItem[][] } = FIXTURE_AVAILABLE
+  ? JSON.parse(readFileSync(FIXTURE_PATH, 'utf-8'))
+  : { pages: [[]] };
 
 /** Items for page 0 of the fixture */
 const fixturePage0 = fixtureData.pages[0] as PdfItem[];
@@ -35,7 +46,7 @@ const fixturePage0 = fixtureData.pages[0] as PdfItem[];
 // 1. Golden output — full ParseResult from the fixture
 // ---------------------------------------------------------------------------
 
-describe('parsePageItems — golden output (cybermax-13apr fixture)', () => {
+describe.skipIf(!FIXTURE_AVAILABLE)('parsePageItems — golden output (cybermax-13apr fixture)', () => {
   const result = parsePageItems(fixturePage0, /* isFirstPage */ true);
 
   it('extracts sheetDate from the header date row', () => {
@@ -388,7 +399,9 @@ describe('parsePageItems — header rows are filtered out', () => {
       { text: 'Origen',    x: 73.18, y: 758.4,  page: 0 },
       { text: 'LLEGADAS',  x: 73.08, y: 774.15, page: 0 },
       { text: 'SALIDAS',   x: 474.66, y: 774.15, page: 0 },
-      { text: 'MALLORCAIR', x: 20.25, y: 810.18, page: 0 },
+      // Company-name footer row. The name is now genericised via FBO_COMPANY_NAME
+      // (defaults to 'FBO'); the filter must drop whatever that token resolves to.
+      { text: 'FBO',       x: 20.25, y: 810.18, page: 0 },
     ];
     const { flights } = parsePageItems(headerItems, true);
     expect(flights).toHaveLength(0);
@@ -403,7 +416,7 @@ describe('parsePageItems — header rows are filtered out', () => {
     expect(flights).toHaveLength(0);
   });
 
-  it('sheetDate is not set on second page (isFirstPage=false)', () => {
+  it.skipIf(!FIXTURE_AVAILABLE)('sheetDate is not set on second page (isFirstPage=false)', () => {
     const { sheetDate } = parsePageItems(fixturePage0, /* isFirstPage */ false);
     expect(sheetDate).toBe('');
   });
@@ -549,7 +562,7 @@ describe('parsePageItems — warnings channel', () => {
 
   // -- 6f. Golden fixture: real clean data → 0 warnings ----------------------
 
-  it('real fixture (cybermax-13apr) produces zero warnings — clean golden data', () => {
+  it.skipIf(!FIXTURE_AVAILABLE)('real fixture (cybermax-13apr) produces zero warnings — clean golden data', () => {
     const { warnings } = parsePageItems(fixturePage0, true);
     expect(warnings).toHaveLength(0);
   });
