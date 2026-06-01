@@ -13,10 +13,13 @@ services:
     environment:
       - NODE_ENV=production
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000"]
+      # La imagen runtime (node:20-slim) no trae wget ni curl; usamos node, que
+      # siempre está. <500 (incluye el 307→/login de NextAuth) cuenta como sano.
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))"]
       interval: 30s
       timeout: 5s
       retries: 3
+      start_period: 40s
 
 volumes:
   fbo-data:

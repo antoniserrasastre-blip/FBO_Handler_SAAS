@@ -1,0 +1,17 @@
+# Secretos: nunca entran al contexto de build (evita hornearlos en una capa de
+# la imagen y el EACCES de Next standalone al intentar leer /app/.env como nextjs).
+# Las variables llegan en runtime por `env_file` en docker-compose.yml.
+.env
+.env.*
+!.env.example
+
+# Artefactos que el build regenera (y que no deben pisar el resultado de npm ci)
+node_modules
+.next
+
+# No necesarios para construir
+.git
+.gitignore
+*.db
+data
+npm-debug.log*
