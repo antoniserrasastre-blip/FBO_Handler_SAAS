@@ -11,10 +11,11 @@ ver el modal con el `VisitCard` real.
 
 ## Variantes
 
-- **A — Fusión A+C (ELEGIDA):** las tarjetas densas de la A (matrícula +
-  **llegada/salida** + **aeropuerto relevante** origen/destino + contador de
-  servicios; hora en 2º plano) pero **agrupadas por estado** en secciones
-  colapsables como la C (orden de ciclo de vida, contador por sección).
+- **A — Fusión A+C (ELEGIDA):** dos zonas de primer nivel con banda de color
+  fuerte — **🛬 LLEGADAS / 🛫 SALIDAS** — para separar llegadas y salidas de un
+  vistazo. Dentro, las tarjetas densas de la A (matrícula + aeropuerto relevante
+  + servicios; hora 2º plano) en **subgrupos por estado** (solo si hay más de uno;
+  Llegadas va con rejilla directa). Contador por zona y por subgrupo.
 - **B — Chip con contexto:** 2 col, matrícula + tipo + LLEG/SAL con horas +
   parking + servicios. Más legible, menos por pantalla.
 - **C — Agrupado por estado:** secciones colapsables ("carpetas") por estado del

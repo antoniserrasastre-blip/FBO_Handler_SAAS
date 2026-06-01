@@ -244,28 +244,73 @@ function FlightChipA({ f, onOpen }: { f: FlightWithRelations; onOpen: (id: strin
   );
 }
 
-// ─── Variante A (fusionada A+C) — rejilla densa de tarjetas, agrupada por estado ─
-function VariantA({ flights, onOpen }: { flights: FlightWithRelations[]; onOpen: (id: string) => void }) {
-  const groups = useMemo(() => groupByState(flights), [flights]);
+// Rejilla densa de tarjetas (reutilizada en cada subgrupo de estado).
+function ChipGrid({ list, onOpen }: { list: FlightWithRelations[]; onOpen: (id: string) => void }) {
   return (
-    <div className="space-y-3">
-      {STATE_ORDER.map((g) => {
-        const list = groups[g.key] || [];
+    <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+      {list.map((f) => (
+        <FlightChipA key={f.id} f={f} onOpen={onOpen} />
+      ))}
+    </div>
+  );
+}
+
+// Dos zonas de primer nivel: separan llegadas de salidas de un vistazo.
+const DIRECTIONS = [
+  { dir: "ARR" as const, label: "Llegadas", color: ARR_COLOR, Icon: PlaneLanding },
+  { dir: "DEP" as const, label: "Salidas", color: DEP_COLOR, Icon: PlaneTakeoff },
+];
+
+// ─── Variante A (fusionada) — zonas LLEGADAS / SALIDAS, subgrupos por estado ──
+function VariantA({ flights, onOpen }: { flights: FlightWithRelations[]; onOpen: (id: string) => void }) {
+  const byDir = useMemo(() => {
+    const m: Record<"ARR" | "DEP", FlightWithRelations[]> = { ARR: [], DEP: [] };
+    for (const f of flights) m[primaryLeg(f).dir].push(f);
+    return m;
+  }, [flights]);
+
+  return (
+    <div className="space-y-4">
+      {DIRECTIONS.map(({ dir, label, color, Icon }) => {
+        const list = byDir[dir];
         if (list.length === 0) return null;
+        const groups = groupByState(list);
+        const present = STATE_ORDER.filter((g) => (groups[g.key] || []).length > 0);
+        // Si solo hay un estado (caso típico de Llegadas), rejilla directa sin
+        // subcabecera redundante; si hay varios (Salidas), subgrupos por estado.
+        const subgroup = present.length > 1;
         return (
-          <details key={g.key} open className="rounded-lg border border-line-subtle bg-white/40">
-            <summary className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm font-semibold text-ink-1">
-              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: stateColor(g.key) }} />
-              {g.label}
-              <span className="rounded-full bg-bg-muted px-1.5 text-xs text-ink-3">{list.length}</span>
-              <ChevronDown size={15} className="ml-auto text-ink-disabled" />
-            </summary>
-            <div className="grid grid-cols-3 gap-2 px-3 pb-3 sm:grid-cols-4">
-              {list.map((f) => (
-                <FlightChipA key={f.id} f={f} onOpen={onOpen} />
-              ))}
+          <section key={dir} className="overflow-hidden rounded-xl border-2" style={{ borderColor: color }}>
+            <header
+              className="flex items-center gap-2 px-3 py-2 text-sm font-bold uppercase tracking-wide text-white"
+              style={{ backgroundColor: color }}
+            >
+              <Icon size={17} aria-hidden />
+              {label}
+              <span className="rounded-full bg-white/25 px-1.5 text-xs">{list.length}</span>
+            </header>
+            <div className="space-y-2 p-2">
+              {subgroup ? (
+                present.map((g) => (
+                  <details key={g.key} open className="rounded-lg border border-line-subtle">
+                    <summary className="flex cursor-pointer items-center gap-2 px-2 py-1.5 text-xs font-semibold text-ink-2">
+                      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: stateColor(g.key) }} />
+                      {g.label}
+                      <span className="rounded-full bg-bg-muted px-1.5 text-[11px] text-ink-3">
+                        {(groups[g.key] || []).length}
+                      </span>
+                      <ChevronDown size={14} className="ml-auto text-ink-disabled" />
+                    </summary>
+                    <div className="px-2 pb-2">
+                      <ChipGrid list={groups[g.key] || []} onOpen={onOpen} />
+                    </div>
+                  </details>
+                ))
+              ) : (
+                <ChipGrid list={list} onOpen={onOpen} />
+              )}
             </div>
-          </details>
+          </section>
         );
       })}
     </div>
