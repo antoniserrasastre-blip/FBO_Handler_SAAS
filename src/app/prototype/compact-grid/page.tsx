@@ -23,7 +23,7 @@ import type { Flight, Service, LostItem, EventLog } from "@/types/compat";
 import { FLIGHT_STATE_CONFIG, normalizeFlightState } from "@/types";
 import { VisitCard } from "@/components/VisitCard";
 import { dateToSqlString } from "@/lib/time";
-import { ChevronLeft, ChevronRight, X, ChevronDown } from "lucide-react";
+import { ChevronLeft, ChevronRight, X, ChevronDown, PlaneLanding, PlaneTakeoff } from "lucide-react";
 
 type FlightWithRelations = Flight & {
   services: Service[];
@@ -64,6 +64,18 @@ function primaryTime(f: FlightWithRelations): string {
 }
 function pendingServices(f: FlightWithRelations): number {
   return (f.services || []).filter((s) => s.state !== "DELIVERED").length;
+}
+// Colores de dirección (inline para no depender de la paleta purgada de Tailwind).
+const ARR_COLOR = "#0284c7"; // llegada
+const DEP_COLOR = "#059669"; // salida
+// Leg "relevante": si aún no ha llegado, lo que importa es la LLEGADA (de dónde
+// viene, origen); una vez en tierra, lo que importa es la SALIDA (a dónde va,
+// destino). La hora es secundaria.
+function primaryLeg(f: FlightWithRelations): { dir: "ARR" | "DEP"; airport: string; time: string } {
+  if (normalizeFlightState(f.state) === "EXPECTED") {
+    return { dir: "ARR", airport: f.origin || "----", time: f.eta || "--:--" };
+  }
+  return { dir: "DEP", airport: f.destination || "----", time: f.etd || "--:--" };
 }
 
 export default function CompactGridPrototypePage() {
@@ -180,24 +192,45 @@ function Inner() {
 function VariantA({ flights, onOpen }: { flights: FlightWithRelations[]; onOpen: (id: string) => void }) {
   return (
     <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-      {flights.map((f) => (
-        <button
-          key={f.id}
-          onClick={() => onOpen(f.id)}
-          className="flex flex-col items-stretch rounded-lg border-l-4 bg-white p-2 text-left shadow-sm active:scale-[0.97]"
-          style={{ borderLeftColor: stateColor(f.state) }}
-        >
-          <span className="truncate font-mono text-sm font-bold text-ink-1">{f.registration}</span>
-          <span className="flex items-center justify-between text-[11px] text-ink-3">
-            <span className="tabular-nums">{primaryTime(f)}</span>
-            {pendingServices(f) > 0 ? (
-              <span className="ml-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-warning-bg px-1 text-[9px] font-bold text-warning-strong">
-                {pendingServices(f)}
+      {flights.map((f) => {
+        const leg = primaryLeg(f);
+        const arr = leg.dir === "ARR";
+        const dirColor = arr ? ARR_COLOR : DEP_COLOR;
+        return (
+          <button
+            key={f.id}
+            onClick={() => onOpen(f.id)}
+            className="flex flex-col items-stretch gap-1 rounded-lg border-l-4 bg-white p-2 text-left shadow-sm active:scale-[0.97]"
+            style={{ borderLeftColor: stateColor(f.state) }}
+          >
+            {/* Fila 1: matrícula + servicios pendientes */}
+            <span className="flex items-center justify-between">
+              <span className="truncate font-mono text-sm font-bold text-ink-1">{f.registration}</span>
+              {pendingServices(f) > 0 ? (
+                <span className="ml-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-warning-bg px-1 text-[9px] font-bold text-warning-strong">
+                  {pendingServices(f)}
+                </span>
+              ) : null}
+            </span>
+            {/* Fila 2: lo que importa — llegada/salida + aeropuerto relevante */}
+            <span className="flex items-center gap-1">
+              {arr ? (
+                <PlaneLanding size={14} className="shrink-0" style={{ color: dirColor }} aria-label="Llegada" />
+              ) : (
+                <PlaneTakeoff size={14} className="shrink-0" style={{ color: dirColor }} aria-label="Salida" />
+              )}
+              <span className="text-[10px] font-bold uppercase" style={{ color: dirColor }}>
+                {arr ? "Lleg" : "Sal"}
               </span>
-            ) : null}
-          </span>
-        </button>
-      ))}
+              <span className="ml-auto truncate font-mono text-base font-bold leading-none text-ink-1">
+                {leg.airport}
+              </span>
+            </span>
+            {/* Fila 3: hora, secundaria */}
+            <span className="tabular-nums text-[10px] text-ink-muted">{leg.time}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }
