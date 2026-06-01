@@ -11,10 +11,10 @@ ver el modal con el `VisitCard` real.
 
 ## Variantes
 
-- **A — Matrícula pura (ELEGIDA):** rejilla densísima 3-4 col. Cada chip muestra
-  matrícula + **llegada/salida** (lo que importa ahora) + **aeropuerto relevante**
-  (origen si llega, destino si sale); la hora queda en segundo plano. + contador
-  de servicios pendientes. Máximo nº de vuelos por pantalla.
+- **A — Fusión A+C (ELEGIDA):** las tarjetas densas de la A (matrícula +
+  **llegada/salida** + **aeropuerto relevante** origen/destino + contador de
+  servicios; hora en 2º plano) pero **agrupadas por estado** en secciones
+  colapsables como la C (orden de ciclo de vida, contador por sección).
 - **B — Chip con contexto:** 2 col, matrícula + tipo + LLEG/SAL con horas +
   parking + servicios. Más legible, menos por pantalla.
 - **C — Agrupado por estado:** secciones colapsables ("carpetas") por estado del

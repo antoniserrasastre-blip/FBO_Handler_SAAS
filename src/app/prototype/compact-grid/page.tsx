@@ -188,47 +188,84 @@ function Inner() {
   );
 }
 
-// ─── Variante A — matrícula pura, máxima densidad (como iconos de app) ───────
-function VariantA({ flights, onOpen }: { flights: FlightWithRelations[]; onOpen: (id: string) => void }) {
+// Estados en orden de ciclo de vida — compartido por A (fusionada) y C.
+const STATE_ORDER: { key: string; label: string }[] = [
+  { key: "EXPECTED", label: "Esperando llegada" },
+  { key: "ON_BLOCKS", label: "En calzos" },
+  { key: "PARKED", label: "En plataforma" },
+  { key: "TURNAROUND", label: "Preparación salida" },
+  { key: "BOARDING", label: "Embarque" },
+  { key: "OFF_BLOCKS", label: "Fuera de calzos" },
+];
+
+function groupByState(flights: FlightWithRelations[]): Record<string, FlightWithRelations[]> {
+  const m: Record<string, FlightWithRelations[]> = {};
+  for (const f of flights) (m[normalizeFlightState(f.state)] ||= []).push(f);
+  return m;
+}
+
+// Tarjeta densa: matrícula + (llegada/salida + aeropuerto relevante) + hora 2ª.
+function FlightChipA({ f, onOpen }: { f: FlightWithRelations; onOpen: (id: string) => void }) {
+  const leg = primaryLeg(f);
+  const arr = leg.dir === "ARR";
+  const dirColor = arr ? ARR_COLOR : DEP_COLOR;
   return (
-    <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-      {flights.map((f) => {
-        const leg = primaryLeg(f);
-        const arr = leg.dir === "ARR";
-        const dirColor = arr ? ARR_COLOR : DEP_COLOR;
+    <button
+      onClick={() => onOpen(f.id)}
+      className="flex flex-col items-stretch gap-1 rounded-lg border-l-4 bg-white p-2 text-left shadow-sm active:scale-[0.97]"
+      style={{ borderLeftColor: stateColor(f.state) }}
+    >
+      {/* Fila 1: matrícula + servicios pendientes */}
+      <span className="flex items-center justify-between">
+        <span className="truncate font-mono text-sm font-bold text-ink-1">{f.registration}</span>
+        {pendingServices(f) > 0 ? (
+          <span className="ml-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-warning-bg px-1 text-[9px] font-bold text-warning-strong">
+            {pendingServices(f)}
+          </span>
+        ) : null}
+      </span>
+      {/* Fila 2: lo que importa — llegada/salida + aeropuerto relevante */}
+      <span className="flex items-center gap-1">
+        {arr ? (
+          <PlaneLanding size={14} className="shrink-0" style={{ color: dirColor }} aria-label="Llegada" />
+        ) : (
+          <PlaneTakeoff size={14} className="shrink-0" style={{ color: dirColor }} aria-label="Salida" />
+        )}
+        <span className="text-[10px] font-bold uppercase" style={{ color: dirColor }}>
+          {arr ? "Lleg" : "Sal"}
+        </span>
+        <span className="ml-auto truncate font-mono text-base font-bold leading-none text-ink-1">
+          {leg.airport}
+        </span>
+      </span>
+      {/* Fila 3: hora, secundaria */}
+      <span className="tabular-nums text-[10px] text-ink-muted">{leg.time}</span>
+    </button>
+  );
+}
+
+// ─── Variante A (fusionada A+C) — rejilla densa de tarjetas, agrupada por estado ─
+function VariantA({ flights, onOpen }: { flights: FlightWithRelations[]; onOpen: (id: string) => void }) {
+  const groups = useMemo(() => groupByState(flights), [flights]);
+  return (
+    <div className="space-y-3">
+      {STATE_ORDER.map((g) => {
+        const list = groups[g.key] || [];
+        if (list.length === 0) return null;
         return (
-          <button
-            key={f.id}
-            onClick={() => onOpen(f.id)}
-            className="flex flex-col items-stretch gap-1 rounded-lg border-l-4 bg-white p-2 text-left shadow-sm active:scale-[0.97]"
-            style={{ borderLeftColor: stateColor(f.state) }}
-          >
-            {/* Fila 1: matrícula + servicios pendientes */}
-            <span className="flex items-center justify-between">
-              <span className="truncate font-mono text-sm font-bold text-ink-1">{f.registration}</span>
-              {pendingServices(f) > 0 ? (
-                <span className="ml-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-warning-bg px-1 text-[9px] font-bold text-warning-strong">
-                  {pendingServices(f)}
-                </span>
-              ) : null}
-            </span>
-            {/* Fila 2: lo que importa — llegada/salida + aeropuerto relevante */}
-            <span className="flex items-center gap-1">
-              {arr ? (
-                <PlaneLanding size={14} className="shrink-0" style={{ color: dirColor }} aria-label="Llegada" />
-              ) : (
-                <PlaneTakeoff size={14} className="shrink-0" style={{ color: dirColor }} aria-label="Salida" />
-              )}
-              <span className="text-[10px] font-bold uppercase" style={{ color: dirColor }}>
-                {arr ? "Lleg" : "Sal"}
-              </span>
-              <span className="ml-auto truncate font-mono text-base font-bold leading-none text-ink-1">
-                {leg.airport}
-              </span>
-            </span>
-            {/* Fila 3: hora, secundaria */}
-            <span className="tabular-nums text-[10px] text-ink-muted">{leg.time}</span>
-          </button>
+          <details key={g.key} open className="rounded-lg border border-line-subtle bg-white/40">
+            <summary className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm font-semibold text-ink-1">
+              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: stateColor(g.key) }} />
+              {g.label}
+              <span className="rounded-full bg-bg-muted px-1.5 text-xs text-ink-3">{list.length}</span>
+              <ChevronDown size={15} className="ml-auto text-ink-disabled" />
+            </summary>
+            <div className="grid grid-cols-3 gap-2 px-3 pb-3 sm:grid-cols-4">
+              {list.map((f) => (
+                <FlightChipA key={f.id} f={f} onOpen={onOpen} />
+              ))}
+            </div>
+          </details>
         );
       })}
     </div>
@@ -282,27 +319,11 @@ function VariantB({ flights, onOpen }: { flights: FlightWithRelations[]; onOpen:
 
 // ─── Variante C — agrupado por estado, secciones colapsables ("carpetas") ────
 function VariantC({ flights, onOpen }: { flights: FlightWithRelations[]; onOpen: (id: string) => void }) {
-  // Agrupa por estado normalizado, en orden de ciclo de vida.
-  const order: { key: string; label: string }[] = [
-    { key: "EXPECTED", label: "Esperando llegada" },
-    { key: "ON_BLOCKS", label: "En calzos" },
-    { key: "PARKED", label: "En plataforma" },
-    { key: "TURNAROUND", label: "Preparación salida" },
-    { key: "BOARDING", label: "Embarque" },
-    { key: "OFF_BLOCKS", label: "Fuera de calzos" },
-  ];
-  const groups = useMemo(() => {
-    const m: Record<string, FlightWithRelations[]> = {};
-    for (const f of flights) {
-      const k = normalizeFlightState(f.state);
-      (m[k] ||= []).push(f);
-    }
-    return m;
-  }, [flights]);
+  const groups = useMemo(() => groupByState(flights), [flights]);
 
   return (
     <div className="space-y-3">
-      {order.map((g) => {
+      {STATE_ORDER.map((g) => {
         const list = groups[g.key] || [];
         if (list.length === 0) return null;
         return (
