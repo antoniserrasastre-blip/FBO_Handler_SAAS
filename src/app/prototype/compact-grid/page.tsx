@@ -68,14 +68,25 @@ function pendingServices(f: FlightWithRelations): number {
 // Colores de dirección (inline para no depender de la paleta purgada de Tailwind).
 const ARR_COLOR = "#0284c7"; // llegada
 const DEP_COLOR = "#059669"; // salida
-// Leg "relevante": si aún no ha llegado, lo que importa es la LLEGADA (de dónde
-// viene, origen); una vez en tierra, lo que importa es la SALIDA (a dónde va,
-// destino). La hora es secundaria.
-function primaryLeg(f: FlightWithRelations): { dir: "ARR" | "DEP"; airport: string; time: string } {
-  if (normalizeFlightState(f.state) === "EXPECTED") {
-    return { dir: "ARR", airport: f.origin || "----", time: f.eta || "--:--" };
-  }
-  return { dir: "DEP", airport: f.destination || "----", time: f.etd || "--:--" };
+
+// "Movimientos del día": un vuelo (Visit) lleva DOS movimientos —llegada y
+// salida— que pueden caer en días distintos. Sólo cuenta como llegada de hoy si
+// su arrivalDate es el día de la hoja, y como salida de hoy si departureDate lo
+// es. La API emite arrivalDate/departureDate en "DD/MM" (UTC).
+function ddMmUTC(d: Date): string {
+  return `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+function isArrivalToday(f: FlightWithRelations, sheetDdMm: string): boolean {
+  return !!f.arrivalDate && f.arrivalDate === sheetDdMm;
+}
+function isDepartureToday(f: FlightWithRelations, sheetDdMm: string): boolean {
+  return !!f.departureDate && f.departureDate === sheetDdMm;
+}
+// Datos del leg que toca mostrar (origen+ETA para llegada, destino+ETD para salida).
+function legInfo(f: FlightWithRelations, dir: "ARR" | "DEP"): { airport: string; time: string } {
+  return dir === "ARR"
+    ? { airport: f.origin || "----", time: f.eta || "--:--" }
+    : { airport: f.destination || "----", time: f.etd || "--:--" };
 }
 
 export default function CompactGridPrototypePage() {
@@ -94,6 +105,7 @@ function Inner() {
 
   const [flights, setFlights] = useState<FlightWithRelations[]>([]);
   const [people, setPeople] = useState<PeopleByVisit>({});
+  const [sheetDdMm, setSheetDdMm] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [openId, setOpenId] = useState<string | null>(null);
 
@@ -106,6 +118,8 @@ function Inner() {
           const data = await res.json();
           setFlights(data.flights || []);
           setPeople(data.people || {});
+          // Día de la hoja en "DD/MM" (UTC), para casar con arrival/departureDate.
+          if (data.daySheet?.date) setSheetDdMm(ddMmUTC(new Date(data.daySheet.date)));
         }
       } catch {
         // prototipo: ignoramos errores de red
@@ -145,7 +159,7 @@ function Inner() {
         ) : flights.length === 0 ? (
           <p className="text-ink-3">No hay vuelos hoy. Prueba en un día con tráfico para ver la densidad.</p>
         ) : variant === "A" ? (
-          <VariantA flights={flights} onOpen={setOpenId} />
+          <VariantA flights={flights} sheetDdMm={sheetDdMm} onOpen={setOpenId} />
         ) : variant === "B" ? (
           <VariantB flights={flights} onOpen={setOpenId} />
         ) : (
@@ -204,11 +218,13 @@ function groupByState(flights: FlightWithRelations[]): Record<string, FlightWith
   return m;
 }
 
-// Tarjeta densa: matrícula + (llegada/salida + aeropuerto relevante) + hora 2ª.
-function FlightChipA({ f, onOpen }: { f: FlightWithRelations; onOpen: (id: string) => void }) {
-  const leg = primaryLeg(f);
-  const arr = leg.dir === "ARR";
+// Tarjeta densa: matrícula + (aeropuerto del leg que toca) + hora 2ª. El `dir`
+// lo fija la zona (Llegadas/Salidas), no el estado: así una pernocta sólo
+// aparece en la zona del movimiento de HOY.
+function FlightChipA({ f, dir, onOpen }: { f: FlightWithRelations; dir: "ARR" | "DEP"; onOpen: (id: string) => void }) {
+  const arr = dir === "ARR";
   const dirColor = arr ? ARR_COLOR : DEP_COLOR;
+  const leg = legInfo(f, dir);
   return (
     <button
       onClick={() => onOpen(f.id)}
@@ -224,7 +240,7 @@ function FlightChipA({ f, onOpen }: { f: FlightWithRelations; onOpen: (id: strin
           </span>
         ) : null}
       </span>
-      {/* Fila 2: lo que importa — llegada/salida + aeropuerto relevante */}
+      {/* Fila 2: lo que importa — aeropuerto relevante del leg de hoy */}
       <span className="flex items-center gap-1">
         {arr ? (
           <PlaneLanding size={14} className="shrink-0" style={{ color: dirColor }} aria-label="Llegada" />
@@ -245,11 +261,11 @@ function FlightChipA({ f, onOpen }: { f: FlightWithRelations; onOpen: (id: strin
 }
 
 // Rejilla densa de tarjetas (reutilizada en cada subgrupo de estado).
-function ChipGrid({ list, onOpen }: { list: FlightWithRelations[]; onOpen: (id: string) => void }) {
+function ChipGrid({ list, dir, onOpen }: { list: FlightWithRelations[]; dir: "ARR" | "DEP"; onOpen: (id: string) => void }) {
   return (
     <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
       {list.map((f) => (
-        <FlightChipA key={f.id} f={f} onOpen={onOpen} />
+        <FlightChipA key={f.id} f={f} dir={dir} onOpen={onOpen} />
       ))}
     </div>
   );
@@ -262,12 +278,14 @@ const DIRECTIONS = [
 ];
 
 // ─── Variante A (fusionada) — zonas LLEGADAS / SALIDAS, subgrupos por estado ──
-function VariantA({ flights, onOpen }: { flights: FlightWithRelations[]; onOpen: (id: string) => void }) {
-  const byDir = useMemo(() => {
-    const m: Record<"ARR" | "DEP", FlightWithRelations[]> = { ARR: [], DEP: [] };
-    for (const f of flights) m[primaryLeg(f).dir].push(f);
-    return m;
-  }, [flights]);
+// Reparte por MOVIMIENTO del día: un vuelo va a Llegadas sólo si llega hoy y a
+// Salidas sólo si sale hoy (un turnaround del día aparece en ambas; una pernocta
+// sólo en la que toca). Así no se cuelan llegadas que no eran de hoy.
+function VariantA({ flights, sheetDdMm, onOpen }: { flights: FlightWithRelations[]; sheetDdMm: string; onOpen: (id: string) => void }) {
+  const byDir = useMemo(() => ({
+    ARR: flights.filter((f) => isArrivalToday(f, sheetDdMm)),
+    DEP: flights.filter((f) => isDepartureToday(f, sheetDdMm)),
+  }), [flights, sheetDdMm]);
 
   return (
     <div className="space-y-4">
@@ -302,12 +320,12 @@ function VariantA({ flights, onOpen }: { flights: FlightWithRelations[]; onOpen:
                       <ChevronDown size={14} className="ml-auto text-ink-disabled" />
                     </summary>
                     <div className="px-2 pb-2">
-                      <ChipGrid list={groups[g.key] || []} onOpen={onOpen} />
+                      <ChipGrid list={groups[g.key] || []} dir={dir} onOpen={onOpen} />
                     </div>
                   </details>
                 ))
               ) : (
-                <ChipGrid list={list} onOpen={onOpen} />
+                <ChipGrid list={list} dir={dir} onOpen={onOpen} />
               )}
             </div>
           </section>

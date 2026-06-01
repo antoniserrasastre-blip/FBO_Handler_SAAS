@@ -16,6 +16,11 @@ ver el modal con el `VisitCard` real.
   vistazo. Dentro, las tarjetas densas de la A (matrícula + aeropuerto relevante
   + servicios; hora 2º plano) en **subgrupos por estado** (solo si hay más de uno;
   Llegadas va con rejilla directa). Contador por zona y por subgrupo.
+  - **Reparto por MOVIMIENTO del día** (no por estado): un vuelo va a Llegadas
+    sólo si `arrivalDate == día` y a Salidas sólo si `departureDate == día`. Un
+    turnaround del día sale en ambas; una pernocta sólo en la que toca. Antes se
+    clasificaba por estado y metía pernoctas (que salen hoy pero llegaron días
+    atrás) como falsas llegadas.
 - **B — Chip con contexto:** 2 col, matrícula + tipo + LLEG/SAL con horas +
   parking + servicios. Más legible, menos por pantalla.
 - **C — Agrupado por estado:** secciones colapsables ("carpetas") por estado del
