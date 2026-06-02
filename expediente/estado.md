@@ -6,7 +6,7 @@ _Última actualización: 2026-06-02_
 
 ## Situación actual
 
-El sistema está en producción (Railway). Modelo v2 estable (Operator→Aircraft→Visit→Movement). La migración v1→v2 está completada.
+El sistema está en producción en el servidor propio `sirvici`, expuesto vía Cloudflare Tunnel en `fbo.randomite.space`. Modelo v2 estable (Operator→Aircraft→Visit→Movement). La migración v1→v2 está completada.
 
 ## Pendientes activos
 

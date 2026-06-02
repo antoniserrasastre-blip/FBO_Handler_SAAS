@@ -12,6 +12,7 @@ Mapa completo del expediente. Leer después de `CLAUDE.md`, antes de actuar.
 | `ui.md` | Páginas (App Router), componentes clave, hooks, patrones UI |
 | `api.md` | Endpoints REST: rutas, métodos, guards de rol |
 | `parsers.md` | Parsers de importación: pdfParserV2, excelParser, gendecParser |
+| `infraestructura.md` | Servidor (`sirvici`), Cloudflare Tunnel, dominio, microservicios |
 
 ## Historial de trabajo
 
