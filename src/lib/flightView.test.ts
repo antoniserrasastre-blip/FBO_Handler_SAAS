@@ -152,6 +152,54 @@ describe("toFlightView — overnight visit spans two days", () => {
 });
 
 // ---------------------------------------------------------------------------
+// state derivation — the visit's lifecycle state is the most advanced point
+// reached across BOTH legs, never just the DEPARTURE leg verbatim.
+// ---------------------------------------------------------------------------
+
+describe("toFlightView — composed lifecycle state", () => {
+  it("overnight on departure day: ARRIVAL=PARKED + DEPARTURE=EXPECTED → state PARKED (not 'Esperando llegada')", () => {
+    const visit = buildVisit({
+      type: "OVERNIGHT",
+      movements: [
+        { id: "mov-arr", direction: "ARRIVAL", state: "PARKED" },
+        { id: "mov-dep", direction: "DEPARTURE", state: "EXPECTED" },
+      ],
+    });
+    // The aircraft is on the apron awaiting its departure prep — must NOT read
+    // as EXPECTED (which the UI labels "Esperando llegada").
+    expect(toFlightView(visit).state).toBe("PARKED");
+  });
+
+  it("departure in progress wins over arrival: ARRIVAL=PARKED + DEPARTURE=BOARDING → state BOARDING", () => {
+    const visit = buildVisit({
+      type: "OVERNIGHT",
+      movements: [
+        { id: "mov-arr", direction: "ARRIVAL", state: "PARKED" },
+        { id: "mov-dep", direction: "DEPARTURE", state: "BOARDING" },
+      ],
+    });
+    expect(toFlightView(visit).state).toBe("BOARDING");
+  });
+
+  it("not yet arrived turnaround: both legs EXPECTED → state EXPECTED", () => {
+    const visit = buildVisit({
+      movements: [
+        { id: "mov-arr", direction: "ARRIVAL", state: "EXPECTED" },
+        { id: "mov-dep", direction: "DEPARTURE", state: "EXPECTED" },
+      ],
+    });
+    expect(toFlightView(visit).state).toBe("EXPECTED");
+  });
+
+  it("legacy aliases normalize before comparison: ARRIVAL=ON_GROUND → state ON_BLOCKS", () => {
+    const visit = buildVisit({
+      movements: [{ id: "mov-arr", direction: "ARRIVAL", state: "ON_GROUND" }],
+    });
+    expect(toFlightView(visit).state).toBe("ON_BLOCKS");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // mergeCrewItemsIntoServices — read-merge helper
 // ---------------------------------------------------------------------------
 

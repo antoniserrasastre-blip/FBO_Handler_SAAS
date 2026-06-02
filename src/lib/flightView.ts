@@ -20,10 +20,27 @@
 // (real services first, then unmigrated crew items appended).
 
 import type { FlightView, FlightViewService, FlightViewLostItem, FlightViewCrewItem, FlightViewTask } from "@/types/v2";
+import { FLIGHT_STATES, normalizeFlightState } from "@/types";
 import { resolveAirport } from "./airportsFallback";
 import { crewItemToService, crewItemServiceId, type CrewItemRecord } from "./crewItemMigration";
 
 type AnyRecord = Record<string, unknown>;
+
+// The visit's single lifecycle state (EXPECTED→ON_BLOCKS→PARKED→TURNAROUND→
+// BOARDING→OFF_BLOCKS) spans BOTH legs, but each Movement only carries its own
+// leg's progress: an overnight's DEPARTURE starts at EXPECTED while its ARRIVAL
+// already sits at PARKED. Taking the DEPARTURE state verbatim would render a
+// parked overnight as "Esperando llegada" and stall the auto-transition.
+// Compose the visit state as the MOST ADVANCED point reached across both legs.
+function mostAdvancedState(...states: (string | null | undefined)[]): string {
+  let best = -1;
+  for (const s of states) {
+    if (!s) continue;
+    const idx = FLIGHT_STATES.indexOf(normalizeFlightState(s));
+    if (idx > best) best = idx;
+  }
+  return best >= 0 ? FLIGHT_STATES[best] : "EXPECTED";
+}
 
 interface VisitWithMovements {
   id: string;
@@ -208,7 +225,7 @@ export function toFlightView(visit: VisitWithMovements): FlightView {
 
     parking: (primary?.parking as string | null) ?? null,
     tobt: (dep?.tobt as string | null) ?? null,
-    state: (primary?.state as string) ?? "EXPECTED",
+    state: mostAdvancedState(arr?.state as string | undefined, dep?.state as string | undefined),
     isOvernight,
 
     crewArrival: (arr?.crewCount as number) ?? 0,
