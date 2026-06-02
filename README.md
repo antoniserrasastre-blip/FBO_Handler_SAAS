@@ -17,7 +17,7 @@ Plataforma web para gestión de operaciones de handling en aviación general (FB
 | Frontend | Next.js 15 (App Router), React 19, TypeScript, Tailwind CSS |
 | Backend | SQLite + Prisma ORM, NextAuth.js, SSE (EventBus) |
 | Microservicio tasas | Node.js + Express (AENA 2026) |
-| Deploy | Railway + Docker |
+| Deploy | Servidor propio `sirvici` + Cloudflare Tunnel (`fbo.randomite.space`) |
 
 ## Desarrollo
 
@@ -28,19 +28,13 @@ npm run db:seed           # Datos de prueba
 npm run dev               # Puerto 3001
 ```
 
-## Estructura
+## Documentación para agentes
 
-```
-src/
-├── app/page.tsx              # Dashboard principal
-├── components/FlightCard.tsx # Componente central de vuelo
-├── lib/pdfParserV2.ts        # Parser de PDFs operacionales
-├── lib/excelParser.ts        # Parser de extras Excel
-├── lib/flightView.ts         # Adapter Visit+Movements → FlightView
-└── lib/events.ts             # Bus de eventos SSE
-aena-microservice/            # Cálculo de tasas AENA 2026
-docs/                         # Documentación técnica (ADRs, handoffs)
-```
+Este proyecto sigue el sistema de carpetas lostandlucky (ver `FILOSOFIA.md`). Los cambios y prioridades los marca el usuario en cada sesión; el estado vivo se recoge en `expediente/estado.md` (no hay roadmap especulativo).
+
+→ Empieza por `CLAUDE.md` (router)
+→ Mapa del expediente en `expediente/INDICE.md`
+→ Estado actual en `expediente/estado.md`
 
 ## Notas de zona horaria
 

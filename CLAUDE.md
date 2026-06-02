@@ -1,36 +1,34 @@
-# Guía del Desarrollador (CLAUDE.md)
+# CLAUDE.md — FBO Handler SaaS
 
-## Tech Stack
-- **Next.js 15 (App Router)** + React 19 + TypeScript
-- **SQLite local** (`file:/app/data/fbo.db`) + Prisma ORM
-- **Tailwind CSS** + Lucide React
-- **NextAuth.js** (Credentials)
-- **SSE** (EventBus en memoria) para tiempo real
+**FBO Handler SaaS** es una plataforma de gestión operativa en tiempo real para un FBO (Fixed Base Operator) en Palma de Mallorca. Gestiona vuelos de aviación privada: importación de PDFs operacionales, seguimiento de servicios, checklist por puesto y exportación de tasas AENA.
 
-## Comandos Rápidos
+## Lee el mapa primero
+
+→ `expediente/INDICE.md` — qué hay en el expediente y dónde está cada cosa
+→ `expediente/estado.md` — pendientes activos y alertas del momento presente
+
+## Stack
+
+Next.js 15 (App Router) + React 19 + TypeScript + SQLite (Prisma) + Tailwind + NextAuth + SSE
+
+## Comandos rápidos
+
 ```bash
-npm install          # Instalar dependencias
 npm run dev          # Servidor de desarrollo (puerto 3001 en prod)
 npm run build        # Build para producción
-npx prisma generate  # Generar cliente Prisma
 npx prisma db push   # Sincronizar esquema (idempotente)
 npm run db:seed      # Poblar datos de prueba
 ```
 
-## Reglas de Oro (LoneWolf Mode)
-1. **Zonas Horarias**:
-   - Días operativos (`palmaDay`): Medianoche UTC calculada según fecha local de Palma.
-   - Vuelos: Horas en **Zulu** (`getUTCHours()`).
-   - Extras/Catering: Horas en **Peninsular** (`getHours()`).
-2. **Importación**:
-   - PDF (Cybermax): Fuente de vuelos. Parser real en `pdfParserV2.ts` (V1 eliminado).
-   - Excel (Extras): Fuente de servicios, se cruza por **Matrícula**.
-3. **UI**: Texto en Español, código en Inglés. Tipos nuevos en `src/types/v2.ts` (`FlightView`); compat antiguo en `src/types/compat.ts`.
-4. **Commits**: Directos a `main`. Sin burocracia de ramas.
+## Reglas de Oro
 
-## Estructura
-- `src/app/page.tsx`: Dashboard principal.
-- `src/components/FlightCard.tsx`: Componente más importante.
-- `src/lib/pdfParserV2.ts` y `excelParser.ts`: Cerebros de importación.
-- `src/lib/flightView.ts`: Adapter Visit+Movements → FlightView.
-- `src/lib/events.ts`: Bus de eventos SSE.
+1. **Zonas horarias** — `palmaDay`: medianoche UTC según fecha local Palma. Vuelos: **Zulu** (`getUTCHours()`). Extras/Catering: **Peninsular** (`getHours()`).
+2. **Importación** — PDF Cybermax: fuente de vuelos (`pdfParserV2.ts`, V1 eliminado). Excel Mallorcair: fuente de servicios, cruce por **Matrícula**.
+3. **UI** — Texto visible en Español, código en Inglés. Tipos nuevos en `src/types/v2.ts`; compat legacy en `src/types/compat.ts`.
+4. **Commits** — Directos a `main`. Sin burocracia de ramas.
+5. **PATCH whitelist** — Todo endpoint PUT/PATCH tiene whitelist explícita de campos permitidos. No hacer blind spread de body.
+6. **EventBus** — Cada cambio de estado relevante emite evento SSE (`src/lib/events.ts`). No olvidar el emit.
+
+## Filosofía de agente
+
+Este proyecto sigue el sistema de carpetas lostandlucky. Ver `FILOSOFIA.md`.
