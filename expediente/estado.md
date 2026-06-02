@@ -31,10 +31,6 @@ Suite de tests: 803 tests en verde, 40 ficheros, 0 skipped. `tsc` y `prisma vali
 
 _(Ninguna activa)_
 
-## Próximos pasos conocidos
-
-- Ver `ROADMAP.md` para features planificadas (v0.4: WebSockets, Gantt/Timeline, integración FlightRadar).
-
 ## Cómo actualizar este fichero
 
 Al inicio de cada sesión: revisar si hay cambios de estado desde la última vez.

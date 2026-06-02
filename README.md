@@ -30,7 +30,7 @@ npm run dev               # Puerto 3001
 
 ## Documentación para agentes
 
-Este proyecto sigue el sistema de carpetas lostandlucky (ver `FILOSOFIA.md`).
+Este proyecto sigue el sistema de carpetas lostandlucky (ver `FILOSOFIA.md`). Los cambios y prioridades los marca el usuario en cada sesión; el estado vivo se recoge en `expediente/estado.md` (no hay roadmap especulativo).
 
 → Empieza por `CLAUDE.md` (router)
 → Mapa del expediente en `expediente/INDICE.md`

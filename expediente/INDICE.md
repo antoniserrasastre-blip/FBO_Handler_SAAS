@@ -41,4 +41,3 @@ Decisiones técnicas permanentes (no cambian con frecuencia, justifican el "por 
 | Encriptación pasaportes | `src/lib/crypto.ts` |
 | Dashboard principal | `src/app/page.tsx` |
 | Tarjeta de vuelo | `src/components/FlightCard.tsx` (legacy) / `VisitCard.tsx` (v2) |
-| Roadmap (lo que viene) | `ROADMAP.md` |
