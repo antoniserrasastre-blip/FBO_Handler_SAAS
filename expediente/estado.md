@@ -19,10 +19,10 @@ Suite de tests: 1004 tests en verde, 53 skipped, 68 ficheros (`vitest run`, 2026
 ### Del plan de testeo profundo (FASE 3-5)
 - [ ] **A6** — Canal de errores del parser: filas descartadas en `pdfParser*.ts` deben propagarse como warnings a la preview en vez de desaparecer en silencio.
 - [ ] **FASE 4 — AENA calc** — Tests de consistencia de `aena-microservice/src/calc/*` (landing, noise, transit, pax, parking). Pendiente además de **flag de exactitud**: pedir al dueño 2-3 cálculos verificados contra factura real.
-- [ ] **FASE 5 — Deuda de diseño**:
-  - PII fuera de `EventLog.action` (A3): loguear id, no `fullName` literal (passengers/crew routes).
-  - Auto-transición duplicada (D2): extraer a helper único compartido por PATCH flights y services.
-  - (Opcional) Generar whitelist PATCH desde `routeFieldToMovement` en vez de mantener `Set` a mano.
+- [ ] **FASE 5 — Deuda de diseño** (analizada 2026-06-02, ver detalle):
+  - **A3 (PII en `EventLog.action`) — ~70% hecho.** En `passengers/[id]/route.ts` el `fullName`/`passportNumber`/`dateOfBirth` ya se loguean como "cambió/actualizado" sin valor. **Falta:** `gender` y `nationality` aún escriben el valor literal en `action` → cambiar a "gender/nationality actualizada" (fix de minutos, categoría sensible RGPD).
+  - **D2 (auto-transición duplicada) — prioritario.** Misma lógica copiada en `flights/[id]/route.ts` y `services/[id]/route.ts`, y **ya divergió**: services loguea el EventLog con `movementId` y emite un `flight_updated` extra; flights no. Extraer a helper `applyAutoTransition(visitId, session)` no es solo DRY, corrige la inconsistencia de eventos SSE.
+  - (Opcional) Generar whitelist PATCH desde `routeFieldToMovement`. **Decisión:** NO en runtime (el `Set` es frontera de seguridad auditable); mejor un **test de paridad** que falle si hay claves en `routeFieldToMovement` ausentes del `Set` (excluyendo casos especiales como `assignedToId`).
 
 ### Persistencia del import (pendiente de decisión)
 - [ ] Política de propiedad de campos cuando se reimporta el mismo PDF. **Ya protegido:** `upsertMovement()` en `src/lib/v2/upsert.ts` separa campos "plan" (callsign, scheduledDate, origin, destination, eta, etd, crewCount → se actualizan en cada reimport) de los operativos del `Set` `MOVEMENT_OPERATIONAL_FIELDS` (state, paxCount, parking, paxState, fuel/toilet/transport… → create-only, nunca se pisan). **Lo que falta:** revisar el `Set` por si falta algún campo editable en UI, y decidir la política sistemática (¿generar el `Set` desde el esquema en vez de mantenerlo a mano?).
