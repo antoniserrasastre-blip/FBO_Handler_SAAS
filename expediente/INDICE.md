@@ -21,6 +21,20 @@ Una hoja por mes con lo que se hizo, decidió o rompió.
 - `historial/2026-05-testeo-profundo.md` — plan de testeo profundo (FASES 0-3 completadas)
 - `historial/2026-06.md` — mes actual
 
+## Capacidades — skills invocables (`.claude/skills/`)
+
+Qué sabe hacer el sistema. Invócalas con `/<nombre>`.
+
+| Skill | Tipo | Para qué |
+|---|---|---|
+| `/verificar-expediente` | Mantener | Audita las hojas contra el código y reporta deriva por severidad |
+| `/actualizar-expediente` | Mantener | Reescribe solo las hojas afectadas por un cambio (lee el git diff) |
+| `/cerrar-dia` | Mantener | Ritual de cierre: actualiza `estado.md` y vuelca al historial mensual |
+| `/nueva-feature` | Expandir | Vertical slice enrutado a los agentes `fbo-*` con las guardas anti-bug-silencioso |
+| `/auditar-deuda` | Mantener | Barrido global: huérfanos, drift de whitelist, mutaciones sin emit, PII en claro |
+
+Subagentes de dominio (no son skills, se invocan por tarea): `fbo-backend`, `fbo-frontend`, `fbo-parsers`, `fbo-reviewer`, `fbo-test`, `fbo-merge` en `.claude/agents/`.
+
 ## Decisiones arquitectónicas (`docs/adr/`)
 
 Decisiones técnicas permanentes (no cambian con frecuencia, justifican el "por qué" del sistema).
