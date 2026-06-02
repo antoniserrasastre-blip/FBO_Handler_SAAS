@@ -8,7 +8,7 @@ _Última actualización: 2026-06-02_
 
 Sistema en producción en `sirvici` (servidor propio), expuesto vía Cloudflare Tunnel en `fbo.randomite.space`. Modelo v2 estable (Operator→Aircraft→Visit→Movement). La migración v1→v2 está completada.
 
-Suite de tests: 803 tests en verde, 40 ficheros, 0 skipped. `tsc` y `prisma validate` limpios.
+Suite de tests: 1004 tests en verde, 53 skipped, 68 ficheros (`vitest run`, 2026-06-02). `tsc --noEmit` y `prisma validate` limpios.
 
 ## Pendientes activos
 
@@ -21,11 +21,11 @@ Suite de tests: 803 tests en verde, 40 ficheros, 0 skipped. `tsc` y `prisma vali
   - (Opcional) Generar whitelist PATCH desde `routeFieldToMovement` en vez de mantener `Set` a mano.
 
 ### Persistencia del import (pendiente de decisión)
-- [ ] Política de propiedad de campos cuando se reimporta el mismo PDF. Hoy `upsert.ts:114-118` pisa ediciones manuales (state, paxCount, parking). Hay que decidir qué campos son "del PDF" y cuáles son "operativos intocables". Las correcciones de FASE 3 ya protegen lo esencial; esto es la versión sistemática.
+- [ ] Política de propiedad de campos cuando se reimporta el mismo PDF. **Ya protegido:** `upsertMovement()` en `src/lib/v2/upsert.ts` separa campos "plan" (callsign, scheduledDate, origin, destination, eta, etd, crewCount → se actualizan en cada reimport) de los operativos del `Set` `MOVEMENT_OPERATIONAL_FIELDS` (state, paxCount, parking, paxState, fuel/toilet/transport… → create-only, nunca se pisan). **Lo que falta:** revisar el `Set` por si falta algún campo editable en UI, y decidir la política sistemática (¿generar el `Set` desde el esquema en vez de mantenerlo a mano?).
 
 ### Otros bugs menores
-- [ ] BUG-4 — falso positivo doble-prefijo `ZZ` en `excelParser.ts:87` (baja prioridad).
-- [ ] Time `0900/0930` en excelParser descarta el 2º horario (cosmético).
+- [ ] BUG-4 — falso positivo doble-prefijo `ZZ` en `looksLikeRegistration()` / `insertDash()` (`src/lib/excelParser.ts`), baja prioridad.
+- [ ] Time `0900/0930` en `excelParser.ts` descarta el 2º horario (cosmético).
 
 ## Alertas
 
