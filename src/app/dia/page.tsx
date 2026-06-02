@@ -250,6 +250,13 @@ function DiaPageInner() {
             onQueryChange={setSearchQuery}
           />
           <div className="flex items-center justify-end gap-1.5">
+            <HelixButton
+              variant="secondary"
+              size="sm"
+              onClick={() => window.open(`/api/export/baggage-sheets?date=${dateToSqlString(date)}`, "_blank")}
+            >
+              Hojas de equipaje
+            </HelixButton>
             <HelixButton variant="primary" size="sm" onClick={() => setShowQuickAdd(true)}>
               + Nuevo vuelo
             </HelixButton>
