@@ -30,6 +30,7 @@ Suite de tests: 1008 tests en verde, 53 skipped, 68 ficheros (`vitest run`, 2026
 ### Otros bugs menores
 - [ ] BUG-4 — falso positivo doble-prefijo `ZZ` en `looksLikeRegistration()` / `insertDash()` (`src/lib/excelParser.ts`), baja prioridad.
 - [ ] Time `0900/0930` en `excelParser.ts` descarta el 2º horario (cosmético).
+- [ ] Warning lint: `isOvernight` asignado y nunca usado en `src/app/api/import/route.ts` (no bloquea, anótalo al tocar ese fichero — prefijar `_` o eliminar).
 
 ## Alertas
 
