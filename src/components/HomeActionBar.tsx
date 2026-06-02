@@ -161,6 +161,12 @@ function MobileMoreMenu({
               >
                 Excel Diario
               </MenuItem>
+              <MenuItem
+                className={item}
+                onClick={() => { setOpen(false); window.open(`/api/export/baggage-sheets?date=${ymd}`, "_blank"); }}
+              >
+                Hojas de equipaje (PDF)
+              </MenuItem>
             </>
           ) : null}
           <div className="mx-2 my-1 border-t border-line-subtle" />
@@ -244,6 +250,12 @@ function ExportMenu({
             Excel Diario
           </button>
           <div className="mx-2 my-1 border-t border-line-subtle" />
+          <button
+            onClick={() => { window.open(`/api/export/baggage-sheets?date=${ymd}`, "_blank"); setOpen(false); }}
+            className={item}
+          >
+            Hojas de equipaje (PDF)
+          </button>
           <button
             onClick={() => { window.open("/api/export/blank-declaration", "_blank"); setOpen(false); }}
             className={item}
