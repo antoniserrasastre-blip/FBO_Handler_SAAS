@@ -26,6 +26,7 @@ import { normalizeFlightState, type ShiftPost } from "@/types";
 import { StatePill, type FboState } from "@/components/helix/Pill";
 import { HelixPill } from "@/components/helix/Pill";
 import { MovementRow } from "@/components/helix/MovementRow";
+import { PrintLabelsButton } from "@/components/PrintLabelsButton";
 import { OperatorBadge } from "@/components/helix/OperatorBadge";
 import { AircraftBadge } from "@/components/helix/AircraftBadge";
 import { CategoryPill } from "@/components/helix/CategoryPill";
@@ -824,6 +825,12 @@ export const VisitCard = memo(function VisitCard({
             paxSource={paxSource}
             onEdit={onOpenPeople ? () => onOpenPeople(flight.id, "DEPARTURE") : undefined}
           />
+        </div>
+      )}
+
+      {expanded && (
+        <div className="flex justify-end border-t border-line-subtle px-3 py-2" onClick={(e) => e.stopPropagation()}>
+          <PrintLabelsButton flight={flight} />
         </div>
       )}
 

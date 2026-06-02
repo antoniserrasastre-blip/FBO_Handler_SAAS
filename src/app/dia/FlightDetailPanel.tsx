@@ -27,6 +27,7 @@ import { RqstChip } from "@/components/helix/RqstChip";
 import { PetCount } from "@/components/helix/PetCount";
 import { MovementRow } from "@/components/helix/MovementRow";
 import { HelixPill } from "@/components/helix/Pill";
+import { PrintLabelsButton } from "@/components/PrintLabelsButton";
 import type { FlightCategory } from "@/types/v2";
 import type { FboState } from "@/components/helix/Pill";
 
@@ -149,6 +150,9 @@ export function FlightDetailPanel({ flight, onClose, onMutated, onOpenPaxCrew, o
           crewCount={flight.crewDepartureReal ?? flight.crewDeparture}
           parking={flight.parking}
         />
+        <div className="flex justify-end px-3 py-2">
+          <PrintLabelsButton flight={flight} />
+        </div>
       </div>
 
       {/* SECCIONES COLAPSABLES */}

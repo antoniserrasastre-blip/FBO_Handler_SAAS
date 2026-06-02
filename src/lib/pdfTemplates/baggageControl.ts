@@ -52,15 +52,23 @@ const LINE = "#374151";
 const HAIR = "#9CA3AF";
 const ACCENT = "#E8772E"; // Mallorcair orange
 
+function drawScissors(doc: PDFKit.PDFDocument, x: number, y: number) {
+  // tiny scissors glyph (Helvetica lacks ✂), blades pointing right
+  doc.save().lineWidth(0.6).strokeColor(HAIR);
+  doc.circle(x, y - 2.4, 1.5).stroke();
+  doc.circle(x, y + 2.4, 1.5).stroke();
+  doc.moveTo(x + 1.3, y - 1.6).lineTo(x + 8, y + 1.2).stroke();
+  doc.moveTo(x + 1.3, y + 1.6).lineTo(x + 8, y - 1.2).stroke();
+  doc.restore();
+}
+
 function drawCutLine(doc: PDFKit.PDFDocument, y: number) {
   doc.save();
   doc.lineWidth(0.6).strokeColor(HAIR).dash(4, { space: 3 });
-  doc.moveTo(MARGIN + 12, y).lineTo(MARGIN + CONTENT_WIDTH - 12, y).stroke();
+  doc.moveTo(MARGIN + 14, y).lineTo(MARGIN + CONTENT_WIDTH, y).stroke();
   doc.undash();
-  doc.fontSize(8).fillColor(HAIR);
-  doc.text("✂", MARGIN, y - 5);
-  doc.text("✂", MARGIN + CONTENT_WIDTH - 8, y - 5);
   doc.restore();
+  drawScissors(doc, MARGIN + 2, y);
 }
 
 // One slip with its top-left corner at (x0, y0).
