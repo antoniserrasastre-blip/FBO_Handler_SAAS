@@ -10,6 +10,10 @@ Sistema en producción en `sirvici` (servidor propio), expuesto vía Cloudflare 
 
 Suite de tests: 1004 tests en verde, 53 skipped, 68 ficheros (`vitest run`, 2026-06-02). `tsc --noEmit` y `prisma validate` limpios.
 
+## Decisiones de alcance (MVP)
+
+- **GenDec aparcado (2026-06-02)** — no se usa actualmente. No invertir más en el flujo de importación GenDec hasta nueva orden. Código intacto y dormido: parser `src/lib/gendecParser.ts`, ruta `POST /api/flights/[id]/gendec/extract`, UI `GenDecPasteSection` (en `PassengerCrewModal` y dos secciones en `/dia`), enum `GENDEC_PASTE`. La exportación de declaración en blanco (`/api/export/blank-declaration`) es independiente y no se toca. Prioridad: simplificar el MVP.
+
 ## Pendientes activos
 
 ### Del plan de testeo profundo (FASE 3-5)
