@@ -14,7 +14,7 @@ La solución: **las carpetas son la memoria, no el agente**. El agente es efíme
 2. **Convenciones de nombres sustituyen queries** — rutas predecibles `dominio/AAAA-MM.md`, el agente sabe la ruta antes de abrir.
 3. **Routing por capas** — `CLAUDE.md` → `INDICE.md` → hoja concreta. Carga mínima.
 4. **Un fichero = una preocupación** — si el agente solo necesita una parte, el fichero es demasiado grande.
-5. **Los comandos/skills son ficheros** — `.claude/commands/<skill>.md`, invocables con `/skill`.
+5. **Los comandos/skills son ficheros** — `.claude/skills/<skill>/SKILL.md`, invocables con `/skill`. (En Claude Code 2026 commands y skills se fusionaron; usamos la forma `skills/`.)
 6. **El agente lee primero el mapa** — `CLAUDE.md` → `INDICE.md` → `estado.md` antes de actuar.
 
 ## Los tres tipos de ficheros
@@ -23,7 +23,7 @@ La solución: **las carpetas son la memoria, no el agente**. El agente es efíme
 |---|---|---|
 | **Datos** | `expediente/flujos.md` | La información en sí |
 | **Mapa** | `INDICE.md`, `estado.md` | Orientar al agente |
-| **Capacidades** | `.claude/commands/cerrar-dia.md` | Qué sabe hacer el sistema |
+| **Capacidades** | `.claude/skills/verificar-expediente/SKILL.md` | Qué sabe hacer el sistema |
 
 ## El `estado.md` — el único fichero vivo
 
@@ -53,6 +53,8 @@ FBO_Handler_SAAS/
 │   └── historial/
 │       └── AAAA-MM.md           ← hoja de trabajo mensual
 └── .claude/
-    └── commands/
-        └── <skill>.md           ← skills invocables
+    ├── agents/
+    │   └── fbo-*.md             ← subagentes de dominio (backend/frontend/…)
+    └── skills/
+        └── <skill>/SKILL.md     ← skills invocables con /skill
 ```
