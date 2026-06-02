@@ -2,11 +2,11 @@
 
 Mapa completo del expediente. Leer después de `CLAUDE.md`, antes de actuar.
 
-## Ficheros de dominio
+## Ficheros de dominio (`expediente/`)
 
 | Fichero | Contenido |
 |---|---|
-| `estado.md` | Pendientes activos, alertas, punto actual del trabajo |
+| `estado.md` | Pendientes activos, alertas, punto actual del trabajo. **El único fichero vivo.** |
 | `modelo-datos.md` | Schema v2: Operator→Aircraft→Visit→Movement. Tipos, enums, encriptación |
 | `flujos.md` | Workflows principales: importación PDF, Excel, pasajeros, ciclo de servicio |
 | `ui.md` | Páginas (App Router), componentes clave, hooks, patrones UI |
@@ -14,11 +14,18 @@ Mapa completo del expediente. Leer después de `CLAUDE.md`, antes de actuar.
 | `parsers.md` | Parsers de importación: pdfParserV2, excelParser, gendecParser |
 | `infraestructura.md` | Servidor (`sirvici`), Cloudflare Tunnel, dominio, microservicios |
 
-## Historial de trabajo
+## Historial de trabajo (`expediente/historial/`)
 
-`historial/AAAA-MM.md` — una hoja por mes con lo que se hizo, decidió o rompió.
+Una hoja por mes con lo que se hizo, decidió o rompió.
 
+- `historial/2026-05-testeo-profundo.md` — plan de testeo profundo (FASES 0-3 completadas)
 - `historial/2026-06.md` — mes actual
+
+## Decisiones arquitectónicas (`docs/adr/`)
+
+Decisiones técnicas permanentes (no cambian con frecuencia, justifican el "por qué" del sistema).
+
+- `docs/adr/0001-eventbus-single-container.md` — EventBus como singleton en memoria (deploy single-container)
 
 ## Dónde está cada cosa en el código
 
@@ -34,4 +41,4 @@ Mapa completo del expediente. Leer después de `CLAUDE.md`, antes de actuar.
 | Encriptación pasaportes | `src/lib/crypto.ts` |
 | Dashboard principal | `src/app/page.tsx` |
 | Tarjeta de vuelo | `src/components/FlightCard.tsx` (legacy) / `VisitCard.tsx` (v2) |
-| ADRs (decisiones arch.) | `docs/adr/` |
+| Roadmap (lo que viene) | `ROADMAP.md` |

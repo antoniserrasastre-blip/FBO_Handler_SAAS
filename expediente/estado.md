@@ -6,11 +6,26 @@ _Última actualización: 2026-06-02_
 
 ## Situación actual
 
-El sistema está en producción en el servidor propio `sirvici`, expuesto vía Cloudflare Tunnel en `fbo.randomite.space`. Modelo v2 estable (Operator→Aircraft→Visit→Movement). La migración v1→v2 está completada.
+Sistema en producción en `sirvici` (servidor propio), expuesto vía Cloudflare Tunnel en `fbo.randomite.space`. Modelo v2 estable (Operator→Aircraft→Visit→Movement). La migración v1→v2 está completada.
+
+Suite de tests: 803 tests en verde, 40 ficheros, 0 skipped. `tsc` y `prisma validate` limpios.
 
 ## Pendientes activos
 
-_(Vacío — añadir cuando haya trabajo en curso)_
+### Del plan de testeo profundo (FASE 3-5)
+- [ ] **A6** — Canal de errores del parser: filas descartadas en `pdfParser*.ts` deben propagarse como warnings a la preview en vez de desaparecer en silencio.
+- [ ] **FASE 4 — AENA calc** — Tests de consistencia de `aena-microservice/src/calc/*` (landing, noise, transit, pax, parking). Pendiente además de **flag de exactitud**: pedir al dueño 2-3 cálculos verificados contra factura real.
+- [ ] **FASE 5 — Deuda de diseño**:
+  - PII fuera de `EventLog.action` (A3): loguear id, no `fullName` literal (passengers/crew routes).
+  - Auto-transición duplicada (D2): extraer a helper único compartido por PATCH flights y services.
+  - (Opcional) Generar whitelist PATCH desde `routeFieldToMovement` en vez de mantener `Set` a mano.
+
+### Persistencia del import (pendiente de decisión)
+- [ ] Política de propiedad de campos cuando se reimporta el mismo PDF. Hoy `upsert.ts:114-118` pisa ediciones manuales (state, paxCount, parking). Hay que decidir qué campos son "del PDF" y cuáles son "operativos intocables". Las correcciones de FASE 3 ya protegen lo esencial; esto es la versión sistemática.
+
+### Otros bugs menores
+- [ ] BUG-4 — falso positivo doble-prefijo `ZZ` en `excelParser.ts:87` (baja prioridad).
+- [ ] Time `0900/0930` en excelParser descarta el 2º horario (cosmético).
 
 ## Alertas
 
@@ -18,10 +33,9 @@ _(Ninguna activa)_
 
 ## Próximos pasos conocidos
 
-- Ver `ROADMAP.md` para features planificadas
-- Ver `docs/handoff-latest.md` para contexto de la última sesión de trabajo
+- Ver `ROADMAP.md` para features planificadas (v0.4: WebSockets, Gantt/Timeline, integración FlightRadar).
 
 ## Cómo actualizar este fichero
 
 Al inicio de cada sesión: revisar si hay cambios de estado desde la última vez.
-Al cierre: actualizar pendientes, añadir lo que se decidió o rompió.
+Al cierre: actualizar pendientes (tachar lo hecho, añadir lo nuevo), añadir lo que se decidió o rompió.
