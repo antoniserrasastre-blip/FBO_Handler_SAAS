@@ -98,15 +98,10 @@ function FlightChip({
         boxShadow: selected ? `0 0 0 2px ${dirColor}` : undefined,
       }}
     >
-      {/* Fila 1: matrícula + servicios pendientes (izq) · aeropuerto del leg (der, a la altura de la matrícula) */}
+      {/* Fila 1: matrícula (izq, ancho completo) · aeropuerto del leg (der, a la altura de la matrícula) */}
       <span className="flex items-center justify-between gap-1">
-        <span className="flex min-w-0 items-center gap-1">
-          <span className="truncate font-mono text-sm font-bold text-ink-1">{f.registration}</span>
-          {pendingServices(f) > 0 ? (
-            <span className="inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full bg-warning-bg px-1 text-[9px] font-bold text-warning-strong">
-              {pendingServices(f)}
-            </span>
-          ) : null}
+        <span className="min-w-0 truncate font-mono text-sm font-bold text-ink-1" title={f.registration}>
+          {f.registration}
         </span>
         <span className="shrink-0 font-mono text-base font-bold leading-none text-ink-1">{leg.airport}</span>
       </span>
@@ -126,11 +121,21 @@ function FlightChip({
           </span>
         ) : null}
       </span>
-      {/* Fila 3: hora (izq, secundaria) + pasaje/tripulación del leg (der) */}
-      <span className="flex items-center justify-between text-[10px] text-ink-muted">
+      {/* Fila 3: hora (izq) · servicios pendientes + pasaje/tripulación del leg (der) */}
+      <span className="flex items-center justify-between gap-1 text-[10px] text-ink-muted">
         <span className="tabular-nums">{leg.time}</span>
-        <span className="tabular-nums font-medium text-ink-2">
-          {counts.pax}P <span className="text-ink-disabled">·</span> {counts.crew}T
+        <span className="flex items-center gap-1.5">
+          {pendingServices(f) > 0 ? (
+            <span
+              className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-warning-bg px-1 text-[9px] font-bold text-warning-strong"
+              title={`${pendingServices(f)} servicios pendientes`}
+            >
+              {pendingServices(f)}
+            </span>
+          ) : null}
+          <span className="tabular-nums font-medium text-ink-2">
+            {counts.pax}P <span className="text-ink-disabled">·</span> {counts.crew}T
+          </span>
         </span>
       </span>
     </button>
