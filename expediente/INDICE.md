@@ -11,7 +11,7 @@ Mapa completo del expediente. Leer después de `CLAUDE.md`, antes de actuar.
 | `flujos.md` | Workflows principales: importación PDF, Excel, pasajeros, ciclo de servicio |
 | `ui.md` | Páginas (App Router), componentes clave, hooks, patrones UI |
 | `api.md` | Endpoints REST: rutas, métodos, guards de rol |
-| `parsers.md` | Parsers de importación: pdfParserV2, excelParser, gendecParser |
+| `parsers.md` | Parsers de importación: PDF (fachada `pdfParser` → `pdfParserV2`), `excelParser`; `gendecParser` aparcado |
 | `infraestructura.md` | Servidor (`sirvici`), Cloudflare Tunnel, dominio, microservicios |
 
 ## Historial de trabajo (`expediente/historial/`)
@@ -34,10 +34,12 @@ Decisiones técnicas permanentes (no cambian con frecuencia, justifican el "por 
 | Schema de DB | `prisma/schema.prisma` |
 | Tipos TS del modelo v2 | `src/types/v2.ts` |
 | Tipos legacy (compat) | `src/types/compat.ts` |
-| Parser PDF Cybermax | `src/lib/pdfParserV2.ts` |
+| Parser PDF Cybermax | `src/lib/pdfParser.ts` (fachada pública + SAFE_MODE; importa todo de aquí) → motor `src/lib/pdfParserV2.ts` |
 | Parser Excel Mallorcair | `src/lib/excelParser.ts` |
 | Adapter Visit→FlightView | `src/lib/flightView.ts` |
 | Bus de eventos SSE | `src/lib/events.ts` |
 | Encriptación pasaportes | `src/lib/crypto.ts` |
 | Dashboard principal | `src/app/page.tsx` |
-| Tarjeta de vuelo | `src/components/FlightCard.tsx` (legacy) / `VisitCard.tsx` (v2) |
+| Tarjeta de vuelo (viva) | `src/components/VisitCard.tsx`. OJO: `FlightCard.tsx` está HUÉRFANO (0 imports), no es la tarjeta de producción |
+| Parser Excel: detección de matrícula | `looksLikeRegistration` / `insertDash` en `src/lib/excelParser.ts` |
+| Auto-transición de estado (duplicada) | `suggestNextState` en `src/lib/flightUrgency.ts`, aplicada en `flights/[id]/route.ts` y `services/[id]/route.ts` |

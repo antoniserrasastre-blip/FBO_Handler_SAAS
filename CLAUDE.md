@@ -23,7 +23,7 @@ npm run db:seed      # Poblar datos de prueba
 ## Reglas de Oro
 
 1. **Zonas horarias** — `palmaDay`: medianoche UTC según fecha local Palma. Vuelos: **Zulu** (`getUTCHours()`). Extras/Catering: **Peninsular** (`getHours()`).
-2. **Importación** — PDF Cybermax: fuente de vuelos (`pdfParserV2.ts`, V1 eliminado). Excel Mallorcair: fuente de servicios, cruce por **Matrícula**.
+2. **Importación** — PDF Cybermax: fuente de vuelos. Importar SIEMPRE de la fachada `src/lib/pdfParser.ts` (añade SAFE_MODE + remapeo a `ParsedFlight` legacy), nunca de `pdfParserV2.ts` directo (es el motor interno). El parser V1 de texto se eliminó. Excel Mallorcair: fuente de servicios, cruce por **Matrícula**.
 3. **UI** — Texto visible en Español, código en Inglés. Tipos nuevos en `src/types/v2.ts`; compat legacy en `src/types/compat.ts`.
 4. **Commits** — Directos a `main`. Sin burocracia de ramas.
 5. **PATCH whitelist** — Todo endpoint PUT/PATCH tiene whitelist explícita de campos permitidos. No hacer blind spread de body.
