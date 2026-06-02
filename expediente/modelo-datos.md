@@ -180,6 +180,11 @@ Módulo: `src/lib/crypto.ts`.
     una estructura plana parecida al antiguo modelo `Flight`. Se construye en `src/lib/flightView.ts`.
     Su `id` **es el `visitId`** (los endpoints `/api/flights/[id]/*` lo usan como id de recurso).
     Sub-formas: `FlightViewService`, `FlightViewLostItem`, `FlightViewCrewItem`, `FlightViewTask`.
+    El `state` del FlightView **no se toma literal de un movimiento**: se compone como el punto
+    MÁS AVANZADO del ciclo (`EXPECTED<ON_BLOCKS<PARKED<TURNAROUND<BOARDING<OFF_BLOCKS`) alcanzado
+    entre ARRIVAL y DEPARTURE (`mostAdvancedState`). Así una pernocta en su día de salida (llegada
+    `PARKED`, salida `EXPECTED`) se muestra `PARKED` ("En plataforma"), no `EXPECTED` ("Esperando
+    llegada"). El `state` per-movimiento sigue siendo el progreso honesto de cada leg.
 - **compat/legacy** (`src/types/compat.ts`): alias para componentes UI que antes importaban de
   `@prisma/client`. Los modelos v1 (`Flight`, `DaySheet`, `Service`, `Passenger`, `CrewMember`,
   `LostItem`) **ya no existen** en Prisma. Mapea:

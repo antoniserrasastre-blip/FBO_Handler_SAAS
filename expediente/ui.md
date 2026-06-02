@@ -35,7 +35,7 @@ ruta (ver columna "Tab").
 
 ### Tarjetas de vuelo
 - `VisitCard.tsx` — Tarjeta central de producción (shape v2: Visit + dos Movements ARRIVAL/DEPARTURE). Usada en `/` y en el prototipo. Compone `MovementRow`, badges helix, `ServiceChipRow`, `StateStepper`, `OpsToggleStrip`, `ChecklistPanel`, `AddServicePicker`, `TurnaroundCountdown`. Delega la edición pesada en `FlightDetailPanel` vía `onOpenDetail`.
-- `CompactFlightGrid.tsx` — Densidad compacta de la Lista: reparte movimientos en zonas 🛬 Llegadas / 🛫 Salidas (clasificación por movimiento, no por estado). Cada tarjeta abre la `VisitCard`.
+- `CompactFlightGrid.tsx` — Densidad compacta de la Lista: reparte movimientos en zonas 🛬 Llegadas / 🛫 Salidas (clasificación por movimiento, no por estado). Cada tarjeta muestra, según la dirección del leg de hoy: matrícula + servicios pendientes, aeropuerto (ICAO + ciudad en lenguaje natural resuelta server-side, truncada con tooltip), hora, y pasaje/tripulación (`paxArrivalReal ?? paxArrival` y homólogos de salida; real del handler si existe, si no el estimado del import). Cada tarjeta abre la `VisitCard`.
 - `FlightDetailPanel.tsx` (`app/dia/`) — Panel lateral de detalle/edición completa de un vuelo. Reutilizado por `/dia` y `/timeline`. Aloja inline-edits, servicios, lost items, pax/crew y la sección GenDec (en pausa).
 - `FlightCard.tsx` — Tarjeta legacy v1. **Huérfana: ya no se importa en ningún sitio** (candidata a borrado).
 

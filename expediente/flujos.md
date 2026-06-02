@@ -40,7 +40,9 @@ Por cada vuelo `f` del body:
 6. `upsertMovement` ARRIVAL con `origin/eta/paxCount/crewCount/parking/state`
    (state = `arrivalState`).
 7. `upsertMovement` DEPARTURE con `destination/etd/paxCount/crewCount/parking/state`
-   (state = `departureState`, siempre `EXPECTED`).
+   (state = `departureState`, siempre `EXPECTED`: el leg de salida aún no ha despegado.
+   El estado mostrado del visit lo **compone** `flightView` a partir de ambos legs — ver
+   "Estado del visit" abajo).
 8. `EventLog`: "Importado desde PDF" si `wasCreated`, "Actualizado desde PDF" si no.
 9. Si `cancelIds` viene en el body: soft-cancel → `prisma.movement.updateMany`
    pone `flightCategory: "CANCELLED"` en todos los movements de esas visitas
@@ -168,6 +170,15 @@ acepta además `CANCELLED`.
    nuevo `state` en DEPARTURE (o ARRIVAL fallback) y recarga.
 4. Construye `changes[]` legibles, EventLog si hay cambios, y siempre
    `eventBus.emit("flight_updated")`.
+
+### Estado del visit (`mostAdvancedState` en `src/lib/flightView.ts`)
+Cada Movement guarda el progreso **de su propio leg** (`arrivalState`, `departureState`). El
+estado único que ven la Lista, `/dia` y `VisitCard` se **compone** tomando el punto más avanzado
+del ciclo (`EXPECTED<ON_BLOCKS<PARKED<TURNAROUND<BOARDING<OFF_BLOCKS`) entre ARRIVAL y DEPARTURE.
+Esto evita que una pernocta en su día de salida (llegada `PARKED`, salida `EXPECTED`) se muestre
+como "Esperando llegada" y desatasca la auto-transición, que lee este estado compuesto. Normaliza
+alias legacy (`ON_GROUND`→`ON_BLOCKS`) antes de comparar. La auto-transición sigue **escribiendo**
+el nuevo estado en el movimiento DEPARTURE (o ARRIVAL fallback), no en el compuesto.
 
 ### `suggestNextState` (`src/lib/flightUrgency.ts`)
 Máquina de estados de vuelo (distinta del ciclo de servicio):

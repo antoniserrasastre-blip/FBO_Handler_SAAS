@@ -8,7 +8,7 @@ _Última actualización: 2026-06-02_
 
 Sistema en producción en `sirvici` (servidor propio), expuesto vía Cloudflare Tunnel en `fbo.randomite.space`. Modelo v2 estable (Operator→Aircraft→Visit→Movement). La migración v1→v2 está completada.
 
-Suite de tests: 1004 tests en verde, 53 skipped, 68 ficheros (`vitest run`, 2026-06-02). `tsc --noEmit` y `prisma validate` limpios.
+Suite de tests: 1008 tests en verde, 53 skipped, 68 ficheros (`vitest run`, 2026-06-02). `tsc --noEmit` y `prisma validate` limpios.
 
 ## Decisiones de alcance (MVP)
 
