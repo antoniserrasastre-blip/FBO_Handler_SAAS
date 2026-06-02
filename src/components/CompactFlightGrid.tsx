@@ -98,35 +98,33 @@ function FlightChip({
         boxShadow: selected ? `0 0 0 2px ${dirColor}` : undefined,
       }}
     >
-      {/* Fila 1: matrícula + servicios pendientes */}
-      <span className="flex items-center justify-between">
-        <span className="truncate font-mono text-sm font-bold text-ink-1">{f.registration}</span>
-        {pendingServices(f) > 0 ? (
-          <span className="ml-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-warning-bg px-1 text-[9px] font-bold text-warning-strong">
-            {pendingServices(f)}
-          </span>
-        ) : null}
-      </span>
-      {/* Fila 2: lo que importa — aeropuerto relevante del leg de hoy + ciudad en lenguaje natural */}
-      <span className="flex items-start gap-1">
-        {arr ? (
-          <PlaneLanding size={14} className="mt-0.5 shrink-0" style={{ color: dirColor }} aria-label="Llegada" />
-        ) : (
-          <PlaneTakeoff size={14} className="mt-0.5 shrink-0" style={{ color: dirColor }} aria-label="Salida" />
-        )}
-        <span className="mt-0.5 text-[10px] font-bold uppercase" style={{ color: dirColor }}>
-          {arr ? "Lleg" : "Sal"}
-        </span>
-        <span className="ml-auto flex min-w-0 flex-col items-end leading-none">
-          <span className="w-full truncate text-right font-mono text-base font-bold text-ink-1">
-            {leg.airport}
-          </span>
-          {leg.city ? (
-            <span className="mt-0.5 w-full truncate text-right text-[9px] font-normal text-ink-muted" title={leg.city}>
-              {leg.city}
+      {/* Fila 1: matrícula + servicios pendientes (izq) · aeropuerto del leg (der, a la altura de la matrícula) */}
+      <span className="flex items-center justify-between gap-1">
+        <span className="flex min-w-0 items-center gap-1">
+          <span className="truncate font-mono text-sm font-bold text-ink-1">{f.registration}</span>
+          {pendingServices(f) > 0 ? (
+            <span className="inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full bg-warning-bg px-1 text-[9px] font-bold text-warning-strong">
+              {pendingServices(f)}
             </span>
           ) : null}
         </span>
+        <span className="shrink-0 font-mono text-base font-bold leading-none text-ink-1">{leg.airport}</span>
+      </span>
+      {/* Fila 2: dirección (izq) · ciudad del aeropuerto en lenguaje natural (der, bajo el ICAO) */}
+      <span className="flex items-center gap-1">
+        {arr ? (
+          <PlaneLanding size={14} className="shrink-0" style={{ color: dirColor }} aria-label="Llegada" />
+        ) : (
+          <PlaneTakeoff size={14} className="shrink-0" style={{ color: dirColor }} aria-label="Salida" />
+        )}
+        <span className="text-[10px] font-bold uppercase" style={{ color: dirColor }}>
+          {arr ? "Lleg" : "Sal"}
+        </span>
+        {leg.city ? (
+          <span className="ml-auto min-w-0 truncate text-[9px] font-normal text-ink-muted" title={leg.city}>
+            {leg.city}
+          </span>
+        ) : null}
       </span>
       {/* Fila 3: hora (izq, secundaria) + pasaje/tripulación del leg (der) */}
       <span className="flex items-center justify-between text-[10px] text-ink-muted">
