@@ -8,7 +8,9 @@ _Última actualización: 2026-06-02_
 
 Sistema en producción en `sirvici` (servidor propio), expuesto vía Cloudflare Tunnel en `fbo.randomite.space`. Modelo v2 estable (Operator→Aircraft→Visit→Movement). La migración v1→v2 está completada.
 
-Suite de tests: 1008 tests en verde, 53 skipped, 68 ficheros (`vitest run`, 2026-06-02). `tsc --noEmit` y `prisma validate` limpios.
+**Equipaje de bodega** (nuevo, 2026-06-02) en producción: hojas de control imprimibles (`/api/export/baggage-sheets`, A4 4-up) + etiquetas por bulto para impresoras Brother TD-46/4750 (`/api/export/baggage-labels`, 62×29 mm). Ver `historial/2026-06.md` sesión 5 y memoria global `project_fbo_baggage`.
+
+Suite de tests: 1008 tests en verde, 53 skipped, 68 ficheros (`vitest run`, 2026-06-02). `tsc --noEmit` y lint limpios.
 
 ## Decisiones de alcance (MVP)
 
@@ -26,6 +28,10 @@ Suite de tests: 1008 tests en verde, 53 skipped, 68 ficheros (`vitest run`, 2026
 
 ### Persistencia del import (pendiente de decisión)
 - [ ] Política de propiedad de campos cuando se reimporta el mismo PDF. **Ya protegido:** `upsertMovement()` en `src/lib/v2/upsert.ts` separa campos "plan" (callsign, scheduledDate, origin, destination, eta, etd, crewCount → se actualizan en cada reimport) de los operativos del `Set` `MOVEMENT_OPERATIONAL_FIELDS` (state, paxCount, parking, paxState, fuel/toilet/transport… → create-only, nunca se pisan). **Lo que falta:** revisar el `Set` por si falta algún campo editable en UI, y decidir la política sistemática (¿generar el `Set` desde el esquema en vez de mantenerlo a mano?).
+
+### Equipaje de bodega — impresión
+- [ ] **Mini-agente ZPL local** para impresión de etiquetas de un clic, sin diálogo. Bloqueado por infra: el server está fuera de la LAN de las impresoras, no alcanza su IP. Requiere un PC de oficina siempre encendido + las IPs de las Brother (pedir a IT). Estado actual: PDF 62×29 + driver Brother (funciona ya). Las TD-46/4750 hablan ZPL II; el generador ZPL aún no está escrito (se decidió esperar a tener IPs).
+- [ ] Pendiente confirmar con el dueño si quiere generar también el generador ZPL ya (dejándolo listo) o esperar.
 
 ### Otros bugs menores
 - [ ] BUG-4 — falso positivo doble-prefijo `ZZ` en `looksLikeRegistration()` / `insertDash()` (`src/lib/excelParser.ts`), baja prioridad.
