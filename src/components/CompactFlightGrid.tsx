@@ -36,10 +36,19 @@ function isArrivalToday(f: GridFlight, sheetDdMm: string): boolean {
 function isDepartureToday(f: GridFlight, sheetDdMm: string): boolean {
   return !!f.departureDate && ddMm(f.departureDate) === sheetDdMm;
 }
-function legInfo(f: GridFlight, dir: "ARR" | "DEP"): { airport: string; time: string } {
+function legInfo(
+  f: GridFlight,
+  dir: "ARR" | "DEP",
+): { airport: string; time: string; city: string | null } {
   return dir === "ARR"
-    ? { airport: f.origin || "----", time: f.eta || "--:--" }
-    : { airport: f.destination || "----", time: f.etd || "--:--" };
+    ? { airport: f.origin || "----", time: f.eta || "--:--", city: f.originCity || null }
+    : { airport: f.destination || "----", time: f.etd || "--:--", city: f.destCity || null };
+}
+// Tripulación y pasaje del leg de hoy: real (override del handler) si existe, si no el estimado del import.
+function legCounts(f: GridFlight, dir: "ARR" | "DEP"): { pax: number; crew: number } {
+  return dir === "ARR"
+    ? { pax: f.paxArrivalReal ?? f.paxArrival ?? 0, crew: f.crewArrivalReal ?? f.crewArrival ?? 0 }
+    : { pax: f.paxDepartureReal ?? f.paxDeparture ?? 0, crew: f.crewDepartureReal ?? f.crewDeparture ?? 0 };
 }
 
 // Estados en orden de ciclo de vida (subgrupos dentro de cada zona).
@@ -78,6 +87,7 @@ function FlightChip({
   const arr = dir === "ARR";
   const dirColor = arr ? ARR_COLOR : DEP_COLOR;
   const leg = legInfo(f, dir);
+  const counts = legCounts(f, dir);
   return (
     <button
       id={`flight-${f.id}`}
@@ -97,22 +107,34 @@ function FlightChip({
           </span>
         ) : null}
       </span>
-      {/* Fila 2: lo que importa — aeropuerto relevante del leg de hoy */}
-      <span className="flex items-center gap-1">
+      {/* Fila 2: lo que importa — aeropuerto relevante del leg de hoy + ciudad en lenguaje natural */}
+      <span className="flex items-start gap-1">
         {arr ? (
-          <PlaneLanding size={14} className="shrink-0" style={{ color: dirColor }} aria-label="Llegada" />
+          <PlaneLanding size={14} className="mt-0.5 shrink-0" style={{ color: dirColor }} aria-label="Llegada" />
         ) : (
-          <PlaneTakeoff size={14} className="shrink-0" style={{ color: dirColor }} aria-label="Salida" />
+          <PlaneTakeoff size={14} className="mt-0.5 shrink-0" style={{ color: dirColor }} aria-label="Salida" />
         )}
-        <span className="text-[10px] font-bold uppercase" style={{ color: dirColor }}>
+        <span className="mt-0.5 text-[10px] font-bold uppercase" style={{ color: dirColor }}>
           {arr ? "Lleg" : "Sal"}
         </span>
-        <span className="ml-auto truncate font-mono text-base font-bold leading-none text-ink-1">
-          {leg.airport}
+        <span className="ml-auto flex min-w-0 flex-col items-end leading-none">
+          <span className="w-full truncate text-right font-mono text-base font-bold text-ink-1">
+            {leg.airport}
+          </span>
+          {leg.city ? (
+            <span className="mt-0.5 w-full truncate text-right text-[9px] font-normal text-ink-muted" title={leg.city}>
+              {leg.city}
+            </span>
+          ) : null}
         </span>
       </span>
-      {/* Fila 3: hora, secundaria */}
-      <span className="tabular-nums text-[10px] text-ink-muted">{leg.time}</span>
+      {/* Fila 3: hora (izq, secundaria) + pasaje/tripulación del leg (der) */}
+      <span className="flex items-center justify-between text-[10px] text-ink-muted">
+        <span className="tabular-nums">{leg.time}</span>
+        <span className="tabular-nums font-medium text-ink-2">
+          {counts.pax}P <span className="text-ink-disabled">·</span> {counts.crew}T
+        </span>
+      </span>
     </button>
   );
 }
