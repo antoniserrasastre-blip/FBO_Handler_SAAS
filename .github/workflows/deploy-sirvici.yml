@@ -3,6 +3,15 @@ name: Deploy to Sirvici
 on:
   push:
     branches: [main]
+    # Los cambios de solo-documentación no reconstruyen ni redespliegan la app.
+    # Si un push toca SOLO estas rutas, el workflow se omite por completo.
+    # (Un push que mezcle docs + código sí corre, porque el código no está aquí.)
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "expediente/**"
+      - ".gitignore"
+      - "LICENSE"
 
 jobs:
   verify:
