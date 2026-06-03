@@ -36,11 +36,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   if (body.gender !== undefined && body.gender !== existing.gender) {
     data.gender = body.gender;
-    changes.push(`gender: ${body.gender}`);
+    changes.push("gender actualizado");
   }
   if (body.nationality !== undefined && body.nationality !== existing.nationality) {
     data.nationality = body.nationality;
-    changes.push(`nationality: ${body.nationality}`);
+    changes.push("nationality actualizada");
   }
   if (body.passportNumber !== undefined) {
     const previousPassport = existing.passportEncrypted ? decrypt(existing.passportEncrypted) : null;

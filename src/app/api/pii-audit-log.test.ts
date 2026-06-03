@@ -264,6 +264,26 @@ describe("PATCH /api/passengers/[id] — EventLog PII compliance", () => {
     expect(logData!.action).not.toContain("ESP-001");
     expect(logData!.action).toContain("pax-42");
   });
+
+  it("does NOT write gender/nationality value to EventLog when they change", async () => {
+    const { PATCH } = await import("./passengers/[id]/route");
+    const req = new NextRequest("http://localhost/api/passengers/pax-42", {
+      method: "PATCH",
+      body: JSON.stringify({ gender: "F", nationality: "FR" }),
+    });
+
+    const res = await PATCH(req, { params: Promise.resolve({ id: "pax-42" }) });
+    expect(res.status).toBe(200);
+
+    const logData = captureEventLogCreate(eventLogCreate);
+    expect(logData).not.toBeNull();
+    // must log the field name, never the value
+    expect(logData!.action).not.toContain("gender: F");
+    expect(logData!.action).not.toContain("nationality: FR");
+    expect(logData!.action).toContain("gender");
+    expect(logData!.action).toContain("nationality");
+    expect(logData!.action).toContain("pax-42");
+  });
 });
 
 // ===================================================================
@@ -551,6 +571,23 @@ describe("PATCH /api/crew/[id] — EventLog PII compliance", () => {
     expect(logData).not.toBeNull();
     expect(logData!.action).not.toContain("NEW-PASSPORT-999");
     expect(logData!.action).not.toContain("ESP-PAX-001");
+    expect(logData!.action).toContain("cm-99");
+  });
+
+  it("does NOT write nationality value to EventLog when crew nationality changes", async () => {
+    const { PATCH } = await import("./crew/[id]/route");
+    const req = new NextRequest("http://localhost/api/crew/m-dep-1__cm-99", {
+      method: "PATCH",
+      body: JSON.stringify({ nationality: "FR" }),
+    });
+
+    const res = await PATCH(req, { params: Promise.resolve({ id: "m-dep-1__cm-99" }) });
+    expect(res.status).toBe(200);
+
+    const logData = captureEventLogCreate(eventLogCreate);
+    expect(logData).not.toBeNull();
+    expect(logData!.action).not.toContain("nationality: FR");
+    expect(logData!.action).toContain("nationality");
     expect(logData!.action).toContain("cm-99");
   });
 });

@@ -43,7 +43,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
   if (body.nationality !== undefined && body.nationality !== assignment.crewMember.nationality) {
     crewData.nationality = body.nationality;
-    changes.push(`nationality: ${body.nationality}`);
+    changes.push("nationality actualizada");
   }
   if (body.passportNumber !== undefined) {
     const prev = assignment.crewMember.passportEncrypted ? decrypt(assignment.crewMember.passportEncrypted) : null;
