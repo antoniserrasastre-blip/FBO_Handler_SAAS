@@ -1,6 +1,6 @@
 # Estado — FBO Handler SaaS
 
-_Última actualización: 2026-06-02_
+_Última actualización: 2026-06-03_
 
 > Este fichero se reescribe en cada sesión de trabajo. Refleja el momento presente, no el historial.
 
@@ -10,7 +10,7 @@ Sistema en producción en `sirvici` (servidor propio), expuesto vía Cloudflare 
 
 **Equipaje de bodega** (nuevo, 2026-06-02) en producción: hojas de control imprimibles (`/api/export/baggage-sheets`, A4 4-up) + etiquetas por bulto para impresoras Brother TD-46/4750 (`/api/export/baggage-labels`, 62×29 mm). Ver `historial/2026-06.md` sesión 5 y memoria global `project_fbo_baggage`.
 
-Suite de tests: 1008 tests en verde, 53 skipped, 68 ficheros (`vitest run`, 2026-06-02). `tsc --noEmit` y lint limpios.
+Suite de tests: 1010 tests en verde, 53 skipped, 68 ficheros (`vitest run`, 2026-06-03). `tsc --noEmit` y lint limpios.
 
 ## Decisiones de alcance (MVP)
 
