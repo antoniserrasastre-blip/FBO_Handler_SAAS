@@ -7,6 +7,7 @@ import {
   deriveATD,
   nextEventMinutes,
   rowUrgency,
+  hasPendingDepServices,
   computeHeaderStats,
   arrivalSegmentState,
   departureSegmentState,
@@ -194,7 +195,7 @@ describe("rowUrgency", () => {
       state: "DEPARTING",
       etd: "10:20",
       fuelState: "REQUESTED",
-      services: [{ state: "PENDING", phase: "DEPARTURE" }],
+      services: [{ state: "PENDING", direction: "DEPARTURE" }],
     });
     expect(rowUrgency(f, day, now)).toBe("alert");
   });
@@ -204,9 +205,23 @@ describe("rowUrgency", () => {
       state: "DEPARTING",
       etd: "10:20",
       fuelState: "SERVED",
-      services: [{ state: "DELIVERED", phase: "DEPARTURE" }],
+      services: [{ state: "DELIVERED", direction: "DEPARTURE" }],
     });
     expect(rowUrgency(f, day, now)).toBe("imminent");
+  });
+
+  it("NO alert hoy si la ETA es de otro día (gate por arrivalDate)", () => {
+    // Regresión del fantasma M-FWWW: EXPECTED con arrivalDate de hace días
+    // no debe proyectar su ETA sobre el día visualizado.
+    const ghost = mk({ state: "EXPECTED", eta: "09:00", arrivalDate: "01/05/26" });
+    expect(nextEventMinutes(ghost, day, now)).toBeNull();
+    expect(rowUrgency(ghost, day, now)).toBe("normal");
+  });
+
+  it("NO alert hoy si la ETD es de otro día (gate por departureDate)", () => {
+    const f = mk({ state: "PARKED", etd: "09:00", departureDate: "13/05/26" });
+    expect(nextEventMinutes(f, day, now)).toBeNull();
+    expect(rowUrgency(f, day, now)).toBe("normal");
   });
 
   it("normal when ETD >90min away", () => {
@@ -273,7 +288,7 @@ describe("computeHeaderStats", () => {
     const flights: FlightLite[] = [
       mk({ id: "1", state: "EXPECTED", eta: "11:00", arrivalDate: "12/05", livePhase: "APPROACHING" }),
       mk({ id: "2", state: "ARRIVING", etd: "12:00", departureDate: "12/05" }),
-      mk({ id: "3", state: "DEPARTING", etd: "10:20", departureDate: "12/05", fuelState: "REQUESTED", services: [{ state: "PENDING", phase: "DEPARTURE" }] }),
+      mk({ id: "3", state: "DEPARTING", etd: "10:20", departureDate: "12/05", fuelState: "REQUESTED", services: [{ state: "PENDING", direction: "DEPARTURE" }] }),
     ];
     const s = computeHeaderStats(flights, day, now);
     expect(s.arrivals).toBe(1);
@@ -283,5 +298,34 @@ describe("computeHeaderStats", () => {
     // f3 esta en DEPARTING con fuel y catering pendientes.
     expect(s.pendingDepServices).toBe(1);
     expect(s.alerts).toBe(1); // f3
+  });
+});
+
+describe("hasPendingDepServices (helper compartido fila↔cabecera)", () => {
+  it("fuel NOT_REQUESTED no cuenta como pendiente (no necesita fuel)", () => {
+    const f = mk({ state: "PARKED", etd: "10:20", fuelState: "NOT_REQUESTED" });
+    expect(hasPendingDepServices(f)).toBe(false);
+  });
+
+  it("fuel REQUESTED sí cuenta; toilet REQUESTED también", () => {
+    expect(hasPendingDepServices(mk({ state: "PARKED", fuelState: "REQUESTED" }))).toBe(true);
+    expect(hasPendingDepServices(mk({ state: "PARKED", toiletState: "REQUESTED" }))).toBe(true);
+  });
+
+  it("lee `direction` (campo real de la API) ademas del legacy `phase`", () => {
+    const viaDirection = mk({ state: "DEPARTING", services: [{ state: "PENDING", direction: "DEPARTURE" }] });
+    const viaPhase = mk({ state: "DEPARTING", services: [{ state: "PENDING", phase: "BOTH" }] });
+    expect(hasPendingDepServices(viaDirection)).toBe(true);
+    expect(hasPendingDepServices(viaPhase)).toBe(true);
+  });
+
+  it("servicios de llegada pendientes no cuentan como pendientes de salida", () => {
+    const f = mk({ state: "DEPARTING", services: [{ state: "PENDING", direction: "ARRIVAL" }] });
+    expect(hasPendingDepServices(f)).toBe(false);
+  });
+
+  it("estados no pre-salida (EXPECTED, DEPARTED) nunca cuentan", () => {
+    expect(hasPendingDepServices(mk({ state: "EXPECTED", fuelState: "REQUESTED" }))).toBe(false);
+    expect(hasPendingDepServices(mk({ state: "DEPARTED", fuelState: "REQUESTED" }))).toBe(false);
   });
 });

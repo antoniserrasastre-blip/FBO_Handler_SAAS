@@ -20,7 +20,20 @@ export type FlightLite = Pick<
   | "livePhase"
   | "liveLastSeenAt"
   | "liveOnGround"
-> & { services: { state: string; phase: string }[]; eventLogs?: EventLog[] };
+> & { services: ServiceLite[]; eventLogs?: EventLog[] };
+
+/** La API v2 emite `direction`; `phase` es el nombre legacy. Aceptamos ambos. */
+export type ServiceLite = { state: string; phase?: string | null; direction?: string | null };
+
+/**
+ * Fase efectiva de un servicio. Mismo fallback que el helper privado
+ * `servicePhase` de src/lib/flightUrgency.ts (no exportado): el GET
+ * /api/flights emite `direction`, no `phase` — leer solo `phase` deja
+ * los criterios de "servicios de salida pendientes" ciegos.
+ */
+function servicePhase(s: ServiceLite): string {
+  return s.phase || s.direction || "DEPARTURE";
+}
 
 /** "DD/MM" del día de referencia. */
 export function shortDate(date: Date): string {
@@ -128,16 +141,25 @@ export const SEGMENT_CELL_CLASS: Record<SegmentState, string> = {
  *  2. eventLog con "Estado → ON_BLOCKS" → timestamp de la transición
  *  3. fallback: si livePhase es LANDED/ON_BLOCKS y liveLastSeenAt existe
  */
+// Regex de transición a llegada/salida en eventLogs. Los escritores
+// históricos loguearon el label de UI de FLIGHT_STATE_CONFIG ("En calzos",
+// "Fuera de calzos"); los nuevos loguean el código de estado. Aceptamos
+// ambos formatos para no perder los logs viejos.
+const ATA_STATE_RE = /Estado\s*(?:→|->)\s*(?:ARRIVING|ON_BLOCKS|En calzos)/i;
+const ATA_AUTO_RE = /Auto-?transici[oó]n\s*(?:→|->).*(?:ARRIVING|ON_BLOCKS|En calzos)/i;
+const ATD_STATE_RE = /Estado\s*(?:→|->)\s*(?:DEPARTED|OFF_BLOCKS|Fuera de calzos)/i;
+const ATD_AUTO_RE = /Auto-?transici[oó]n\s*(?:→|->).*(?:DEPARTED|OFF_BLOCKS|Fuera de calzos)/i;
+
 export function deriveATA(f: FlightLite): string | null {
   if (f.ata) return f.ata;
-  if (f.eventLogs?.length) {
-    // Acepta tanto el nuevo "ARRIVING" como el legado "ON_BLOCKS" para no
-    // perder datos de vuelos pre-migracion.
-    for (const e of f.eventLogs) {
-      if (
-        /Estado\s*(?:→|->)\s*(?:ARRIVING|ON_BLOCKS)/i.test(e.action) ||
-        /Auto-?transici[oó]n\s*(?:→|->).*(?:ARRIVING|ON_BLOCKS)/i.test(e.action)
-      ) {
+  const logs = f.eventLogs;
+  if (logs?.length) {
+    // eventLogs llega en orden DESC (más reciente primero). La ATA operativa
+    // es la PRIMERA transición a llegada (el avión aterriza una vez; un
+    // mis-click posterior no debe pisarla) → recorremos desde el final.
+    for (let i = logs.length - 1; i >= 0; i--) {
+      const e = logs[i];
+      if (ATA_STATE_RE.test(e.action) || ATA_AUTO_RE.test(e.action)) {
         return formatHHMM(new Date(e.timestamp));
       }
     }
@@ -151,11 +173,11 @@ export function deriveATA(f: FlightLite): string | null {
 export function deriveATD(f: FlightLite): string | null {
   if (f.atd) return f.atd;
   if (f.eventLogs?.length) {
+    // Aquí sí usamos la transición MÁS RECIENTE (orden DESC → primera del
+    // array): si el avión vuelve a calzos y sale otra vez, la última salida
+    // es la ATD válida.
     for (const e of f.eventLogs) {
-      if (
-        /Estado\s*(?:→|->)\s*(?:DEPARTED|OFF_BLOCKS)/i.test(e.action) ||
-        /Auto-?transici[oó]n\s*(?:→|->).*(?:DEPARTED|OFF_BLOCKS)/i.test(e.action)
-      ) {
+      if (ATD_STATE_RE.test(e.action) || ATD_AUTO_RE.test(e.action)) {
         return formatHHMM(new Date(e.timestamp));
       }
     }
@@ -180,13 +202,27 @@ function formatHHMM(d: Date): string {
 export function nextEventMinutes(f: FlightLite, dayUtc: Date, now: Date = new Date()): number | null {
   switch (f.state) {
     case "EXPECTED":
-      return f.eta ? calcMinutes(f.eta, dayUtc, now) : null;
+      if (!f.eta) return null;
+      // Gate por fecha: una ETA de otro día (p.ej. el fantasma con arrivalDate
+      // de hace 10 días) no es "el próximo evento" del día visualizado.
+      // null (sin fecha) sigue significando "hoy" — overnights y vuelos
+      // manuales dependen de ese fallback.
+      if (segmentIsOtherDay(f.arrivalDate, dayUtc)) return null;
+      return calcMinutes(f.eta, dayUtc, now);
     case "DEPARTED":
     case "OFF_BLOCKS":
       return null;
     default:
-      return f.etd ? calcMinutes(f.etd, dayUtc, now) : null;
+      if (!f.etd) return null;
+      if (segmentIsOtherDay(f.departureDate, dayUtc)) return null;
+      return calcMinutes(f.etd, dayUtc, now);
   }
+}
+
+/** true solo si hay fecha almacenada Y no es el día visualizado. */
+function segmentIsOtherDay(stored: string | null, dayUtc: Date): boolean {
+  const cmp = compareStoredDate(stored, dayUtc);
+  return cmp !== null && cmp !== 0;
 }
 
 export type Urgency = "departed" | "imminent" | "soon" | "normal" | "alert";
@@ -201,18 +237,33 @@ export function rowUrgency(f: FlightLite, dayUtc: Date, now: Date = new Date()):
   const minutes = nextEventMinutes(f, dayUtc, now);
   if (minutes === null) return "normal";
 
-  const hasPendingDepServices =
-    (f.state === "DEPARTING" || f.state === "PARKED" ||
-     f.state === "TURNAROUND" || f.state === "BOARDING") &&
-    (f.fuelState !== "SERVED" ||
-      f.toiletState === "REQUESTED" ||
-      f.services.some((s) => s.state !== "DELIVERED" && (s.phase === "DEPARTURE" || s.phase === "BOTH")));
-
   if (minutes < 0) return "alert";                                   // ya pasado el evento, no listo
-  if (minutes <= 30 && hasPendingDepServices) return "alert";        // <30min y servicios sin terminar
+  if (minutes <= 30 && hasPendingDepServices(f)) return "alert";     // <30min y servicios sin terminar
   if (minutes <= 30) return "imminent";
   if (minutes <= 90) return "soon";
   return "normal";
+}
+
+/**
+ * ¿Tiene el vuelo servicios de SALIDA sin terminar? Compartido entre
+ * rowUrgency y computeHeaderStats para que fila y cabecera no diverjan.
+ * Ojo: fuel/toilet NOT_REQUESTED significa "no lo necesita" (1260/1302
+ * movements en prod), NO "pendiente" — solo REQUESTED cuenta.
+ */
+export function hasPendingDepServices(f: FlightLite): boolean {
+  const onGroundPreDeparture =
+    f.state === "DEPARTING" || f.state === "PARKED" ||
+    f.state === "TURNAROUND" || f.state === "BOARDING";
+  if (!onGroundPreDeparture) return false;
+  return (
+    f.fuelState === "REQUESTED" ||
+    f.toiletState === "REQUESTED" ||
+    (f.services ?? []).some((s) => {
+      if (s.state === "DELIVERED") return false;
+      const p = servicePhase(s);
+      return p === "DEPARTURE" || p === "BOTH";
+    })
+  );
 }
 
 export const URGENCY_ROW_CLASS: Record<Urgency, string> = {
@@ -261,13 +312,7 @@ export function computeHeaderStats(
     if (isArrivalToday(f, dayUtc)) arrivals++;
     if (isDepartureToday(f, dayUtc)) departures++;
     if (f.livePhase === "APPROACHING") approaching++;
-    if (f.state === "DEPARTING" || f.state === "PARKED" ||
-        f.state === "TURNAROUND" || f.state === "BOARDING") {
-      const dep = f.services.some(
-        (s) => s.state !== "DELIVERED" && (s.phase === "DEPARTURE" || s.phase === "BOTH"),
-      );
-      if (dep || f.fuelState !== "SERVED") pendingDepServices++;
-    }
+    if (hasPendingDepServices(f)) pendingDepServices++;
     if (rowUrgency(f, dayUtc, now) === "alert") alerts++;
   }
   return { arrivals, departures, approaching, pendingDepServices, alerts };

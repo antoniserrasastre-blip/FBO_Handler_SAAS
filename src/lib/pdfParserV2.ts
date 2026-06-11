@@ -133,6 +133,25 @@ function findColumn(x: number): ColumnName | null {
   return null;
 }
 
+/**
+ * Normalizes a raw time cell to "HH:MM".
+ * Accepts "H:MM" / "HH:MM" and compact 4-digit "HHMM" ("0900" → "09:00").
+ * Returns '' for an empty cell (no time scheduled) and null when the cell has
+ * text that is not a parseable time — the caller drops it and emits a warning
+ * instead of storing raw text that downstream consumers (calcMinutes) can't read.
+ * "24:00" is allowed as end-of-day midnight.
+ */
+export function normalizeTime(raw: string): string | null {
+  const txt = raw.trim();
+  if (!txt) return '';
+  const m = txt.match(/^(\d{1,2}):(\d{2})$/) ?? txt.match(/^(\d{2})(\d{2})$/);
+  if (!m) return null;
+  const hh = parseInt(m[1], 10);
+  const mm = parseInt(m[2], 10);
+  if (hh > 24 || mm > 59 || (hh === 24 && mm > 0)) return null;
+  return `${String(hh).padStart(2, '0')}:${m[2]}`;
+}
+
 function detectFlightType(callsign: string, registration: string): FlightType {
   const cs = (callsign || '').toUpperCase();
   const reg = (registration || '').toUpperCase();
@@ -260,6 +279,21 @@ export function parsePageItems(items: PdfItem[], isFirstPage: boolean, pageNum =
         row: logicalRow,
         reason: `Fila ${logicalRow} (callsign=${f.callsign || '?'}): sin matrícula — la fila se incluye pero no se podrá cruzar con Extras`,
       });
+    }
+
+    // Normalize ETA/ETD to "HH:MM". Unreadable text is dropped (the import
+    // stores null instead of raw text) and surfaced as a warning.
+    for (const key of ['arrTime', 'depTime'] as const) {
+      const norm = normalizeTime(f[key]);
+      if (norm === null) {
+        warnings.push({
+          row: logicalRow,
+          reason: `Fila ${logicalRow} (callsign=${f.callsign || '?'}): hora ${key === 'arrTime' ? 'de llegada' : 'de salida'} ilegible "${f[key]}" — se descarta (queda sin ${key === 'arrTime' ? 'ETA' : 'ETD'})`,
+        });
+        f[key] = '';
+      } else {
+        f[key] = norm;
+      }
     }
 
     // Warn: text items fell outside all column ranges (potential layout shift).

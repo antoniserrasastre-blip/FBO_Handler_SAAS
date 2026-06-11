@@ -14,6 +14,7 @@ import { RqstChip } from "@/components/helix/RqstChip";
 import { PetCount } from "@/components/helix/PetCount";
 import type { FlightCategory } from "@/types/v2";
 import { computeHeaderStats, type FlightLite, shortDate } from "@/app/dia/diaHelpers";
+import { countMovements } from "@/lib/movementCounts";
 import {
   computeBarBounds,
   flightPips,
@@ -149,6 +150,10 @@ function TimelinePageInner() {
     [flights, date, now],
   );
 
+  // Movimientos del día con el criterio compartido solo-fecha (B3): la lista
+  // trae VISITS, así que `flights.length` no es el nº de movimientos.
+  const moveCounts = useMemo(() => countMovements(flights, shortDate(date)), [flights, date]);
+
   const selectedFlight = useMemo(
     () => flights.find((f) => f.id === selectedFlightId) ?? null,
     [flights, selectedFlightId],
@@ -208,7 +213,7 @@ function TimelinePageInner() {
 
       {/* SUMMARY band */}
       <div className="flex items-stretch border-b border-gray-200 bg-white px-7">
-        <Stat label="Movimientos" value={String(flights.length)} sub={`${stats.arrivals} LLEG · ${stats.departures} SAL`} />
+        <Stat label="Movimientos" value={String(moveCounts.arrivals + moveCounts.departures)} sub={`${moveCounts.arrivals} LLEG · ${moveCounts.departures} SAL`} />
         <Stat label="Activos ahora" value={String(activeNowCount)} sub="en parking" />
         <Stat label="Próximas 2 h" value={String(countNext2h(flights, now))} sub={`${countNext2hKind(flights, now, "DEP")} SAL · ${countNext2hKind(flights, now, "ARR")} LLEG`} />
         <Stat label="Servicios pend." value={String(stats.pendingDepServices)} sub="fuel + catering" />

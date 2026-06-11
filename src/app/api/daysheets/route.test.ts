@@ -140,3 +140,78 @@ describe("DELETE /api/daysheets?id=<palmaDay> — supervisor guard", () => {
     expect(res.status).toBe(200);
   });
 });
+
+describe("GET /api/daysheets — conteo por movimiento (B3)", () => {
+  const D1 = new Date("2026-06-10T00:00:00.000Z");
+  const D2 = new Date("2026-06-11T00:00:00.000Z");
+
+  function movement(direction: string, scheduledDate: Date, state = "EXPECTED") {
+    return { direction, scheduledDate, state, paxCount: 2, paxCountReal: null };
+  }
+
+  beforeEach(() => {
+    vi.resetModules();
+    vi.doMock("@/lib/db", () => ({
+      prisma: {
+        visit: {
+          findMany: vi.fn(async () => [
+            // Turnaround del D1: llegada y salida el mismo día.
+            {
+              palmaDay: D1,
+              movements: [movement("ARRIVAL", D1, "OFF_BLOCKS"), movement("DEPARTURE", D1, "OFF_BLOCKS")],
+              services: [],
+            },
+            // Pernocta anclada en D1 cuya salida cae en D2: la salida debe
+            // contar en D2, no en el palmaDay de la visit.
+            {
+              palmaDay: D1,
+              movements: [movement("ARRIVAL", D1), movement("DEPARTURE", D2)],
+              services: [],
+            },
+          ]),
+        },
+        daySheet: { findMany: vi.fn(async () => []) },
+      },
+    }));
+  });
+  afterEach(() => {
+    resetSessionMock();
+    vi.doUnmock("@/lib/db");
+  });
+
+  it("counts arrivals/departures per movement date and keeps visits separate", async () => {
+    mockSession("HANDLER");
+    const { GET } = await import("./route");
+    const res = await GET();
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Array<{
+      id: string;
+      totalFlights: number;
+      visits: number;
+      arrivals: number;
+      departures: number;
+    }>;
+
+    const day1 = body.find((d) => d.id === D1.toISOString());
+    expect(day1).toBeTruthy();
+    expect(day1!.visits).toBe(2);
+    expect(day1!.totalFlights).toBe(2); // compat: nº de visits
+    expect(day1!.arrivals).toBe(2);
+    expect(day1!.departures).toBe(1); // la salida de la pernocta NO cuenta aquí
+
+    // D2 se materializa por el movimiento de salida aunque ninguna visit
+    // tenga palmaDay = D2.
+    const day2 = body.find((d) => d.id === D2.toISOString());
+    expect(day2).toBeTruthy();
+    expect(day2!.visits).toBe(0);
+    expect(day2!.arrivals).toBe(0);
+    expect(day2!.departures).toBe(1);
+  });
+
+  it("returns 401 without session", async () => {
+    mockSession(null);
+    const { GET } = await import("./route");
+    const res = await GET();
+    expect(res.status).toBe(401);
+  });
+});

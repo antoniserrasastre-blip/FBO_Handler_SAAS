@@ -12,6 +12,7 @@
 import { useMemo } from "react";
 import type { Flight, Service } from "@/types/compat";
 import { FLIGHT_STATE_CONFIG, normalizeFlightState } from "@/types";
+import { isArrivalOn, isDepartureOn } from "@/lib/movementCounts";
 import { PlaneLanding, PlaneTakeoff, ChevronDown } from "lucide-react";
 
 type GridFlight = Flight & { services?: Service[] };
@@ -26,15 +27,31 @@ function stateColor(state: string): string {
 function pendingServices(f: GridFlight): number {
   return (f.services || []).filter((s) => s.state !== "DELIVERED").length;
 }
-// Comparación "DD/MM" robusta (la API emite arrival/departureDate en ese formato).
-function ddMm(v: string | null | undefined): string {
-  return (v || "").slice(0, 5);
+// Hora del leg que manda en cada zona: ARR por eta (fallback etd), DEP por etd
+// (fallback eta) — el mismo criterio que la cola de turno de page.tsx.
+function legTime(f: GridFlight, dir: "ARR" | "DEP"): string {
+  return (dir === "ARR" ? f.eta || f.etd : f.etd || f.eta) || "99:99";
 }
-function isArrivalToday(f: GridFlight, sheetDdMm: string): boolean {
-  return !!f.arrivalDate && ddMm(f.arrivalDate) === sheetDdMm;
-}
-function isDepartureToday(f: GridFlight, sheetDdMm: string): boolean {
-  return !!f.departureDate && ddMm(f.departureDate) === sheetDdMm;
+
+/**
+ * Reparte y ORDENA los movimientos del día por zona (exportada para tests).
+ * - Pertenencia al día: criterio compartido solo-fecha (lib/movementCounts);
+ *   sin fecha, exige evidencia del leg (eta/ata/origin · etd/atd/destination)
+ *   para no pintar llegadas fantasma de quick-adds solo-salida.
+ * - SALIDAS exige además f.etd: una visit con DEPARTURE vacío (placeholder del
+ *   import sin hora ni destino) no es una salida operable (B2b).
+ * - Cada zona se ordena por la hora de SU propio leg (B6).
+ */
+export function splitByDirection(
+  flights: GridFlight[],
+  sheetDdMm: string,
+): { ARR: GridFlight[]; DEP: GridFlight[] } {
+  const byLeg = (dir: "ARR" | "DEP") => (a: GridFlight, b: GridFlight) =>
+    legTime(a, dir).localeCompare(legTime(b, dir));
+  return {
+    ARR: flights.filter((f) => isArrivalOn(f, sheetDdMm)).sort(byLeg("ARR")),
+    DEP: flights.filter((f) => !!f.etd && isDepartureOn(f, sheetDdMm)).sort(byLeg("DEP")),
+  };
 }
 function legInfo(
   f: GridFlight,
@@ -173,13 +190,7 @@ export interface CompactFlightGridProps {
 }
 
 export function CompactFlightGrid({ flights, sheetDdMm, selectedId, onOpen }: CompactFlightGridProps) {
-  const byDir = useMemo(
-    () => ({
-      ARR: flights.filter((f) => isArrivalToday(f, sheetDdMm)),
-      DEP: flights.filter((f) => isDepartureToday(f, sheetDdMm)),
-    }),
-    [flights, sheetDdMm],
-  );
+  const byDir = useMemo(() => splitByDirection(flights, sheetDdMm), [flights, sheetDdMm]);
 
   return (
     <div className="space-y-4">

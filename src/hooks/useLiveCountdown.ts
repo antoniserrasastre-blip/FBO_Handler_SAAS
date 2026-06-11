@@ -28,10 +28,16 @@ export function calcMinutes(
   now: Date = new Date(),
 ): number | null {
   if (!targetTime) return null;
-  const match = targetTime.match(/^(\d{1,2}):(\d{2})$/);
+  // Accepted formats: "H:MM" / "HH:MM" and compact 4-digit "HHMM" ("0900").
+  // Anything else ("TBN", "10:5", "--:--") is not a time → null.
+  const match =
+    targetTime.match(/^(\d{1,2}):(\d{2})$/) ?? targetTime.match(/^(\d{2})(\d{2})$/);
   if (!match) return null;
   const hh = parseInt(match[1], 10);
   const mm = parseInt(match[2], 10);
+  // "24:00" is allowed as end-of-day midnight (rolls to D+1 via Date.UTC);
+  // beyond that, out-of-range values are garbage, not times.
+  if (hh > 24 || mm > 59 || (hh === 24 && mm > 0)) return null;
 
   if (dayUtc) {
     const target = Date.UTC(

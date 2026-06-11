@@ -112,7 +112,15 @@ function DiaPageInner() {
       const res = await fetch(`/api/flights?date=${dateStr}`);
       if (res.ok) {
         const data = await res.json();
-        setFlights(data.flights);
+        // Defensivo: eventLogs es opcional en la respuesta del endpoint
+        // (llega en orden DESC cuando viene); normalizamos a [] para que
+        // deriveATA/ATD y los consumidores tipados no rompan si falta.
+        setFlights(
+          (data.flights ?? []).map((f: FlightWithRelations) => ({
+            ...f,
+            eventLogs: f.eventLogs ?? [],
+          })),
+        );
       }
     } catch (err) {
       console.error("Error fetching flights:", err);

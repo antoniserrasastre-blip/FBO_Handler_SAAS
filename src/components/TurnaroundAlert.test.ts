@@ -109,3 +109,54 @@ describe("getTurnaroundAlerts (UTC handling)", () => {
     expect(alerts[0].minutesLeft).toBe(10);
   });
 });
+
+describe("getTurnaroundAlerts — retrasados en tierra (B4)", () => {
+  beforeEach(() => {
+    // 2024-07-01T12:30:00Z, igual que el resto de la suite.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2024-07-01T12:30:00.000Z"));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("keeps alerting a departure overdue by MORE than 30 min while still on ground", () => {
+    // ETD 11:00, ahora 12:30 → -90 min. Antes la ventana (-30, 90] lo expulsaba
+    // del panel justo cuando más retrasado iba.
+    const alerts = getTurnaroundAlerts([
+      makeFlight({ id: "f1", state: "TURNAROUND", etd: "11:00" }),
+    ]);
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0].kind).toBe("DEPARTURE");
+    expect(alerts[0].minutesLeft).toBe(-90);
+  });
+
+  it("drops the alert once the handler logs an ATD (the aircraft left)", () => {
+    const alerts = getTurnaroundAlerts([
+      makeFlight({ id: "f1", state: "TURNAROUND", etd: "11:00", atd: "12:10" }),
+    ]);
+    expect(alerts).toHaveLength(0);
+  });
+
+  it("does not alert OFF_BLOCKS flights even with the ETD far in the past", () => {
+    const alerts = getTurnaroundAlerts([
+      makeFlight({ id: "f1", state: "OFF_BLOCKS", etd: "08:00" }),
+    ]);
+    expect(alerts).toHaveLength(0);
+  });
+
+  it("counts pending departure services that only carry `direction` (API v2)", () => {
+    // ETD en 60 min: solo alerta si hay servicios de salida pendientes. La API
+    // v2 emite `direction` (no `phase`) — D2 ampliado.
+    const alerts = getTurnaroundAlerts([
+      makeFlight({
+        id: "f1",
+        state: "PARKED",
+        etd: "13:30",
+        services: [{ state: "PENDING", direction: "DEPARTURE" }],
+      }),
+    ]);
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0].pendingServices).toBe(1);
+  });
+});

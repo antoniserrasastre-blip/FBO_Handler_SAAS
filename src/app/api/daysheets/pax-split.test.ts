@@ -11,21 +11,29 @@ import { mockSession, resetSessionMock } from "@/test/mock-session";
 
 /** Build a Visit row matching what prisma.visit.findMany returns with the
  *  includes used by GET /api/daysheets:
- *    movements: { select: { paxCount, paxCountReal, state } }
+ *    movements: { select: { paxCount, paxCountReal, direction, state, scheduledDate } }
  *    services:  { select: { state } }
  */
 function makeVisit(opts: {
   palmaDay?: Date;
-  movements: { direction: string; paxCount: number; paxCountReal?: number | null; state?: string }[];
+  movements: {
+    direction: string;
+    paxCount: number;
+    paxCountReal?: number | null;
+    state?: string;
+    scheduledDate?: Date;
+  }[];
 }) {
+  const palmaDay = opts.palmaDay ?? new Date("2026-05-24T00:00:00.000Z");
   return {
     id: `v-${Math.random()}`,
-    palmaDay: opts.palmaDay ?? new Date("2026-05-24T00:00:00.000Z"),
+    palmaDay,
     movements: opts.movements.map((m) => ({
       direction: m.direction,
       paxCount: m.paxCount,
       paxCountReal: m.paxCountReal ?? null,
       state: m.state ?? "PARKED",
+      scheduledDate: m.scheduledDate ?? palmaDay,
     })),
     services: [],
   };

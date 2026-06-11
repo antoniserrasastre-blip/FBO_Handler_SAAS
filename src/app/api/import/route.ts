@@ -13,6 +13,7 @@ import { eventBus } from "@/lib/events";
 import { validateUpload, validateContentLength } from "@/lib/uploadValidation";
 import { upsertAircraft, upsertVisit, upsertMovement, upsertOperator } from "@/lib/v2/upsert";
 import { resolveImportState } from "@/lib/v2/resolveImportState";
+import { sweepNoShows } from "@/lib/noShowSweep";
 import { findOperator } from "@/lib/operators";
 
 // POST — preview
@@ -127,7 +128,7 @@ export async function PUT(req: NextRequest) {
 
     // Derive all state/date decisions from the pure helper (BUG-2 + BUG-3 fix).
     const {
-      isOvernight,
+      isOvernight: _isOvernight,
       arrivalState,
       departureState,
       visitDay,
@@ -174,7 +175,7 @@ export async function PUT(req: NextRequest) {
 
     // ARRIVAL movement — state is operational (PARKED for overnight, EXPECTED otherwise).
     // On re-import the state is preserved by upsertMovement's plan-only update policy.
-    await upsertMovement({
+    const { record: arrMovement, wasCreated: arrWasCreated } = await upsertMovement({
       visitId: visit.id,
       direction: "ARRIVAL",
       callsign,
@@ -189,6 +190,41 @@ export async function PUT(req: NextRequest) {
         state: arrivalState,
       },
     });
+
+    // B1-reimport: el PDF de hoy puede listar como pernocta un visit cuyo
+    // ARRIVAL sigue EXPECTED (posible no-show de días anteriores). Decisión:
+    // NO avanzamos a PARKED salvo evidencia real de llegada (ata o livePhase
+    // LANDED/ON_BLOCKS) — "que el PDF lo dé por aparcado" no es evidencia.
+    // Sin evidencia queda EXPECTED y sweepNoShows() lo resolverá al cierre.
+    if (!arrWasCreated && arrivalState === "PARKED" && arrMovement.state === "EXPECTED") {
+      const hasArrivalEvidence =
+        Boolean(arrMovement.ata) ||
+        arrMovement.livePhase === "LANDED" ||
+        arrMovement.livePhase === "ON_BLOCKS";
+      if (hasArrivalEvidence) {
+        await prisma.movement.update({
+          where: { id: arrMovement.id },
+          data: { state: "PARKED" },
+        });
+        await prisma.eventLog.create({
+          data: {
+            visitId: visit.id,
+            movementId: arrMovement.id,
+            userId: session.user.id,
+            action: "Auto-transición → PARKED",
+            details: "Pernocta confirmada en re-import por evidencia de llegada",
+          },
+        });
+        eventBus.emit({
+          type: "flight_updated",
+          flightId: visit.id,
+          userId: session.user.id,
+          userName: session.user.name || undefined,
+          detail: "Estado → En plataforma",
+          timestamp: new Date().toISOString(),
+        });
+      }
+    }
 
     // DEPARTURE movement — always starts EXPECTED (BUG-2 fix: was using arrivalState
     // for both, which left overnight departures as PARKED).
@@ -248,10 +284,23 @@ export async function PUT(req: NextRequest) {
     }
   }
 
+  // B1-noshow: al cierre del import diario, marca NO_SHOW los ARRIVAL
+  // EXPECTED viejos sin evidencia de llegada. Un fallo del sweep no debe
+  // tumbar un import que ya persistió — se loguea y se sigue.
+  let noShows = 0;
+  if (flights.length > 0) {
+    try {
+      noShows = await sweepNoShows({ userId: session.user.id });
+    } catch (e) {
+      console.error("sweepNoShows tras import falló:", e);
+    }
+  }
+
   const parts = [];
   if (created > 0) parts.push(`${created} nuevos`);
   if (updated > 0) parts.push(`${updated} actualizados`);
   if (cancelled > 0) parts.push(`${cancelled} cancelados`);
+  if (noShows > 0) parts.push(`${noShows} no-show`);
 
   eventBus.emit({
     type: "flight_created",
@@ -266,6 +315,7 @@ export async function PUT(req: NextRequest) {
     created,
     updated,
     cancelled,
+    noShows,
     linked: 0,
     total: flights.length,
   });

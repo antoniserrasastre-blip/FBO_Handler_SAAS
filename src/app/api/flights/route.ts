@@ -51,10 +51,36 @@ export async function GET(req: NextRequest) {
       services: { orderBy: { createdAt: "asc" } },
       lostItems: { orderBy: { createdAt: "asc" } },
       crewItems: { orderBy: { createdAt: "asc" } },
+      // /dia deriva ATA/ATD de los logs de transición de estado; 20 entradas
+      // recientes bastan (los cambios de estado son ~6 por visit). El user se
+      // limita a { name } — toFlightView lo proyecta tal cual al wire.
+      eventLogs: {
+        orderBy: { timestamp: "desc" },
+        take: 20,
+        include: { user: { select: { name: true } } },
+      },
     },
   });
 
-  const flights = visits.map(toFlightView);
+  // B1 — vuelos fantasma: el reimport re-ancla el DEPARTURE de visits no-show
+  // viejas al día de hoy, así que el arrastre (`movements.some.scheduledDate`)
+  // traería visits cuyo ARRIVAL sigue EXPECTED desde hace días. Reglas:
+  //  - pernoctas legítimas (ARRIVAL avanzado: ON_BLOCKS/PARKED/...) se
+  //    arrastran SIEMPRE;
+  //  - un EXPECTED de ayer (día-1) sigue siendo válido (vuelo retrasado de
+  //    madrugada);
+  //  - solo se excluye el ARRIVAL EXPECTED/NO_SHOW sin evidencia de llegada
+  //    (ata / livePhase LANDED|ON_BLOCKS) con scheduledDate < día-1.
+  const dayMinus1 = new Date(palmaDay.getTime() - 24 * 60 * 60 * 1000);
+  const visibleVisits = visits.filter((v) => {
+    const arr = v.movements.find((m) => m.direction === "ARRIVAL");
+    if (!arr) return true;
+    if (arr.state !== "EXPECTED" && arr.state !== "NO_SHOW") return true;
+    if (arr.ata || arr.livePhase === "LANDED" || arr.livePhase === "ON_BLOCKS") return true;
+    return new Date(arr.scheduledDate).getTime() >= dayMinus1.getTime();
+  });
+
+  const flights = visibleVisits.map(toFlightView);
 
   // Build a side-channel { [visitId]: { passengers, crew } } so the FlightView
   // shape stays stable. Decryption happens server-side here; the wire payload
@@ -62,7 +88,7 @@ export async function GET(req: NextRequest) {
   let people: Record<string, { passengers: unknown[]; crew: unknown[]; paxSource: string | null }> = {};
   if (includePeople) {
     people = {};
-    for (const v of visits) {
+    for (const v of visibleVisits) {
       const passengers: unknown[] = [];
       const crew: unknown[] = [];
       let paxSource: string | null = null;

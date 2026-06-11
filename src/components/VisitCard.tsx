@@ -133,6 +133,9 @@ export interface VisitCardProps {
   onOpenPeople?: (visitId: string, direction: "ARRIVAL" | "DEPARTURE") => void;
   /** Operating-day date of the sheet (DD/MM/YY). Used to mark overnight legs. */
   sheetDate?: string | null;
+  /** Día operativo de la hoja (UTC midnight). Ancla el reloj de urgencia al día
+   *  real (calcMinutes con dayUtc) para que "/" y /dia calculen lo mismo. */
+  date?: Date | null;
   /** Puestos de turno activos. Si se pasan, el checklist se filtra a esas tareas. */
   shiftPosts?: ShiftPost[];
   /** Usuario actual: si coincide con flight.assignedToId, la tarjeta se marca "Mío". */
@@ -163,6 +166,7 @@ export const VisitCard = memo(function VisitCard({
   onDelete,
   onOpenPeople,
   sheetDate,
+  date,
   shiftPosts,
   currentUserId,
   assignableUsers,
@@ -267,9 +271,11 @@ export const VisitCard = memo(function VisitCard({
     [focus, flight.state, tasks, isCancelled],
   );
 
-  // Urgency outline — refleja getFlightClock + useLiveCountdown
+  // Urgency outline — refleja getFlightClock + useLiveCountdown. Pasamos el día
+  // operativo (dayUtc) para usar la MISMA rama de calcMinutes que /dia: sin él,
+  // el wrap ±12h daba urgencias distintas para el mismo vuelo en cada vista.
   const clock = getFlightClock({ state: flight.state, eta: flight.eta, etd: flight.etd });
-  const minutesLeft = useLiveCountdown(clock.ref);
+  const minutesLeft = useLiveCountdown(clock.ref, date);
   const urgency: "past" | "critical" | "warning" | null =
     isCancelled || minutesLeft === null || clock.kind === null
       ? null
@@ -303,7 +309,7 @@ export const VisitCard = memo(function VisitCard({
           />
           <OperatorBadge callsign={flight.callsign} onSelect={onBadgeClick} />
           <RqstChip rqstNumber={flight.rqstNumber} />
-          <TurnaroundCountdown eta={flight.eta} etd={flight.etd} flightState={flight.state} />
+          <TurnaroundCountdown eta={flight.eta} etd={flight.etd} flightState={flight.state} dayUtc={date} />
           <div className="spacer" />
           {/* Asignación: chip visible (no sólo en title) para coordinar en pista. */}
           {canAssign && assignableUsers && onAssign ? (

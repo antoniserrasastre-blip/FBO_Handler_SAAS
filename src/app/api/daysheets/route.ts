@@ -19,7 +19,15 @@ export async function GET() {
   const [visits, daySheets] = await Promise.all([
     prisma.visit.findMany({
       include: {
-        movements: { select: { paxCount: true, paxCountReal: true, direction: true, state: true } },
+        movements: {
+          select: {
+            paxCount: true,
+            paxCountReal: true,
+            direction: true,
+            state: true,
+            scheduledDate: true,
+          },
+        },
         services: { select: { state: true } },
       },
     }),
@@ -44,10 +52,26 @@ export async function GET() {
     }
   }
 
+  // Conteo por MOVIMIENTO y por SU PROPIA fecha (scheduledDate), no por el
+  // palmaDay de la visit: la salida de una pernocta cuenta en su día real, y
+  // un día que solo tenga salidas (sin visit anclada) también sale en la lista.
+  const movementsByDay = new Map<string, { arrivals: number; departures: number }>();
+  for (const v of visits) {
+    for (const m of v.movements) {
+      const key = m.scheduledDate.toISOString();
+      const c = movementsByDay.get(key) ?? { arrivals: 0, departures: 0 };
+      if (m.direction === "ARRIVAL") c.arrivals++;
+      else if (m.direction === "DEPARTURE") c.departures++;
+      movementsByDay.set(key, c);
+      if (!byDay.has(key)) byDay.set(key, []);
+    }
+  }
+
   const result = Array.from(byDay.entries())
     .map(([iso, list]) => {
       const date = new Date(iso);
       const totalFlights = list.length;
+      const moves = movementsByDay.get(iso) ?? { arrivals: 0, departures: 0 };
       const dispatched = list.filter((v) =>
         v.movements.some((m) => m.state === "OFF_BLOCKS")
       ).length;
@@ -76,7 +100,12 @@ export async function GET() {
       return {
         id: iso,
         date,
+        // `totalFlights` = nº de VISITS del día (compat con clientes existentes);
+        // `arrivals`/`departures` cuentan por movimiento (B3).
         totalFlights,
+        visits: totalFlights,
+        arrivals: moves.arrivals,
+        departures: moves.departures,
         dispatched,
         paxArrival,
         paxDeparture,

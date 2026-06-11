@@ -107,7 +107,13 @@ export function FlightDetailPanel({ flight, onClose, onMutated, onOpenPaxCrew, o
             <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${stateCfg.bg} ${stateCfg.text}`}>
               {stateCfg.label}
             </span>
-            <span className="font-bold text-base" style={{ fontFamily: "var(--font-mono)" }}>{flight.callsign}</span>
+            <span className="font-bold text-base" style={{ fontFamily: "var(--font-mono)" }}>
+              {flight.arrivalCallsign &&
+              flight.departureCallsign &&
+              flight.arrivalCallsign !== flight.departureCallsign
+                ? `${flight.arrivalCallsign} → ${flight.departureCallsign}`
+                : flight.callsign}
+            </span>
             <RqstChip rqstNumber={flight.rqstNumber} />
             <AircraftBadge registration={flight.registration} aircraftType={flight.aircraftType} />
             <OperatorBadge callsign={flight.callsign} />

@@ -7,9 +7,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { eventBus } from "@/lib/events";
 import { requireWriter } from "@/lib/roles";
-import { suggestNextState } from "@/lib/flightUrgency";
-import { FLIGHT_STATE_CONFIG, type FlightState } from "@/types";
-import { toFlightView } from "@/lib/flightView";
+import { applyAutoTransition } from "@/lib/autoTransition";
 import { crewItemToService } from "@/lib/crewItemMigration";
 
 const ALLOWED_SERVICE_PATCH_FIELDS = new Set([
@@ -130,38 +128,14 @@ export async function PATCH(
       timestamp: new Date().toISOString(),
     });
 
-    // Auto-transition: service change can close arrival phase
-    const visit = await prisma.visit.findUnique({
-      where: { id: existing.visitId },
-      include: { aircraft: true, movements: true, services: true },
+    // Auto-transition: service change can close arrival phase.
+    // Helper compartido con /api/flights/[id] (deuda D2): persiste estado,
+    // loguea con movementId + código de estado y emite flight_updated.
+    await applyAutoTransition({
+      visitId: existing.visitId,
+      userId: session.user.id,
+      userName: session.user.name,
     });
-    if (visit) {
-      const view = toFlightView(visit);
-      const next: FlightState | null = suggestNextState(view, visit.services);
-      if (next && next !== view.state) {
-        const dep = visit.movements.find((m) => m.direction === "DEPARTURE")
-                 || visit.movements.find((m) => m.direction === "ARRIVAL");
-        if (dep) {
-          await prisma.movement.update({ where: { id: dep.id }, data: { state: next } });
-          await prisma.eventLog.create({
-            data: {
-              visitId: visit.id,
-              movementId: dep.id,
-              userId: session.user.id,
-              action: `Auto-transición → ${FLIGHT_STATE_CONFIG[next].label}`,
-            },
-          });
-          eventBus.emit({
-            type: "flight_updated",
-            flightId: visit.id,
-            userId: session.user.id,
-            userName: session.user.name || undefined,
-            detail: `Estado → ${FLIGHT_STATE_CONFIG[next].label}`,
-            timestamp: new Date().toISOString(),
-          });
-        }
-      }
-    }
   }
 
   return NextResponse.json({ ...service, phase: service.direction });

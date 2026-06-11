@@ -71,23 +71,28 @@ export function getTurnaroundAlerts(
       continue;
     }
 
-    // Salida: ON_BLOCKS / PARKED / TURNAROUND / BOARDING con ETD <= 90 min y departureDate de hoy
+    // Salida: ON_BLOCKS / PARKED / TURNAROUND / BOARDING con ETD <= 90 min y departureDate de hoy.
+    // Con ATD anotado el avión ya salió (aunque el estado no se haya cerrado): sin alerta.
     if (
       (state === "ON_BLOCKS" || state === "PARKED" || state === "TURNAROUND" || state === "BOARDING") &&
-      flight.etd
+      flight.etd &&
+      !flight.atd
     ) {
       if (!isSameDay(flight.departureDate, refDay)) continue;
       const [h, m] = flight.etd.split(":").map(Number);
       if (isNaN(h) || isNaN(m)) continue;
 
       const minutesUntilDeparture = h * 60 + m - currentMinutes;
-      if (minutesUntilDeparture > -30 && minutesUntilDeparture <= 90) {
-        // Filtrar servicios DEPARTURE / BOTH pendientes
-        const pendingServices = flight.services.filter(
-          (s) =>
-            s.state !== "DELIVERED" &&
-            (s.phase === "DEPARTURE" || s.phase === "BOTH" || !s.phase),
-        ).length;
+      // Sin límite inferior: un vuelo con ETD pasada sigue en tierra y la alerta
+      // "sale hace X min" persiste hasta OFF_BLOCKS / atd (B4).
+      if (minutesUntilDeparture <= 90) {
+        // Filtrar servicios DEPARTURE / BOTH pendientes. La API v2 emite
+        // `direction`; `phase` es el alias legacy — espejo de servicePhase()
+        // en lib/flightUrgency.ts (no exportado).
+        const pendingServices = flight.services.filter((s) => {
+          const phase = s.phase || s.direction || "DEPARTURE";
+          return s.state !== "DELIVERED" && (phase === "DEPARTURE" || phase === "BOTH");
+        }).length;
         if (pendingServices > 0 || minutesUntilDeparture <= 30) {
           alerts.push({
             flightId: flight.id,

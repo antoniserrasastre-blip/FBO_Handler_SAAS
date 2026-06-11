@@ -23,7 +23,7 @@
 import { describe, it, expect } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { parsePageItems, PdfItem, type ParseWarning } from './pdfParserV2';
+import { parsePageItems, normalizeTime, PdfItem, type ParseWarning } from './pdfParserV2';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -601,5 +601,97 @@ describe('parsePageItems — warnings channel', () => {
     const reasonTexts = warnings.map(w => w.reason);
     expect(reasonTexts.some(r => /sin matr[íi]cula/i.test(r))).toBe(true);
     expect(reasonTexts.some(r => r.includes('fuera de columna'))).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 7. Time normalization — ETA/ETD always "HH:MM" or empty, never raw text
+//    (QA run 11-06-2026: raw "0900" stored verbatim broke calcMinutes → a
+//     5h-late flight rendered as a quiet 'today-pending' row in /dia)
+// ---------------------------------------------------------------------------
+
+describe('normalizeTime — unit', () => {
+  it('passes through canonical "HH:MM"', () => {
+    expect(normalizeTime('17:25')).toBe('17:25');
+  });
+
+  it('pads single-digit hour: "9:00" → "09:00"', () => {
+    expect(normalizeTime('9:00')).toBe('09:00');
+  });
+
+  it('accepts compact 4-digit "HHMM": "0900" → "09:00"', () => {
+    expect(normalizeTime('0900')).toBe('09:00');
+  });
+
+  it('empty cell stays empty (no time scheduled, not an error)', () => {
+    expect(normalizeTime('')).toBe('');
+    expect(normalizeTime('  ')).toBe('');
+  });
+
+  it('"24:00" is kept as end-of-day midnight', () => {
+    expect(normalizeTime('24:00')).toBe('24:00');
+  });
+
+  it('returns null for unparseable text', () => {
+    expect(normalizeTime('TBN')).toBeNull();
+    expect(normalizeTime('10:5')).toBeNull();
+    expect(normalizeTime('--:--')).toBeNull();
+  });
+
+  it('returns null for out-of-range digits ("9900", "12:90", "24:01")', () => {
+    expect(normalizeTime('9900')).toBeNull();
+    expect(normalizeTime('12:90')).toBeNull();
+    expect(normalizeTime('24:01')).toBeNull();
+  });
+});
+
+describe('parsePageItems — ETA/ETD normalization on import', () => {
+  function rowWithTimes(arrTime: string, depTime: string): PdfItem[] {
+    return [
+      { text: 'TXF99A',  x: 20.25,  y: 700, page: 0 },  // arr_callsign
+      { text: 'EDMA',    x: 71.25,  y: 700, page: 0 },  // origin
+      { text: arrTime,   x: 155.74, y: 700, page: 0 },  // arr_time
+      { text: 'D-FAKE',  x: 189.32, y: 700, page: 0 },  // registration
+      { text: 'TXF99A',  x: 417.75, y: 700, page: 0 },  // dep_callsign
+      { text: 'EDMA',    x: 465.0,  y: 700, page: 0 },  // destination
+      // x=560: inside dep_time [544,579] and clear of dep_date [504,547],
+      // which wins the first-match lookup at x=547 (cleanFlightItems' anchor
+      // works there only because that row asserts nothing about depTime).
+      { text: depTime,   x: 560.0,  y: 700, page: 0 },  // dep_time
+    ];
+  }
+
+  it('compact "0900" is normalized to "09:00" without warning', () => {
+    const { flights, warnings } = parsePageItems(rowWithTimes('0900', '1530'), false);
+    expect(flights).toHaveLength(1);
+    expect(flights[0].arrTime).toBe('09:00');
+    expect(flights[0].depTime).toBe('15:30');
+    expect(warnings).toHaveLength(0);
+  });
+
+  it('canonical "HH:MM" passes through untouched', () => {
+    const { flights, warnings } = parsePageItems(rowWithTimes('08:40', '09:55'), false);
+    expect(flights[0].arrTime).toBe('08:40');
+    expect(flights[0].depTime).toBe('09:55');
+    expect(warnings).toHaveLength(0);
+  });
+
+  it('unreadable arr_time is dropped (empty, → null downstream) and warned', () => {
+    const { flights, warnings } = parsePageItems(rowWithTimes('TBN', '09:55'), false);
+    expect(flights[0].arrTime).toBe('');
+    expect(flights[0].depTime).toBe('09:55');
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0].reason).toContain('ilegible');
+    expect(warnings[0].reason).toContain('"TBN"');
+    expect(warnings[0].reason).toContain('TXF99A');
+  });
+
+  it('unreadable dep_time is dropped and warned independently of arr_time', () => {
+    const { flights, warnings } = parsePageItems(rowWithTimes('08:40', '??:??'), false);
+    expect(flights[0].arrTime).toBe('08:40');
+    expect(flights[0].depTime).toBe('');
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0].reason).toContain('ilegible');
+    expect(warnings[0].reason).toContain('"??:??"');
   });
 });

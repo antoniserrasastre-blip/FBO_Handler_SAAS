@@ -1078,3 +1078,26 @@ describe("VisitCard inline service picker (touch)", () => {
     }
   });
 });
+
+describe("VisitCard urgency clock — paridad con /dia (dayUtc)", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("anchors the countdown to the sheet day when `date` is provided", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-11T09:00:00.000Z"));
+    // Hoja de AYER con ETD 10:00: anclado al día (rama dayUtc de calcMinutes,
+    // la misma que usa /dia) el vuelo va ~23 h tarde → anillo de "past".
+    // Sin dayUtc, el wrap ±12h lo pintaría como "sale en 60 min" (warning).
+    const { container } = render(
+      <VisitCard
+        flight={makeFlight({ state: "TURNAROUND", etd: "10:00" })}
+        date={new Date("2026-06-10T00:00:00.000Z")}
+      />
+    );
+    const article = container.querySelector("article");
+    expect(article?.className).toContain("ring-danger");
+    expect(article?.className).not.toContain("ring-warning");
+  });
+});

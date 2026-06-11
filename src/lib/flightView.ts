@@ -19,8 +19,8 @@
 // precedence).  The result: each item appears exactly once, in stable order
 // (real services first, then unmigrated crew items appended).
 
-import type { FlightView, FlightViewService, FlightViewLostItem, FlightViewCrewItem, FlightViewTask } from "@/types/v2";
-import { FLIGHT_STATES, normalizeFlightState } from "@/types";
+import type { FlightView, FlightViewService, FlightViewLostItem, FlightViewCrewItem, FlightViewTask, FlightViewEventLogWithUser } from "@/types/v2";
+import { FLIGHT_STATES, NO_SHOW_STATE, normalizeFlightState } from "@/types";
 import { resolveAirport } from "./airportsFallback";
 import { crewItemToService, crewItemServiceId, type CrewItemRecord } from "./crewItemMigration";
 
@@ -34,11 +34,20 @@ type AnyRecord = Record<string, unknown>;
 // Compose the visit state as the MOST ADVANCED point reached across both legs.
 function mostAdvancedState(...states: (string | null | undefined)[]): string {
   let best = -1;
+  let sawNoShow = false;
   for (const s of states) {
     if (!s) continue;
+    // NO_SHOW es terminal, no parte de la progresión: no entra en el ranking.
+    if (s === NO_SHOW_STATE) {
+      sawNoShow = true;
+      continue;
+    }
     const idx = FLIGHT_STATES.indexOf(normalizeFlightState(s));
     if (idx > best) best = idx;
   }
+  // ARRIVAL en NO_SHOW con la otra pata sin progreso operativo (EXPECTED o
+  // ausente) ⇒ el visit entero nunca ocurrió: proyectamos NO_SHOW.
+  if (sawNoShow && best <= 0) return NO_SHOW_STATE;
   return best >= 0 ? FLIGHT_STATES[best] : "EXPECTED";
 }
 
@@ -60,6 +69,7 @@ interface VisitWithMovements {
   services?: unknown[];
   lostItems?: unknown[];
   crewItems?: unknown[];
+  eventLogs?: unknown[];
 }
 
 function pick<T extends AnyRecord>(rows: T[], dir: "ARRIVAL" | "DEPARTURE"): T | null {
@@ -279,6 +289,22 @@ export function toFlightView(visit: VisitWithMovements): FlightView {
     lostItems: visit.lostItems as FlightViewLostItem[] | undefined,
     crewItems: visit.crewItems as FlightViewCrewItem[] | undefined,
     tasks: collectTasks(arr, dep),
+    // Proyección explícita (no spread) para no filtrar campos futuros del
+    // modelo EventLog al wire. `action`/`details` no llevan PII (ver
+    // pii-audit-log.test.ts) — referencian ids y códigos de estado — y el
+    // autor se reduce a { name }.
+    eventLogs: visit.eventLogs
+      ? (visit.eventLogs as AnyRecord[]).map((e): FlightViewEventLogWithUser => ({
+          id: e.id as string,
+          visitId: (e.visitId as string | null) ?? undefined,
+          movementId: (e.movementId as string | null) ?? undefined,
+          userId: (e.userId as string | null) ?? null,
+          action: e.action as string,
+          details: (e.details as string | null) ?? null,
+          timestamp: e.timestamp as Date | string,
+          user: e.user ? { name: (e.user as { name: string }).name } : null,
+        }))
+      : undefined,
     ata: (arr?.ata as string | null) ?? null,
     atd: (dep?.atd as string | null) ?? null,
     livePhase: (liveSource?.livePhase as string | null) ?? null,

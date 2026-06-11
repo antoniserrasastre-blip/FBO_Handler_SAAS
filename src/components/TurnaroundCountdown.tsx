@@ -7,6 +7,12 @@ interface TurnaroundCountdownProps {
   eta?: string | null;
   etd?: string | null;
   flightState: string;
+  /**
+   * Día operativo (UTC midnight). Si llega, calcMinutes usa la rama absoluta
+   * (la misma que /dia); sin él cae al fallback legacy de ocurrencia más
+   * cercana ±12h (FlightCard no tiene día en contexto y sigue así).
+   */
+  dayUtc?: Date | null;
 }
 
 /**
@@ -15,9 +21,9 @@ interface TurnaroundCountdownProps {
  *  - ON_BLOCKS / PARKED / TURNAROUND / BOARDING → cuenta hasta ETD
  *  - OFF_BLOCKS → oculto
  */
-export function TurnaroundCountdown({ eta, etd, flightState }: TurnaroundCountdownProps) {
+export function TurnaroundCountdown({ eta, etd, flightState, dayUtc }: TurnaroundCountdownProps) {
   const clock = getFlightClock({ state: flightState, eta: eta ?? null, etd: etd ?? null });
-  const minutesLeft = useLiveCountdown(clock.ref);
+  const minutesLeft = useLiveCountdown(clock.ref, dayUtc);
 
   if (minutesLeft === null || clock.kind === null) return null;
   if (minutesLeft > 180) return null;

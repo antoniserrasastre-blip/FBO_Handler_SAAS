@@ -8,8 +8,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { eventBus } from "@/lib/events";
 import { requireWriter } from "@/lib/roles";
-import { suggestNextState } from "@/lib/flightUrgency";
-import { FLIGHT_STATE_CONFIG, type FlightState } from "@/types";
+import { applyAutoTransition } from "@/lib/autoTransition";
+import { type FlightState } from "@/types";
 import { toFlightView, routeFieldToMovement } from "@/lib/flightView";
 import { palmaDayUtc } from "@/lib/time";
 
@@ -134,22 +134,20 @@ export async function PATCH(
   if (!refreshed) return NextResponse.json({ error: "Lost during update" }, { status: 500 });
   let flightView = toFlightView(refreshed);
 
-  // Auto-transition only if client didn't change state explicitly
+  // Auto-transition only if client didn't change state explicitly.
+  // applyAutoTransition (helper compartido con /api/services/[id], deuda D2)
+  // persiste el estado, deja su propio EventLog (movementId + código de
+  // estado) y emite flight_updated.
   let autoTransition: FlightState | null = null;
   if (rawBody.state === undefined) {
-    autoTransition = suggestNextState(flightView, (refreshed.services || []) as Array<{ phase?: string | null; direction?: string | null; state: string }>);
-    if (autoTransition && autoTransition !== flightView.state) {
-      const dep = refreshed.movements.find((m) => m.direction === "DEPARTURE");
-      if (dep) {
-        await prisma.movement.update({ where: { id: dep.id }, data: { state: autoTransition } });
-      } else {
-        const arr = refreshed.movements.find((m) => m.direction === "ARRIVAL");
-        if (arr) await prisma.movement.update({ where: { id: arr.id }, data: { state: autoTransition } });
-      }
+    autoTransition = await applyAutoTransition({
+      visitId: id,
+      userId: session.user.id,
+      userName: session.user.name,
+    });
+    if (autoTransition) {
       const finalRefresh = await loadVisit(id);
       flightView = toFlightView(finalRefresh!);
-    } else {
-      autoTransition = null;
     }
   }
 
@@ -168,7 +166,8 @@ export async function PATCH(
   if (rawBody.assignedToId !== undefined && (visitUpdates.assignedToId ?? null) !== previousView.assignedToId) {
     changes.push(visitUpdates.assignedToId ? `flight_assigned → ${flightView.assignedToName || visitUpdates.assignedToId}` : `flight_unassigned`);
   }
-  if (autoTransition) changes.push(`Auto-transición → ${FLIGHT_STATE_CONFIG[autoTransition].label}`);
+  // Nota: la auto-transición ya quedó logueada por applyAutoTransition (con
+  // movementId y código de estado) — no se duplica aquí.
 
   if (changes.length > 0) {
     await prisma.eventLog.create({

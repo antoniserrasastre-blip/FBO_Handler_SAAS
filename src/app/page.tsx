@@ -26,6 +26,7 @@ import { HelixButton, Stat, StatBand, useDate } from "@/components/helix";
 
 import { dateToSqlString } from "@/lib/time";
 import { shortDate } from "@/app/dia/diaHelpers";
+import { countMovements } from "@/lib/movementCounts";
 import { isFlightPending } from "@/lib/pendingFilter";
 import { flightWithinHours } from "@/lib/timeWindow";
 import { isServiceOverdue } from "@/lib/overdue";
@@ -675,29 +676,9 @@ function HomePageInner() {
   };
 
   // --- Movement counts for the selected day ---
-  const movementStats = useMemo(() => {
-    const day = date.getUTCDate();
-    const month = date.getUTCMonth() + 1;
-    const shortDate = `${String(day).padStart(2, "0")}/${String(month).padStart(2, "0")}`;
-
-    let arrivals = 0;
-    let departures = 0;
-
-    flights.forEach((f) => {
-      // It's an arrival today if arrivalDate matches shortDate OR if arrivalDate is missing (assumed today)
-      // but only if it actually has an ETA
-      if (f.eta && (!f.arrivalDate || f.arrivalDate === shortDate)) {
-        arrivals++;
-      }
-      // It's a departure today if departureDate matches shortDate OR if departureDate is missing (assumed today)
-      // but only if it actually has an ETD
-      if (f.etd && (!f.departureDate || f.departureDate === shortDate)) {
-        departures++;
-      }
-    });
-
-    return { arrivals, departures };
-  }, [flights, date]);
+  // Criterio compartido solo-fecha (lib/movementCounts): antes esta cabecera
+  // exigía eta/etd y daba 34 cuando los banners de zona contaban 36 (B3).
+  const movementStats = useMemo(() => countMovements(flights, shortDate(date)), [flights, date]);
 
   // Counts sobre la lista COMPLETA (pre-búsqueda) para los badges del strip.
   // Así el usuario sabe qué hay aunque tenga la búsqueda activa.
@@ -957,6 +938,7 @@ function HomePageInner() {
                   <VisitCard
                     flight={flight}
                     sheetDate={shortDate(date)}
+                    date={date}
                     passengers={ppl?.passengers || []}
                     crew={ppl?.crew || []}
                     paxSource={ppl?.paxSource || null}

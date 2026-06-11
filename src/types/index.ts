@@ -20,6 +20,12 @@ export function normalizeFlightState(state: string): FlightState {
   return LEGACY_STATE_MAP[state] ?? "EXPECTED";
 }
 
+// Estado terminal (B1): la llegada nunca se materializó (no-show). No forma
+// parte de la progresión operativa FLIGHT_STATES — se persiste en
+// Movement.state y lo escribe el sweep de no-shows (src/lib/noShowSweep.ts).
+export const NO_SHOW_STATE = "NO_SHOW" as const;
+export type TerminalFlightState = typeof NO_SHOW_STATE;
+
 // Service types
 export const SERVICE_TYPES = [
   "CATERING",
@@ -111,7 +117,7 @@ export const SERVICE_TARGET_LABELS: Record<ServiceTarget, string> = {
 
 // Flight state colors, labels and progress %
 export const FLIGHT_STATE_CONFIG: Record<
-  FlightState,
+  FlightState | TerminalFlightState,
   { label: string; color: string; bg: string; text: string; progress: number }
 > = {
   EXPECTED: {
@@ -155,6 +161,14 @@ export const FLIGHT_STATE_CONFIG: Record<
     bg: "bg-success-bg",
     text: "text-success-strong",
     progress: 100,
+  },
+  // Terminal: la llegada nunca se registró (ver NO_SHOW_STATE arriba).
+  NO_SHOW: {
+    label: "No-show",
+    color: "#EF4444",
+    bg: "bg-danger-bg",
+    text: "text-danger-strong",
+    progress: 0,
   },
 };
 

@@ -136,6 +136,10 @@ export interface FlightView {
   lostItems?: FlightViewLostItem[];
   crewItems?: FlightViewCrewItem[];
   tasks?: FlightViewTask[];
+  // Últimos EventLog del visit (orderBy timestamp desc, take 20 en el GET).
+  // /dia los usa para derivar ATA/ATD de las transiciones de estado logueadas;
+  // las tarjetas muestran el autor (user.name) en "Actividad reciente".
+  eventLogs?: FlightViewEventLogWithUser[];
 
   createdAt: Date | string;
   updatedAt: Date | string;
@@ -188,6 +192,27 @@ export interface FlightViewCrewItem {
   returnedAt: Date | string | null;
   createdAt: Date | string;
 }
+
+// Mirrors the legacy `EventLog` shape consumed by the UI (deriveATA/ATD in
+// /dia). `action` carries state-change codes ("Auto-transición → ON_BLOCKS");
+// it must never contain passenger/crew PII (see pii-audit-log.test.ts).
+export interface FlightViewEventLog {
+  id: string;
+  visitId?: string;
+  flightId?: string;
+  movementId?: string;
+  userId: string | null;
+  action: string;
+  details: string | null;
+  timestamp: Date | string;
+}
+
+// Shape exacta que consumen las tarjetas (FlightCard/VisitCard/paneles):
+// el log con su autor resuelto. `user` se reduce a { name } en el GET — nunca
+// se hidrata el modelo User completo al wire.
+export type FlightViewEventLogWithUser = FlightViewEventLog & {
+  user: { name: string } | null;
+};
 
 export interface FlightViewTask {
   id: string;

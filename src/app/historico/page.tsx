@@ -9,7 +9,11 @@ import { HelixButton, HelixPill } from "@/components/helix";
 interface DaySheetSummary {
   id: string;
   date: string;
+  /** Nº de visits del día (una visit puede tener llegada Y salida). */
   totalFlights: number;
+  /** Conteo por movimiento (B3): legs cuya fecha cae en este día. */
+  arrivals: number;
+  departures: number;
   dispatched: number;
   paxArrival: number;
   paxDeparture: number;
@@ -156,8 +160,10 @@ export default function HistoricoPage() {
                       {ds.manual ? <HelixPill tone="info">PREPARADO</HelixPill> : null}
                     </div>
                     <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 font-mono text-xs text-ink-3 [font-variant-numeric:tabular-nums]">
+                      {/* Conteo por movimiento — "N vuelos" mentía: contaba visits, no legs. */}
                       <span>
-                        <span className="font-semibold text-ink-1">{ds.totalFlights}</span> vuelos
+                        <span className="font-semibold text-ink-1">{ds.arrivals ?? 0}</span> lleg ·{" "}
+                        <span className="font-semibold text-ink-1">{ds.departures ?? 0}</span> sal
                       </span>
                       <span>
                         <span className="font-semibold text-success-strong">{ds.dispatched}</span> despachados
