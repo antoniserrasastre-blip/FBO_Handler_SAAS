@@ -22,7 +22,7 @@ Notas:
 
 | Método | Ruta | Guard | Función |
 |---|---|---|---|
-| GET | `/api/flights` | Auth | Listar vuelos (Visit+Movement) del palmaDay |
+| GET | `/api/flights` | Auth | Listar vuelos (Visit+Movement) del palmaDay. Desde 11-06-2026: incluye `eventLogs` (20 desc) y filtra el arrastre — visits con ARRIVAL `EXPECTED`/`NO_SHOW` sin evidencia de llegada y `scheduledDate < día-1` quedan fuera (pernoctas reales se arrastran siempre) |
 | POST | `/api/flights` | requireWriter | Crear vuelo manual |
 | PATCH | `/api/flights/[id]` | requireWriter | Actualizar vuelo (whitelist de campos) |
 | DELETE | `/api/flights/[id]` | requireWriter | Eliminar vuelo |
@@ -67,7 +67,7 @@ Notas:
 | Método | Ruta | Guard | Función |
 |---|---|---|---|
 | POST | `/api/import` | requireWriter | Importar PDF Cybermax (vuelos del día) |
-| PUT | `/api/import` | requireWriter | Confirmar/aplicar import de vuelos |
+| PUT | `/api/import` | requireWriter | Confirmar/aplicar import de vuelos. Al cierre ejecuta el sweep NO_SHOW (`src/lib/noShowSweep.ts`); un fallo del sweep no tumba el import |
 | POST | `/api/import/extras` | requireWriter | Importar Excel Mallorcair (servicios) |
 | PUT | `/api/import/extras` | requireWriter | Confirmar/aplicar import de extras |
 | POST | `/api/import/netjets-pax` | requireWriter | Importar pasajeros NetJets PDF |

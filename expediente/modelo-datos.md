@@ -64,6 +64,10 @@ Notas de relación reales (no asumir):
 - Tiempos Zulu como `String` "HH:MM": `eta?` (ARRIVAL), `etd?` (DEPARTURE), `ata?`, `atd?` (overrides handler).
 - `parking?`, `tobt?`.
 - `state` (default `EXPECTED`): `EXPECTED | ON_BLOCKS | PARKED | TURNAROUND | BOARDING | OFF_BLOCKS`.
+  Además **`NO_SHOW`** (11-06-2026): estado **terminal**, solo ARRIVAL, fuera del ciclo (no está en
+  `FLIGHT_STATES` para no romper los `Record` exhaustivos; ver `NO_SHOW_STATE` en `types/index.ts`).
+  Lo asigna el sweep `src/lib/noShowSweep.ts` (al cierre de PUT `/api/import`): ARRIVAL `EXPECTED`
+  con `scheduledDate < hoy-1`, sin `ata` ni `livePhase` de llegada. Con EventLog + SSE por transición.
 - Conteos: `paxCount`/`paxCountReal?`, `crewCount`/`crewCountReal?`.
 - Flujo pax: `paxState` (default `IN_AIRCRAFT`), `bagsState` (default `IN_AIRCRAFT`),
   `bagsChecked`, `bagsCabin`, `transportType` (default `UNDEFINED`), `transportState` (default `PENDING`),
@@ -185,6 +189,9 @@ Módulo: `src/lib/crypto.ts`.
     entre ARRIVAL y DEPARTURE (`mostAdvancedState`). Así una pernocta en su día de salida (llegada
     `PARKED`, salida `EXPECTED`) se muestra `PARKED` ("En plataforma"), no `EXPECTED` ("Esperando
     llegada"). El `state` per-movimiento sigue siendo el progreso honesto de cada leg.
+    Caso especial (11-06-2026): si el ARRIVAL es `NO_SHOW` y la otra pata no avanzó, el FlightView
+    proyecta `NO_SHOW`. El FlightView también lleva `eventLogs[]` (`FlightViewEventLog`, últimos 20
+    desc) desde el GET `/api/flights` — alimentan `deriveATA/ATD` y "Actividad reciente" en `/dia`.
 - **compat/legacy** (`src/types/compat.ts`): alias para componentes UI que antes importaban de
   `@prisma/client`. Los modelos v1 (`Flight`, `DaySheet`, `Service`, `Passenger`, `CrewMember`,
   `LostItem`) **ya no existen** en Prisma. Mapea:
