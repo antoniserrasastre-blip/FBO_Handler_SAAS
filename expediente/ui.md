@@ -35,8 +35,8 @@ ruta (ver columna "Tab").
 
 ### Tarjetas de vuelo
 - `VisitCard.tsx` — Tarjeta central de producción (shape v2: Visit + dos Movements ARRIVAL/DEPARTURE). Usada en `/` y en el prototipo. Compone `MovementRow`, badges helix, `ServiceChipRow`, `StateStepper`, `OpsToggleStrip`, `ChecklistPanel`, `AddServicePicker`, `TurnaroundCountdown`. Delega la edición pesada en `FlightDetailPanel` vía `onOpenDetail`.
-- `CompactFlightGrid.tsx` — Densidad compacta de la Lista: reparte movimientos en zonas 🛬 Llegadas / 🛫 Salidas (clasificación por movimiento, no por estado). Cada tarjeta muestra, según la dirección del leg de hoy: matrícula + servicios pendientes, aeropuerto (ICAO + ciudad en lenguaje natural resuelta server-side, truncada con tooltip), hora, y pasaje/tripulación (`paxArrivalReal ?? paxArrival` y homólogos de salida; real del handler si existe, si no el estimado del import). Cada tarjeta abre la `VisitCard`.
-- `FlightDetailPanel.tsx` (`app/dia/`) — Panel lateral de detalle/edición completa de un vuelo. Reutilizado por `/dia` y `/timeline`. Aloja inline-edits, servicios, lost items, pax/crew y la sección GenDec (en pausa).
+- `CompactFlightGrid.tsx` — Densidad compacta de la Lista: reparte movimientos en zonas 🛬 Llegadas / 🛫 Salidas (clasificación por movimiento, no por estado; desde 11-06-2026 la zona Salidas exige `etd` — una visit sin salida planificada no genera tarjeta — y cada zona ordena por la hora de su propio leg: ARR por eta, DEP por etd). Los banners de zona cuentan con el criterio único de `src/lib/movementCounts.ts` (coinciden con la cabecera). Cada tarjeta muestra, según la dirección del leg de hoy: matrícula + servicios pendientes, aeropuerto (ICAO + ciudad en lenguaje natural resuelta server-side, truncada con tooltip), hora, y pasaje/tripulación (`paxArrivalReal ?? paxArrival` y homólogos de salida; real del handler si existe, si no el estimado del import). Cada tarjeta abre la `VisitCard`.
+- `FlightDetailPanel.tsx` (`app/dia/`) — Panel lateral de detalle/edición completa de un vuelo. Reutilizado por `/dia` y `/timeline`. Aloja inline-edits, servicios, lost items, pax/crew, `PrintLabelsButton` y la sección GenDec (en pausa). Desde 11-06-2026: el header muestra ambos callsigns cuando llegada y salida difieren ("NJE492E → NJE648C") y "Actividad reciente" se alimenta de los `eventLogs` que ahora sí llegan en el GET `/api/flights`.
 - `FlightCard.tsx` — Tarjeta legacy v1. **Huérfana: ya no se importa en ningún sitio** (candidata a borrado).
 
 ### Servicios y operativa (subcomponentes de VisitCard)
@@ -47,7 +47,8 @@ ruta (ver columna "Tab").
 - `OpsToggleStrip.tsx` — Tira de toggles operativos.
 - `StateStepper.tsx` — Avance del estado del vuelo paso a paso.
 - `PendingServicesPanel.tsx` — Panel de servicios pendientes (en `/` y `/dia`).
-- `TurnaroundAlert.tsx` / `TurnaroundCountdown.tsx` — Alerta y cuenta atrás de turnarounds ajustados.
+- `TurnaroundAlert.tsx` / `TurnaroundCountdown.tsx` — Alerta y cuenta atrás de turnarounds ajustados. Desde 11-06-2026 la alerta de ETD pasada persiste hasta el despegue real (`atd`), sin la ventana de -30 min que la expulsaba; servicios pendientes leídos con el fallback `phase || direction`. `TurnaroundCountdown` acepta `dayUtc` para anclar la cuenta al día del vuelo.
+- `PrintLabelsButton.tsx` — Etiquetas de equipaje 62×29 mm para Brother TD (popover con nº de bultos sugerido = pax, editable; `GET /api/export/baggage-labels`, stateless por query params). Montado en `FlightDetailPanel` (`/dia`) y `VisitCard` (Lista). Las hojas de control A4 4-up (`/api/export/baggage-sheets`) se lanzan desde `HomeActionBar`.
 
 ### Personas (PII)
 - `PassengerCrewModal.tsx` — Modal que carga y muestra pax/crew (datos sensibles) bajo petición. Componente más reutilizado (`/`, `/dia`, `/timeline`, prototipo). Incluye la sección GenDec (en pausa).
@@ -57,7 +58,7 @@ ruta (ver columna "Tab").
 - `ShiftBar.tsx` — Barra del turno activo (puesto, horas). Solo en `/`.
 - `ShiftHandover.tsx` — Entrega de turno con notas. Solo en `/`.
 - `ShiftQueueToggle.tsx` — Toggle de cola/vista por turno. Solo en `/`.
-- `DaySummary.tsx` — Resumen/contadores del día. Solo en `/`.
+- `DaySummary.tsx` — Resumen/contadores del día. Solo en `/`. Desde 11-06-2026 la franja de fases (Tierra/Esper./Embar./Desp.) cuenta sobre los estados reales vía `normalizeFlightState`, y los contadores LLEGADAS/SALIDAS usan `movementCounts.ts` (mismo número que los banners de zona).
 - `HomeActionBar.tsx` — Acciones globales (importar, etc.). Solo en `/`.
 - `QuickAddFlight.tsx` — Alta rápida de vuelo (modal) en `/` y `/dia`.
 
@@ -83,7 +84,7 @@ ruta (ver columna "Tab").
 | `useShift.ts` | Estado del turno actual (puesto, userId). |
 | `useDate.ts` (en `helix/`) | Fecha/turno activos compartidos por el chrome y las vistas. |
 | `useMediaQuery.ts` (`useIsMobile`) | Conmutación desktop/móvil. |
-| `useLiveCountdown.ts` | Cuenta atrás en vivo (turnaround). |
+| `useLiveCountdown.ts` | Cuenta atrás en vivo (turnaround). `calcMinutes` acepta `HH:MM`, `H:MM` y `HHMM` (11-06-2026); con `dayUtc` ancla al día del vuelo, sin él aplica wrap ±12h. |
 | `useOverdueAlert.ts` | Alerta de servicios vencidos. |
 | `useLongPress.ts` | Long-press para UX móvil. |
 | `useServicePresets.ts` | Presets de servicios. |
