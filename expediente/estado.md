@@ -1,46 +1,77 @@
 # Estado — FBO Handler SaaS
 
-_Última actualización: 2026-06-03_
+_Última actualización: 2026-06-11_
 
 > Este fichero se reescribe en cada sesión de trabajo. Refleja el momento presente, no el historial.
 
 ## Situación actual
 
-Sistema en producción en `sirvici` (servidor propio), expuesto vía Cloudflare Tunnel en `fbo.randomite.space`. Modelo v2 estable (Operator→Aircraft→Visit→Movement). La migración v1→v2 está completada.
+Sistema en producción en `sirvici`, expuesto vía Cloudflare Tunnel en `fbo.randomite.space`. Modelo v2 estable.
 
-**Equipaje de bodega** (nuevo, 2026-06-02) en producción: hojas de control imprimibles (`/api/export/baggage-sheets`, A4 4-up) + etiquetas por bulto para impresoras Brother TD-46/4750 (`/api/export/baggage-labels`, 62×29 mm). Ver `historial/2026-06.md` sesión 5 y memoria global `project_fbo_baggage`.
+**QA + fix run multi-agente (2026-06-11):** un bot QA navegó producción como un humano y una run
+de agentes (sondas + causa raíz + verificación adversarial) confirmó **26 bugs**; el informe vive
+en La Bestia: `workspace/coding/projects/fbo-handler-saas/qa-run_11-06-2026.md`. El mismo día se
+aplicó la fix run: **26/26 fixes en el working tree, SIN COMMITEAR**, sobre baseline `74ddad3`.
+Suite **1137 pass / 0 fail / 53 skip**, `tsc` + lint + `npm run build` limpios. 28 ficheros
+modificados + 13 nuevos (`src/lib/autoTransition.ts`, `noShowSweep.ts`, `movementCounts.ts`,
+tests de regresión y 4 sondas `*.probe.test.ts`, todas en verde).
 
-Suite de tests: 1010 tests en verde, 53 skipped, 68 ficheros (`vitest run`, 2026-06-03). `tsc --noEmit` y lint limpios.
+**Live tracking caído:** el worker OpenSky arranca en cada boot pero corre en modo anónimo
+(~400 créditos/día, agotados en la primera hora; OpenSky retiró el basic auth). Confirmable en
+`/api/live/status` (logueado). Plan decidido: migrar `fetchStates()` a **adsb.lol** (gratis,
+formato ADSBx) + polling adaptativo + estado `FINAL` (alerta de corta final) + push ntfy —
+**después** de desplegar la fix run (la tubería ATA/ATD que el live tracking alimenta era parte
+de los bugs). Medio plazo: receptor ADS-B propio en el FBO.
 
 ## Decisiones de alcance (MVP)
 
-- **GenDec aparcado (2026-06-02)** — no se usa actualmente. No invertir más en el flujo de importación GenDec hasta nueva orden. Código intacto y dormido: parser `src/lib/gendecParser.ts`, ruta `POST /api/flights/[id]/gendec/extract`, UI `GenDecPasteSection` (en `PassengerCrewModal` y dos secciones en `/dia`), enum `GENDEC_PASTE`. La exportación de declaración en blanco (`/api/export/blank-declaration`) es independiente y no se toca. Prioridad: simplificar el MVP.
+- **GenDec aparcado (2026-06-02)** — sin cambios, código intacto y dormido.
+- **NO_SHOW (2026-06-11)** — nuevo estado terminal. Sweep al cierre del import: ARRIVAL EXPECTED
+  con scheduledDate < hoy-1 y sin evidencia de llegada (ata / livePhase) → NO_SHOW, con EventLog
+  + SSE por transición. Limpiará los **484 no-shows históricos** en el primer import tras el deploy.
 
 ## Pendientes activos
 
-### Del plan de testeo profundo (FASE 3-5)
-- [ ] **A6** — Canal de errores del parser: filas descartadas en `pdfParser*.ts` deben propagarse como warnings a la preview en vez de desaparecer en silencio.
-- [ ] **FASE 4 — AENA calc** — Tests de consistencia de `aena-microservice/src/calc/*` (landing, noise, transit, pax, parking). Pendiente además de **flag de exactitud**: pedir al dueño 2-3 cálculos verificados contra factura real.
-- [ ] **FASE 5 — Deuda de diseño** (analizada 2026-06-02, ver detalle):
-  - **A3 (PII en `EventLog.action`) — HECHO (2026-06-03).** `gender`/`nationality` en `passengers/[id]/route.ts` ya no escriben el valor literal. Se detectó y arregló además la misma fuga de `nationality` en `crew/[id]/route.ts` (no estaba en el análisis original). Blindado con 2 tests nuevos en `pii-audit-log.test.ts`. 10/10 verde, `tsc` limpio.
-  - **D2 (auto-transición duplicada) — prioritario.** Misma lógica copiada en `flights/[id]/route.ts` y `services/[id]/route.ts`, y **ya divergió**: services loguea el EventLog con `movementId` y emite un `flight_updated` extra; flights no. Extraer a helper `applyAutoTransition(visitId, session)` no es solo DRY, corrige la inconsistencia de eventos SSE.
-  - (Opcional) Generar whitelist PATCH desde `routeFieldToMovement`. **Decisión:** NO en runtime (el `Set` es frontera de seguridad auditable); mejor un **test de paridad** que falle si hay claves en `routeFieldToMovement` ausentes del `Set` (excluyendo casos especiales como `assignedToId`).
+- [ ] **REVISAR Y DESPLEGAR LA FIX RUN** ← el siguiente paso. Revisar `git diff`, trocear en
+  commits lógicos si se quiere, push → deploy por runner. Detalle fix a fix en el informe de QA.
+- [ ] **Migración live tracking a adsb.lol** (tras el deploy) — ver plan arriba.
 
-### Persistencia del import (pendiente de decisión)
-- [ ] Política de propiedad de campos cuando se reimporta el mismo PDF. **Ya protegido:** `upsertMovement()` en `src/lib/v2/upsert.ts` separa campos "plan" (callsign, scheduledDate, origin, destination, eta, etd, crewCount → se actualizan en cada reimport) de los operativos del `Set` `MOVEMENT_OPERATIONAL_FIELDS` (state, paxCount, parking, paxState, fuel/toilet/transport… → create-only, nunca se pisan). **Lo que falta:** revisar el `Set` por si falta algún campo editable en UI, y decidir la política sistemática (¿generar el `Set` desde el esquema en vez de mantenerlo a mano?).
+### Del plan de testeo profundo (FASE 3-5)
+- [ ] **A6** — canal de errores del parser: **parcial (2026-06-11)** — horas ilegibles ahora se
+  descartan con `ParseWarning` (`normalizeTime` en `pdfParserV2.ts`); falta propagar el resto de
+  filas descartadas a la preview.
+- [ ] **FASE 4 — AENA calc** — sin cambios (tests de consistencia + flag de exactitud).
+- **D2 — HECHO (2026-06-11).** `src/lib/autoTransition.ts` unifica la auto-transición de
+  `flights/[id]` y `services/[id]`; eventos SSE idénticos en ambos caminos; el EventLog escribe
+  el **código** de estado (los regex de `deriveATA/ATD` aceptan códigos y labels históricos).
+- [ ] Test de paridad PATCH whitelist ↔ `routeFieldToMovement` — sigue pendiente (opcional).
+
+### Persistencia del import
+- **Gate de evidencia en reimport — HECHO (2026-06-11):** un visit pernocta del PDF no avanza a
+  PARKED sin ata/livePhase; sin evidencia queda para el sweep NO_SHOW.
+- [ ] Revisar el `Set` `MOVEMENT_OPERATIONAL_FIELDS` completo y decidir política sistemática.
 
 ### Equipaje de bodega — impresión
-- [ ] **Mini-agente ZPL local** para impresión de etiquetas de un clic, sin diálogo. Bloqueado por infra: el server está fuera de la LAN de las impresoras, no alcanza su IP. Requiere un PC de oficina siempre encendido + las IPs de las Brother (pedir a IT). Estado actual: PDF 62×29 + driver Brother (funciona ya). Las TD-46/4750 hablan ZPL II; el generador ZPL aún no está escrito (se decidió esperar a tener IPs).
-- [ ] Pendiente confirmar con el dueño si quiere generar también el generador ZPL ya (dejándolo listo) o esperar.
+- [ ] Mini-agente ZPL local — sin cambios (bloqueado por IPs/IT).
 
 ### Otros bugs menores
-- [ ] BUG-4 — falso positivo doble-prefijo `ZZ` en `looksLikeRegistration()` / `insertDash()` (`src/lib/excelParser.ts`), baja prioridad.
-- [ ] Time `0900/0930` en `excelParser.ts` descarta el 2º horario (cosmético).
-- [ ] Warning lint: `isOvernight` asignado y nunca usado en `src/app/api/import/route.ts` (no bloquea, anótalo al tocar ese fichero — prefijar `_` o eliminar).
+- [ ] BUG-4 — doble-prefijo `ZZ` en `excelParser.ts`, sigue.
+- [ ] Time `0900/0930` en `excelParser.ts` descarta el 2º horario — sigue (lo del 11-06 fue
+  pdfParser + calcMinutes, no excelParser).
+- Warning lint `isOvernight` — **HECHO** (renombrado `_isOvernight` por el integrador).
+
+### Decisiones de producto pendientes (del informe QA)
+- [ ] Cómo etiquetar rotaciones dobles del mismo avión el mismo día (caso EC-OGB, B2).
+- [ ] Qué señal de urgencia quiere rampa en el FlightChip de `/` (B4 se arregló en alertas y
+  orden; el chip sigue sin color de urgencia por decisión pendiente).
+- [ ] Unificar `isArrivalToday/isDepartureToday` de `diaHelpers` con `movementCounts` (quedaron
+  dos implementaciones compatibles pero separadas para no cruzar propiedad de ficheros).
 
 ## Alertas
 
-_(Ninguna activa)_
+- ⚠️ **Working tree con la fix run SIN commitear** (28 modificados + 13 nuevos). No pushear a
+  ciegas: push = deploy. La suite está verde (1137/0), pero revisar el diff antes. Recordatorio
+  del gotcha: si `verify` fallara, `/srv` se congela en el commit viejo.
 
 ## Cómo actualizar este fichero
 
