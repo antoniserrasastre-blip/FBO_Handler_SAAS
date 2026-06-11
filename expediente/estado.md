@@ -11,10 +11,12 @@ Sistema en producción en `sirvici`, expuesto vía Cloudflare Tunnel en `fbo.ran
 **QA + fix run multi-agente (2026-06-11):** un bot QA navegó producción como un humano y una run
 de agentes (sondas + causa raíz + verificación adversarial) confirmó **26 bugs**; el informe vive
 en La Bestia: `workspace/coding/projects/fbo-handler-saas/qa-run_11-06-2026.md`. El mismo día se
-aplicó la fix run: **26/26 fixes en el working tree, SIN COMMITEAR**, sobre baseline `74ddad3`.
-Suite **1137 pass / 0 fail / 53 skip**, `tsc` + lint + `npm run build` limpios. 28 ficheros
-modificados + 13 nuevos (`src/lib/autoTransition.ts`, `noShowSweep.ts`, `movementCounts.ts`,
-tests de regresión y 4 sondas `*.probe.test.ts`, todas en verde).
+aplicó la fix run (26/26) y se **DESPLEGÓ**: commits `1557ee0` (fixes) + `159ab70` (cierre),
+deploy verde (verify + Build&Deploy + healthcheck). Suite **1137 pass / 0 fail / 53 skip**.
+Piezas nuevas: `src/lib/autoTransition.ts`, `noShowSweep.ts`, `movementCounts.ts`, tests de
+regresión y 4 sondas `*.probe.test.ts` (todas en verde).
+**OJO:** el sweep NO_SHOW limpia los 484 fantasmas históricos en el **primer import de PDF**
+tras el deploy — hasta entonces el filtro del GET ya los oculta de la hoja viva.
 
 **Live tracking caído:** el worker OpenSky arranca en cada boot pero corre en modo anónimo
 (~400 créditos/día, agotados en la primera hora; OpenSky retiró el basic auth). Confirmable en
@@ -32,9 +34,9 @@ de los bugs). Medio plazo: receptor ADS-B propio en el FBO.
 
 ## Pendientes activos
 
-- [ ] **REVISAR Y DESPLEGAR LA FIX RUN** ← el siguiente paso. Revisar `git diff`, trocear en
-  commits lógicos si se quiere, push → deploy por runner. Detalle fix a fix en el informe de QA.
-- [ ] **Migración live tracking a adsb.lol** (tras el deploy) — ver plan arriba.
+- [ ] **Migración live tracking a adsb.lol** ← el siguiente bloque — ver plan arriba.
+- [ ] Verificar tras el primer import post-deploy: sweep NO_SHOW ejecutado (484 históricos),
+  fantasmas fuera de la hoja, contadores cabecera=banner, y re-pasar el bot QA para confirmar.
 
 ### Del plan de testeo profundo (FASE 3-5)
 - [ ] **A6** — canal de errores del parser: **parcial (2026-06-11)** — horas ilegibles ahora se
@@ -69,9 +71,8 @@ de los bugs). Medio plazo: receptor ADS-B propio en el FBO.
 
 ## Alertas
 
-- ⚠️ **Working tree con la fix run SIN commitear** (28 modificados + 13 nuevos). No pushear a
-  ciegas: push = deploy. La suite está verde (1137/0), pero revisar el diff antes. Recordatorio
-  del gotcha: si `verify` fallara, `/srv` se congela en el commit viejo.
+_(Ninguna activa — fix run desplegada y verde el 2026-06-11; los 484 NO_SHOW históricos se
+limpian solos en el primer import de PDF.)_
 
 ## Cómo actualizar este fichero
 
