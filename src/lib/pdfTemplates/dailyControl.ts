@@ -85,9 +85,9 @@ function buildColumns(airportHeader: string): Col[] {
   return [...fixed.slice(0, -1), services, fixed[fixed.length - 1]];
 }
 
-const ROW_H = 20;
-const HEADER_H = 16;
-const BAND_H = 18;
+const ROW_H = 14;
+const HEADER_H = 13;
+const BAND_H = 15;
 
 function drawColHeaders(doc: PDFKit.PDFDocument, cols: Col[], y: number) {
   let x = MARGIN;
@@ -96,7 +96,7 @@ function drawColHeaders(doc: PDFKit.PDFDocument, cols: Col[], y: number) {
   doc.restore();
   doc.font("Helvetica-Bold").fontSize(6).fillColor(MUTED);
   for (const c of cols) {
-    doc.text(c.label, x + 4, y + 5, { width: c.w - 8, align: c.align === "center" ? "center" : "left" });
+    doc.text(c.label, x + 4, y + 3.5, { width: c.w - 8, align: c.align === "center" ? "center" : "left" });
     x += c.w;
   }
   // column separators
@@ -116,7 +116,7 @@ function drawColHeaders(doc: PDFKit.PDFDocument, cols: Col[], y: number) {
 // so "done" is signalled by the muted gray + dropped bullet, not a checkmark.)
 function drawServices(doc: PDFKit.PDFDocument, x: number, y: number, w: number, services: DailyControlService[]) {
   if (services.length === 0) {
-    doc.font("Helvetica").fontSize(7).fillColor(HAIR).text("—", x + 4, y + 6.5, { width: w - 8 });
+    doc.font("Helvetica").fontSize(6.5).fillColor(HAIR).text("—", x + 4, y + 4.5, { width: w - 8 });
     return;
   }
   let cx = x + 4;
@@ -126,13 +126,13 @@ function drawServices(doc: PDFKit.PDFDocument, x: number, y: number, w: number, 
     const s = services[i];
     const mark = s.done ? "" : "• "; // bullet for pending only
     const text = mark + s.label + (i < services.length - 1 ? sep : "");
-    doc.font(s.done ? "Helvetica" : "Helvetica-Bold").fontSize(7);
+    doc.font(s.done ? "Helvetica" : "Helvetica-Bold").fontSize(6.5);
     const tw = doc.widthOfString(text);
     if (cx + tw > maxX && cx > x + 4) {
-      doc.font("Helvetica-Bold").fontSize(7).fillColor(ACCENT).text("…", cx, y + 6.5);
+      doc.font("Helvetica-Bold").fontSize(6.5).fillColor(ACCENT).text("…", cx, y + 4.5);
       return;
     }
-    doc.fillColor(s.done ? MUTED : INK).text(text, cx, y + 6.5, { lineBreak: false });
+    doc.fillColor(s.done ? MUTED : INK).text(text, cx, y + 4.5, { lineBreak: false });
     cx += tw;
   }
   doc.font("Helvetica");
@@ -149,8 +149,8 @@ function drawRow(doc: PDFKit.PDFDocument, cols: Col[], y: number, row: DailyCont
       drawServices(doc, x, y, c.w, row.services);
     } else if (c.key === "check") {
       // empty tick box centered
-      const bs = 10;
-      doc.save().lineWidth(0.8).strokeColor(LINE);
+      const bs = 8;
+      doc.save().lineWidth(0.7).strokeColor(LINE);
       doc.rect(x + (c.w - bs) / 2, y + (ROW_H - bs) / 2, bs, bs).stroke();
       doc.restore();
     } else {
@@ -158,9 +158,9 @@ function drawRow(doc: PDFKit.PDFDocument, cols: Col[], y: number, row: DailyCont
       const isCallsign = c.key === "callsign" || c.key === "registration";
       doc
         .font(isCallsign ? "Helvetica-Bold" : "Helvetica")
-        .fontSize(isCallsign ? 8 : 7.5)
+        .fontSize(isCallsign ? 7.5 : 7)
         .fillColor(dim ? HAIR : INK)
-        .text(value, x + 4, y + (isCallsign ? 5.5 : 6), {
+        .text(value, x + 4, y + 4, {
           width: c.w - 8,
           align: c.align === "center" ? "center" : "left",
           lineBreak: false,
@@ -186,12 +186,12 @@ function drawSectionBand(doc: PDFKit.PDFDocument, y: number, title: string, coun
   doc.save().lineWidth(2).strokeColor(ACCENT);
   doc.moveTo(MARGIN, y + 0.6).lineTo(MARGIN + 60, y + 0.6).stroke();
   doc.restore();
-  doc.font("Helvetica-Bold").fontSize(10).fillColor(INK).text(title, MARGIN + 6, y + 4.5);
+  doc.font("Helvetica-Bold").fontSize(9).fillColor(INK).text(title, MARGIN + 6, y + 3.5);
   doc
     .font("Helvetica")
-    .fontSize(8)
+    .fontSize(7)
     .fillColor(MUTED)
-    .text(`${count} ${count === 1 ? "movimiento" : "movimientos"}`, MARGIN, y + 5.5, {
+    .text(`${count} ${count === 1 ? "movimiento" : "movimientos"}`, MARGIN, y + 4.5, {
       width: CONTENT_W - 8,
       align: "right",
     });
@@ -207,21 +207,21 @@ export async function generateDailyControl(data: DailyControlData): Promise<Buff
 
     // --- Page title ---------------------------------------------------------
     let y = MARGIN;
-    doc.font("Helvetica-Bold").fontSize(15).fillColor(INK).text("HOJA DE CONTROL DEL DÍA", MARGIN, y);
+    doc.font("Helvetica-Bold").fontSize(13).fillColor(INK).text("HOJA DE CONTROL DEL DÍA", MARGIN, y);
     doc
       .font("Helvetica")
-      .fontSize(10)
+      .fontSize(9)
       .fillColor(MUTED)
       .text(`Palma · ${data.fecha}`, MARGIN, y + 1.5, { width: CONTENT_W, align: "right" });
-    y += 22;
+    y += 17;
     // Turno / handler write-in line
-    doc.font("Helvetica").fontSize(8).fillColor(MUTED).text("Turno / Handler:", MARGIN, y + 2);
+    doc.font("Helvetica").fontSize(8).fillColor(MUTED).text("Turno / Handler:", MARGIN, y + 1);
     doc.save().lineWidth(0.5).strokeColor(HAIR);
-    doc.moveTo(MARGIN + 70, y + 10).lineTo(MARGIN + 260, y + 10).stroke();
-    doc.text("Notas:", MARGIN + 280, y + 2);
-    doc.moveTo(MARGIN + 320, y + 10).lineTo(MARGIN + CONTENT_W, y + 10).stroke();
+    doc.moveTo(MARGIN + 70, y + 9).lineTo(MARGIN + 260, y + 9).stroke();
+    doc.text("Notas:", MARGIN + 280, y + 1);
+    doc.moveTo(MARGIN + 320, y + 9).lineTo(MARGIN + CONTENT_W, y + 9).stroke();
     doc.restore();
-    y += 20;
+    y += 16;
 
     const bottomLimit = PAGE_H - MARGIN;
 
@@ -255,7 +255,7 @@ export async function generateDailyControl(data: DailyControlData): Promise<Buff
     };
 
     renderSection("LLEGADAS", data.arrivals, ARR_TINT, "ORIGEN");
-    y += 12;
+    y += 8;
     renderSection("SALIDAS", data.departures, DEP_TINT, "DESTINO");
 
     doc.end();
