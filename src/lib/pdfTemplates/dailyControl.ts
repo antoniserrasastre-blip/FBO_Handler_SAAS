@@ -254,8 +254,20 @@ export async function generateDailyControl(data: DailyControlData): Promise<Buff
       }
     };
 
+    // If both blocks fit together on the first page, keep them together; if not,
+    // start each block on its own page (Llegadas page 1, Salidas page 2…) so a
+    // multi-page sheet never splits a block mid-way across the page boundary.
+    const sectionHeight = (count: number) => BAND_H + HEADER_H + Math.max(count, 1) * ROW_H;
+    const bothFit =
+      y + sectionHeight(data.arrivals.length) + 8 + sectionHeight(data.departures.length) <= bottomLimit;
+
     renderSection("LLEGADAS", data.arrivals, ARR_TINT, "ORIGEN");
-    y += 8;
+    if (bothFit) {
+      y += 8;
+    } else {
+      doc.addPage();
+      y = MARGIN;
+    }
     renderSection("SALIDAS", data.departures, DEP_TINT, "DESTINO");
 
     doc.end();
