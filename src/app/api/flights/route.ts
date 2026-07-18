@@ -174,10 +174,18 @@ export async function POST(req: NextRequest) {
     callsignForOperator: flightData.callsign,
   });
 
+  // Match by callsign + hora: a quick-add for an aircraft that already has a
+  // visit today joins it only if it IS that rotation — otherwise it's a new
+  // rotation (rotaciones fuera del daily) and gets its own visit.
   const { record: visit } = await upsertVisit({
     aircraftId: aircraft.id,
     palmaDay,
     operatorId,
+    match: {
+      callsigns: [flightData.callsign],
+      eta: flightData.eta || null,
+      etd: flightData.etd || null,
+    },
   });
 
   // Create DEPARTURE movement (manual quick-adds typically capture the departure leg)

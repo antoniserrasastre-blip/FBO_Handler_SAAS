@@ -88,10 +88,62 @@ export async function upsertOperator(icaoCode: string, name: string) {
 }
 
 /**
+ * Identity hint to match an incoming row against one of possibly SEVERAL
+ * Visits of the same aircraft on the same day (double rotations).
+ * Anchor: callsign + hora — registration alone cannot tell rotations apart.
+ */
+export interface VisitMatchHint {
+  /** Callsigns of the row (arrival and/or departure leg). */
+  callsigns?: Array<string | null | undefined>;
+  /** Scheduled HH:MM Zulu times of the row's legs. */
+  eta?: string | null;
+  etd?: string | null;
+  /** Visits already claimed by other rows of the same import run — a row can
+   *  never merge into a visit a sibling row already owns. */
+  excludeVisitIds?: string[];
+}
+
+/**
+ * Max distance (minutes) between the row's scheduled time and an existing
+ * movement's for both to count as the same rotation when the callsign changed
+ * (daily correction / errata). Beyond it the row is a new rotation.
+ */
+const ROTATION_TIME_TOLERANCE_MIN = 90;
+
+function hhmmToMinutes(t: string): number | null {
+  const m = /^(\d{1,2}):(\d{2})/.exec(t.trim());
+  if (!m) return null;
+  return Number(m[1]) * 60 + Number(m[2]);
+}
+
+/** Minutes between two HH:MM times, wrapping around midnight; null if unparseable. */
+function timeDelta(a: string | null | undefined, b: string | null | undefined): number | null {
+  if (!a || !b) return null;
+  const ma = hhmmToMinutes(a);
+  const mb = hhmmToMinutes(b);
+  if (ma === null || mb === null) return null;
+  const diff = Math.abs(ma - mb);
+  return Math.min(diff, 1440 - diff);
+}
+
+type VisitWithMovements = Awaited<ReturnType<typeof prisma.visit.create>> & {
+  movements: Array<{ direction: string; callsign: string; eta: string | null; etd: string | null }>;
+};
+
+/**
  * Find or create a Visit for a given aircraft on a given Palma operating day.
- * Multiple legs in the same day end up as separate Visits — callers should
- * key by callsign+date if disambiguation is needed (current import flows
- * treat one aircraft/day as one visit, mirroring the old Flight semantics).
+ *
+ * Without a `match` hint one aircraft/day is one visit (first found wins),
+ * mirroring the old Flight semantics — enrichment callers (netjets-pax,
+ * extras) rely on this and attach to the first rotation of the day.
+ *
+ * With a `match` hint (daily import, quick-add) rotations are told apart by
+ * callsign + hora: a visit whose movements share a callsign with the row is
+ * the same rotation; failing that, one whose scheduled times fall within
+ * ROTATION_TIME_TOLERANCE_MIN is the same rotation with a corrected callsign;
+ * failing both, the row is a NEW rotation and gets its own Visit. Before this
+ * (18-07-2026) the second rotation of the day silently overwrote the first
+ * (D-ASIM lost its real arrival/departure).
  *
  * Returns `{ record, wasCreated }` so callers can distinguish first import
  * from re-import without relying on the timestamp heuristic (BUG-6 fix).
@@ -100,11 +152,16 @@ export async function upsertVisit(args: {
   aircraftId: string;
   palmaDay: Date | string;
   operatorId?: string | null;
+  match?: VisitMatchHint;
 }): Promise<{ record: Awaited<ReturnType<typeof prisma.visit.create>>; wasCreated: boolean }> {
   const palmaDay = args.palmaDay instanceof Date ? args.palmaDay : palmaDayUtc(args.palmaDay);
-  const existing = await prisma.visit.findFirst({
-    where: { aircraftId: args.aircraftId, palmaDay },
-  });
+
+  const existing = args.match
+    ? await findVisitByRotation(args.aircraftId, palmaDay, args.match)
+    : await prisma.visit.findFirst({
+        where: { aircraftId: args.aircraftId, palmaDay },
+      });
+
   if (existing) {
     if (!existing.operatorId && args.operatorId) {
       const updated = await prisma.visit.update({
@@ -123,6 +180,55 @@ export async function upsertVisit(args: {
     },
   });
   return { record: created, wasCreated: true };
+}
+
+/** Pick the visit of the day that IS this row's rotation, or null for "new rotation". */
+async function findVisitByRotation(
+  aircraftId: string,
+  palmaDay: Date,
+  match: VisitMatchHint
+): Promise<Awaited<ReturnType<typeof prisma.visit.create>> | null> {
+  const excluded = new Set(match.excludeVisitIds || []);
+  const visits = (
+    (await prisma.visit.findMany({
+      where: { aircraftId, palmaDay },
+      include: {
+        movements: { select: { direction: true, callsign: true, eta: true, etd: true } },
+      },
+      orderBy: { createdAt: "asc" },
+    })) as VisitWithMovements[]
+  ).filter((v) => !excluded.has(v.id));
+  if (!visits.length) return null;
+
+  const stripMovements = (v: VisitWithMovements) => {
+    const { movements: _movements, ...record } = v;
+    return record;
+  };
+
+  const callsigns = new Set(
+    (match.callsigns || [])
+      .filter((c): c is string => Boolean(c))
+      .map((c) => c.toUpperCase().trim())
+  );
+  if (callsigns.size) {
+    const byCallsign = visits.find((v) =>
+      v.movements.some((m) => callsigns.has(m.callsign.toUpperCase().trim()))
+    );
+    if (byCallsign) return stripMovements(byCallsign);
+  }
+
+  // No callsign in common — same rotation only if the scheduled times line up
+  // (corrected callsign). Pick the closest visit within tolerance.
+  let best: { visit: VisitWithMovements; delta: number } | null = null;
+  for (const v of visits) {
+    for (const m of v.movements) {
+      const delta =
+        m.direction === "ARRIVAL" ? timeDelta(match.eta, m.eta) : timeDelta(match.etd, m.etd);
+      if (delta === null || delta > ROTATION_TIME_TOLERANCE_MIN) continue;
+      if (!best || delta < best.delta) best = { visit: v, delta };
+    }
+  }
+  return best ? stripMovements(best.visit) : null;
 }
 
 /**

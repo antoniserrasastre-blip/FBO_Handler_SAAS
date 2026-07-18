@@ -122,6 +122,10 @@ export async function PUT(req: NextRequest) {
   let updated = 0;
   let cancelled = 0;
 
+  // Visits already claimed by rows of THIS import — two rows of the same PDF
+  // (double rotation) must never merge into the same visit.
+  const claimedVisitIds = new Set<string>();
+
   for (const f of flights) {
     const callsign: string = f.callsign;
     const registration: string = f.registration;
@@ -153,14 +157,23 @@ export async function PUT(req: NextRequest) {
       callsignForOperator: callsign,
     });
 
-    // Visit keyed by aircraft + arrival palmaDay. If arrived earlier (pernocta),
+    // Visit keyed by aircraft + arrival palmaDay, disambiguated by callsign +
+    // hora so a second rotation of the same day gets its OWN visit instead of
+    // overwriting the first (D-ASIM 18-07). If arrived earlier (pernocta),
     // the visit lives in the arrival's day; the departure leg refers to the same
     // Visit even though it's "on" the target sheet.
     const { record: visit, wasCreated: visitWasCreated } = await upsertVisit({
       aircraftId: aircraft.id,
       palmaDay: arrDate,
       operatorId,
+      match: {
+        callsigns: [callsign, f.departureCallsign],
+        eta: f.eta || null,
+        etd: f.etd || null,
+        excludeVisitIds: [...claimedVisitIds],
+      },
     });
+    claimedVisitIds.add(visit.id);
 
     // Visit plan fields (type, arrivalDate, departureDate) are always updated —
     // these are PDF plan data, not handler-editable operational fields.

@@ -361,8 +361,9 @@ describe("upsertVisit — idempotence", () => {
     // (aircraftId, palmaDay). There is NO database-level unique constraint on
     // this pair (only @@index). Therefore a race condition between two
     // concurrent imports of the same aircraft+day can create duplicate visits.
-    // Proposed fix: add @@unique([aircraftId, palmaDay]) to schema.prisma and
-    // switch to prisma.visit.upsert() — tracked as a separate increment.
+    // A @@unique([aircraftId, palmaDay]) is NOT an option since the double-
+    // rotation fix (18-07-2026): several visits per aircraft+day are legal.
+    // Serialising concurrent imports would be a separate increment.
     "uses findFirst not findUnique — no DB-level uniqueness on aircraftId+palmaDay (race condition risk documented)",
     async () => {
       mockFindFirst.mockResolvedValue(null);
@@ -375,6 +376,194 @@ describe("upsertVisit — idempotence", () => {
       expect(mockFindFirst).toHaveBeenCalled();
     }
   );
+});
+
+// ---------------------------------------------------------------------------
+// upsertVisit — double rotations (match by callsign + hora, 18-07-2026 fix)
+// ---------------------------------------------------------------------------
+
+describe("upsertVisit — rotation matching (callsign + hora)", () => {
+  let mockFindFirst: ReturnType<typeof vi.fn>;
+  let mockFindMany: ReturnType<typeof vi.fn>;
+  let mockUpdate: ReturnType<typeof vi.fn>;
+  let mockCreate: ReturnType<typeof vi.fn>;
+
+  /** A visit as returned by findMany with the movements include. */
+  function makeVisitWithMovements(
+    id: string,
+    movements: Array<Record<string, unknown>>,
+    overrides: Record<string, unknown> = {}
+  ) {
+    return {
+      ...makeVisit({ id, ...overrides }),
+      movements: movements.map((m) => ({ eta: null, etd: null, ...m })),
+    };
+  }
+
+  beforeEach(() => {
+    vi.resetModules();
+    mockFindFirst = vi.fn();
+    mockFindMany = vi.fn();
+    mockUpdate = vi.fn();
+    mockCreate = vi.fn();
+
+    vi.doMock("@/lib/db", () => ({
+      prisma: {
+        visit: {
+          findFirst: mockFindFirst,
+          findMany: mockFindMany,
+          update: mockUpdate,
+          create: mockCreate,
+        },
+      },
+    }));
+  });
+
+  afterEach(() => {
+    vi.doUnmock("@/lib/db");
+  });
+
+  it("without a match hint keeps the legacy findFirst path (enrichment callers)", async () => {
+    mockFindFirst.mockResolvedValue(makeVisit({ operatorId: "op-1" }));
+
+    const { upsertVisit } = await import("./upsert");
+    await upsertVisit({ aircraftId: "ac-1", palmaDay: "2025-06-12" });
+
+    expect(mockFindFirst).toHaveBeenCalledOnce();
+    expect(mockFindMany).not.toHaveBeenCalled();
+  });
+
+  it("with a hint and no visits that day, creates one (wasCreated=true)", async () => {
+    mockFindMany.mockResolvedValue([]);
+    mockCreate.mockResolvedValue(makeVisit());
+
+    const { upsertVisit } = await import("./upsert");
+    const result = await upsertVisit({
+      aircraftId: "ac-1",
+      palmaDay: "2025-06-12",
+      match: { callsigns: ["NJE721CK"], eta: "12:00" },
+    });
+
+    expect(mockFindFirst).not.toHaveBeenCalled();
+    expect(result.wasCreated).toBe(true);
+  });
+
+  it("matches the visit that shares a callsign (normal re-import) and strips movements from the record", async () => {
+    const v1 = makeVisitWithMovements("v-1", [
+      { direction: "ARRIVAL", callsign: "ASH101", eta: "08:00" },
+      { direction: "DEPARTURE", callsign: "ASH102", etd: "10:00" },
+    ], { operatorId: "op-1" });
+    mockFindMany.mockResolvedValue([v1]);
+
+    const { upsertVisit } = await import("./upsert");
+    const result = await upsertVisit({
+      aircraftId: "ac-1",
+      palmaDay: "2025-06-12",
+      match: { callsigns: ["ash102"], eta: "18:00", etd: "20:00" },
+    });
+
+    expect(mockCreate).not.toHaveBeenCalled();
+    expect(result.record.id).toBe("v-1");
+    expect(result.wasCreated).toBe(false);
+    expect("movements" in result.record).toBe(false);
+  });
+
+  it("matches by hora within tolerance when the callsign was corrected (errata)", async () => {
+    const v1 = makeVisitWithMovements("v-1", [
+      { direction: "ARRIVAL", callsign: "ASH101", eta: "08:00" },
+      { direction: "DEPARTURE", callsign: "ASH102", etd: "10:00" },
+    ], { operatorId: "op-1" });
+    mockFindMany.mockResolvedValue([v1]);
+
+    const { upsertVisit } = await import("./upsert");
+    const result = await upsertVisit({
+      aircraftId: "ac-1",
+      palmaDay: "2025-06-12",
+      // Corrected callsigns, times slid 30 min — same rotation.
+      match: { callsigns: ["ASH201", "ASH202"], eta: "08:30", etd: "10:30" },
+    });
+
+    expect(mockCreate).not.toHaveBeenCalled();
+    expect(result.record.id).toBe("v-1");
+  });
+
+  it("creates a SECOND visit for a second rotation of the same day (D-ASIM regression)", async () => {
+    // Rotation 1 already imported: arrival 06:55, departure 09:30.
+    const v1 = makeVisitWithMovements("v-1", [
+      { direction: "ARRIVAL", callsign: "ASH101", eta: "06:55" },
+      { direction: "DEPARTURE", callsign: "ASH102", etd: "09:30" },
+    ], { operatorId: "op-1" });
+    mockFindMany.mockResolvedValue([v1]);
+    mockCreate.mockResolvedValue(makeVisit({ id: "v-2" }));
+
+    const { upsertVisit } = await import("./upsert");
+    // Rotation 2 of the same aircraft: different callsigns, hours apart.
+    const result = await upsertVisit({
+      aircraftId: "ac-1",
+      palmaDay: "2025-06-12",
+      match: { callsigns: ["ASH201", "ASH202"], eta: "12:42", etd: "14:30" },
+    });
+
+    expect(mockCreate).toHaveBeenCalledOnce();
+    expect(result.record.id).toBe("v-2");
+    expect(result.wasCreated).toBe(true);
+  });
+
+  it("never merges into a visit already claimed by a sibling row (excludeVisitIds), even with the same callsign", async () => {
+    const v1 = makeVisitWithMovements("v-1", [
+      { direction: "ARRIVAL", callsign: "SHT100", eta: "07:00" },
+      { direction: "DEPARTURE", callsign: "SHT100", etd: "09:00" },
+    ], { operatorId: "op-1" });
+    mockFindMany.mockResolvedValue([v1]);
+    mockCreate.mockResolvedValue(makeVisit({ id: "v-2" }));
+
+    const { upsertVisit } = await import("./upsert");
+    const result = await upsertVisit({
+      aircraftId: "ac-1",
+      palmaDay: "2025-06-12",
+      match: { callsigns: ["SHT100"], eta: "13:00", etd: "15:00", excludeVisitIds: ["v-1"] },
+    });
+
+    expect(mockCreate).toHaveBeenCalledOnce();
+    expect(result.record.id).toBe("v-2");
+    expect(result.wasCreated).toBe(true);
+  });
+
+  it("picks the CLOSEST visit when several fall within tolerance", async () => {
+    const v1 = makeVisitWithMovements("v-1", [
+      { direction: "DEPARTURE", callsign: "ASH102", etd: "10:00" },
+    ], { operatorId: "op-1" });
+    const v2 = makeVisitWithMovements("v-2", [
+      { direction: "DEPARTURE", callsign: "ASH202", etd: "11:00" },
+    ], { operatorId: "op-1" });
+    mockFindMany.mockResolvedValue([v1, v2]);
+
+    const { upsertVisit } = await import("./upsert");
+    const result = await upsertVisit({
+      aircraftId: "ac-1",
+      palmaDay: "2025-06-12",
+      match: { callsigns: ["ASH999"], etd: "10:50" },
+    });
+
+    expect(result.record.id).toBe("v-2");
+  });
+
+  it("treats times as wrapping around midnight (23:50 vs 00:20 = 30 min apart)", async () => {
+    const v1 = makeVisitWithMovements("v-1", [
+      { direction: "DEPARTURE", callsign: "ASH102", etd: "23:50" },
+    ], { operatorId: "op-1" });
+    mockFindMany.mockResolvedValue([v1]);
+
+    const { upsertVisit } = await import("./upsert");
+    const result = await upsertVisit({
+      aircraftId: "ac-1",
+      palmaDay: "2025-06-12",
+      match: { callsigns: ["ASH999"], etd: "00:20" },
+    });
+
+    expect(mockCreate).not.toHaveBeenCalled();
+    expect(result.record.id).toBe("v-1");
+  });
 });
 
 // ---------------------------------------------------------------------------
