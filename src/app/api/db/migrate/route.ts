@@ -97,7 +97,9 @@ const V2_TABLES = [
   `CREATE INDEX IF NOT EXISTS "Visit_aircraftId_idx" ON "Visit"("aircraftId")`,
   `CREATE INDEX IF NOT EXISTS "Visit_palmaDay_idx" ON "Visit"("palmaDay")`,
   `CREATE INDEX IF NOT EXISTS "Visit_operatorId_idx" ON "Visit"("operatorId")`,
-  `CREATE UNIQUE INDEX IF NOT EXISTS "Visit_aircraftId_palmaDay_key" ON "Visit"("aircraftId","palmaDay")`,
+  // 18-07-2026: índice NO único — varias visitas por avión+día son legales
+  // (dobles rotaciones). El unique antiguo se elimina en el paso de abajo.
+  `CREATE INDEX IF NOT EXISTS "Visit_aircraftId_palmaDay_idx" ON "Visit"("aircraftId","palmaDay")`,
 
   // Movement
   `CREATE TABLE IF NOT EXISTS "Movement" (
@@ -377,32 +379,25 @@ async function runMigration(req: NextRequest) {
       }
     }
 
-    // Visit unique index — idempotent. Fails only if duplicate rows exist.
-    // NOTE: If the live DB has duplicate (aircraftId, palmaDay) rows, this will
-    // return a 409. Deduplicate first:
-    //   DELETE FROM Visit WHERE id NOT IN (
-    //     SELECT MIN(id) FROM Visit GROUP BY aircraftId, palmaDay
-    //   );
-    log.push("== Visit unique index ==");
+    // Visit rotation index — 18-07-2026: el UNIQUE (aircraftId, palmaDay) se
+    // ELIMINA porque las dobles rotaciones del mismo día son legales (cada
+    // rotación su propia Visit; identidad por callsign + hora en upsertVisit).
+    // Se sustituye por un índice normal para conservar el lookup.
+    log.push("== Visit rotation index (drop unique, keep lookup) ==");
     try {
+      await client.execute(`DROP INDEX IF EXISTS "Visit_aircraftId_palmaDay_key"`);
+      log.push("  ✓ dropped Visit_aircraftId_palmaDay_key (unique)");
       await client.execute(
-        `CREATE UNIQUE INDEX IF NOT EXISTS "Visit_aircraftId_palmaDay_key" ON "Visit"("aircraftId","palmaDay")`
+        `CREATE INDEX IF NOT EXISTS "Visit_aircraftId_palmaDay_idx" ON "Visit"("aircraftId","palmaDay")`
       );
-      log.push("  ✓ Visit_aircraftId_palmaDay_key");
+      log.push("  ✓ Visit_aircraftId_palmaDay_idx");
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      if (msg.includes("already exists")) {
-        log.push("  ⊘ skipped (already exists): Visit_aircraftId_palmaDay_key");
-      } else {
-        log.push(`  ✗ Visit unique index failed: ${msg}`);
-        return NextResponse.json(
-          {
-            error: `Visit unique index failed (likely duplicate rows): ${msg}. Deduplicate with: DELETE FROM Visit WHERE id NOT IN (SELECT MIN(id) FROM Visit GROUP BY aircraftId, palmaDay)`,
-            log,
-          },
-          { status: 409 },
-        );
-      }
+      log.push(`  ✗ Visit rotation index failed: ${msg}`);
+      return NextResponse.json(
+        { error: `Visit rotation index failed: ${msg}`, log },
+        { status: 500 },
+      );
     }
 
     return NextResponse.json({ success: true, reset, log });

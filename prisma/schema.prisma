@@ -140,7 +140,9 @@ model Visit {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([aircraftId, palmaDay])
+  // Varias visitas por avión+día son LEGALES (dobles rotaciones, 18-07-2026).
+  // La identidad de rotación la resuelve upsertVisit por callsign + hora.
+  @@index([aircraftId, palmaDay])
   @@index([aircraftId])
   @@index([palmaDay])
   @@index([operatorId])

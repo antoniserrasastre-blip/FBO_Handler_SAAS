@@ -107,7 +107,9 @@ const V2_TABLES = [
   `CREATE INDEX IF NOT EXISTS "Visit_aircraftId_idx" ON "Visit"("aircraftId")`,
   `CREATE INDEX IF NOT EXISTS "Visit_palmaDay_idx" ON "Visit"("palmaDay")`,
   `CREATE INDEX IF NOT EXISTS "Visit_operatorId_idx" ON "Visit"("operatorId")`,
-  `CREATE UNIQUE INDEX IF NOT EXISTS "Visit_aircraftId_palmaDay_key" ON "Visit"("aircraftId","palmaDay")`,
+  // 18-07-2026: índice NO único — varias visitas por avión+día son legales
+  // (dobles rotaciones). El unique antiguo se elimina en el paso de abajo.
+  `CREATE INDEX IF NOT EXISTS "Visit_aircraftId_palmaDay_idx" ON "Visit"("aircraftId","palmaDay")`,
 
   `CREATE TABLE IF NOT EXISTS "Movement" (
     "id" TEXT NOT NULL PRIMARY KEY,
@@ -364,25 +366,21 @@ async function main() {
     }
   }
 
-  // Unique index on Visit(aircraftId, palmaDay) — idempotent via IF NOT EXISTS.
-  // NOTE: If the live DB already has duplicate (aircraftId, palmaDay) rows this
-  // will fail with "UNIQUE constraint failed". Deduplicate first by running:
-  //   DELETE FROM Visit WHERE id NOT IN (
-  //     SELECT MIN(id) FROM Visit GROUP BY aircraftId, palmaDay
-  //   );
-  console.log("\n→ Ensuring Visit unique index...");
+  // Visit rotation index — 18-07-2026: el UNIQUE (aircraftId, palmaDay) se
+  // ELIMINA porque las dobles rotaciones del mismo día son legales (cada
+  // rotación su propia Visit; identidad por callsign + hora en upsertVisit).
+  // Se sustituye por un índice normal para conservar el lookup.
+  console.log("\n→ Visit rotation index (drop unique, keep lookup)...");
   try {
+    await client.execute(`DROP INDEX IF EXISTS "Visit_aircraftId_palmaDay_key"`);
+    console.log("  ✓ dropped Visit_aircraftId_palmaDay_key (unique)");
     await client.execute(
-      `CREATE UNIQUE INDEX IF NOT EXISTS "Visit_aircraftId_palmaDay_key" ON "Visit"("aircraftId","palmaDay")`
+      `CREATE INDEX IF NOT EXISTS "Visit_aircraftId_palmaDay_idx" ON "Visit"("aircraftId","palmaDay")`
     );
-    console.log("  ✓ Visit_aircraftId_palmaDay_key");
+    console.log("  ✓ Visit_aircraftId_palmaDay_idx");
   } catch (e) {
-    if (e.message?.includes("already exists")) {
-      console.log("  ⊘ skipped (already exists): Visit_aircraftId_palmaDay_key");
-    } else {
-      console.error(`  ✗ Visit unique index failed: ${e.message}`);
-      throw e;
-    }
+    console.error(`  ✗ Visit rotation index failed: ${e.message}`);
+    throw e;
   }
 
   const after = await client.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name");

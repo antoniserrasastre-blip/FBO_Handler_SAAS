@@ -9,7 +9,8 @@
 // updating the migration script.  That is exactly the goal.
 //
 // The test also verifies that:
-//   - The Visit unique index (aircraftId, palmaDay) is present.
+//   - The Visit rotation index: unique (aircraftId, palmaDay) DROPPED
+//     (double rotations legal since 18-07-2026), plain lookup index present.
 //   - Key new columns (AENA fields, commercialFlag, isStateAircraft, ata/atd)
 //     appear in the migration SQL.
 
@@ -198,10 +199,15 @@ describe("Migration drift guard — schema.prisma vs migrate-v2-schema.mjs", () 
     });
   });
 
-  describe("Visit unique index is present in migration", () => {
-    it('CREATE UNIQUE INDEX for (aircraftId, palmaDay)', () => {
-      expect(migrateSrc).toContain('"Visit_aircraftId_palmaDay_key"');
-      expect(migrateSrc).toContain('ON "Visit"("aircraftId","palmaDay")');
+  describe("Visit rotation index (18-07-2026: unique dropped, double rotations legal)", () => {
+    it("drops the old unique index and creates a plain lookup index", () => {
+      expect(migrateSrc).toContain('DROP INDEX IF EXISTS "Visit_aircraftId_palmaDay_key"');
+      expect(migrateSrc).toContain(
+        'CREATE INDEX IF NOT EXISTS "Visit_aircraftId_palmaDay_idx" ON "Visit"("aircraftId","palmaDay")'
+      );
+    });
+    it("never re-creates the unique variant", () => {
+      expect(migrateSrc).not.toContain("CREATE UNIQUE INDEX IF NOT EXISTS \"Visit_aircraftId_palmaDay_key\"");
     });
   });
 
