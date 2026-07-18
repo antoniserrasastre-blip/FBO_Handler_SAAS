@@ -1,6 +1,6 @@
 # Estado — FBO Handler SaaS
 
-_Última actualización: 2026-06-11_
+_Última actualización: 2026-07-18_
 
 > Este fichero se reescribe en cada sesión de trabajo. Refleja el momento presente, no el historial.
 
@@ -25,6 +25,16 @@ formato ADSBx) + polling adaptativo + estado `FINAL` (alerta de corta final) + p
 **después** de desplegar la fix run (la tubería ATA/ATD que el live tracking alimenta era parte
 de los bugs). Medio plazo: receptor ADS-B propio en el FBO.
 
+**Bugfix dobles rotaciones (2026-07-18):** `upsertVisit` keyeaba por avión+palmaDay y la 2ª
+rotación del día pisaba a la 1ª (caso D-ASIM 18-07, detectado en el piloto escribano). Fix en dos
+commits desplegados en verde: `06fdbb9` (matching por **callsign + hora ±90 min**, hint desde
+import y quick-add, visitas ya reclamadas excluidas por pasada) y `75df350` (fuera el
+`@@unique(aircraftId, palmaDay)` — chocaba con el create de la 2ª visita; migrado en schema,
+`migrate-v2-schema.mjs` y `/api/db/migrate`, drift test invertido). Suite 1147 pass. D-ASIM
+18-07 **reparado en producción vía API** (visita LUA379W con ATA 12:42Z / ATD 14:30Z; la de
+LUA180Y intacta) — la reparación misma verificó el fix e2e. Reabre el race documentado de
+imports concurrentes (riesgo aceptado: operador único).
+
 ## Decisiones de alcance (MVP)
 
 - **GenDec aparcado (2026-06-02)** — sin cambios, código intacto y dormido.
@@ -34,6 +44,10 @@ de los bugs). Medio plazo: receptor ADS-B propio en el FBO.
 
 ## Pendientes activos
 
+- [ ] **Migrar el target Vercel/Turso (18-07)**: el unique de Visit sigue vivo allí — hasta
+  migrarlo, una doble rotación devuelve 500 en ese target. Vía: `POST /api/db/migrate` con
+  header `x-setup-secret` contra la URL de Vercel (o `npm run db:push-turso` con creds
+  `TURSO_*`). Credenciales/URL no están en sirvici — lo tiene Toni.
 - [ ] **Migración live tracking a adsb.lol** ← el siguiente bloque — ver plan arriba.
 - [ ] Verificar tras el primer import post-deploy: sweep NO_SHOW ejecutado (484 históricos),
   fantasmas fuera de la hoja, contadores cabecera=banner, y re-pasar el bot QA para confirmar.
@@ -63,7 +77,9 @@ de los bugs). Medio plazo: receptor ADS-B propio en el FBO.
 - Warning lint `isOvernight` — **HECHO** (renombrado `_isOvernight` por el integrador).
 
 ### Decisiones de producto pendientes (del informe QA)
-- [ ] Cómo etiquetar rotaciones dobles del mismo avión el mismo día (caso EC-OGB, B2).
+- [ ] Cómo etiquetar rotaciones dobles del mismo avión el mismo día (caso EC-OGB, B2) —
+  la **capa de datos quedó resuelta el 18-07** (cada rotación su propia Visit); pendiente solo
+  si la UI quiere distinguirlas visualmente (badge "2ª rotación" o similar).
 - [ ] Qué señal de urgencia quiere rampa en el FlightChip de `/` (B4 se arregló en alertas y
   orden; el chip sigue sin color de urgencia por decisión pendiente).
 - [ ] Unificar `isArrivalToday/isDepartureToday` de `diaHelpers` con `movementCounts` (quedaron

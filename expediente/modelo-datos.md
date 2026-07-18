@@ -55,7 +55,10 @@ Notas de relación reales (no asumir):
 - `type?`: `TURNAROUND` | `OVERNIGHT` | null (constante `VISIT_TYPES` en `v2.ts`).
 - `arrivalDate?`, `departureDate?`, `notes?`.
 - FK `assignedToId?` → User (relación `AssignedVisits`, handler asignado por el coordinador).
-- Único: `@@unique([aircraftId, palmaDay])`. Índices: `aircraftId`, `palmaDay`, `operatorId`, `assignedToId`.
+- **SIN unicidad avión+día (18-07-2026)**: varias Visits por avión+`palmaDay` son legales
+  (dobles rotaciones del mismo día). La identidad de rotación la resuelve `upsertVisit` por
+  **callsign + hora** (match callsign → hora ±90 min → visita nueva); ver `src/lib/v2/upsert.ts`.
+  Índices: `aircraftId`, `palmaDay`, `(aircraftId, palmaDay)`, `operatorId`, `assignedToId`.
 
 ### Movement
 - FK `visitId` → Visit (Cascade). Único: `@@unique([visitId, direction])` (máx. 1 ARRIVAL + 1 DEPARTURE).
