@@ -108,7 +108,7 @@ export interface VisitMatchHint {
  * movement's for both to count as the same rotation when the callsign changed
  * (daily correction / errata). Beyond it the row is a new rotation.
  */
-const ROTATION_TIME_TOLERANCE_MIN = 90;
+export const ROTATION_TIME_TOLERANCE_MIN = 90;
 
 function hhmmToMinutes(t: string): number | null {
   const m = /^(\d{1,2}):(\d{2})/.exec(t.trim());
@@ -117,7 +117,7 @@ function hhmmToMinutes(t: string): number | null {
 }
 
 /** Minutes between two HH:MM times, wrapping around midnight; null if unparseable. */
-function timeDelta(a: string | null | undefined, b: string | null | undefined): number | null {
+export function timeDelta(a: string | null | undefined, b: string | null | undefined): number | null {
   if (!a || !b) return null;
   const ma = hhmmToMinutes(a);
   const mb = hhmmToMinutes(b);

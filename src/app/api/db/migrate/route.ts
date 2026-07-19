@@ -34,6 +34,20 @@ const V2_TABLES = [
   )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS "User_email_key" ON "User"("email")`,
 
+  // AgentToken — credencial MCP estática revocable (rol AGENT). Sprint 01
+  // mcp-lectura (19-07-2026). Back-relation User.agentTokens ⇄ AgentToken.userId.
+  `CREATE TABLE IF NOT EXISTS "AgentToken" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "name" TEXT NOT NULL,
+    "tokenHash" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "revokedAt" DATETIME,
+    "lastUsedAt" DATETIME,
+    CONSTRAINT "AgentToken_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "AgentToken_tokenHash_key" ON "AgentToken"("tokenHash")`,
+
   // DaySheet — V2 version (opt-in day rows with notes + closed flag).
   // The old V1 DaySheet (no notes/closed) is dropped in V1_DROPS; recreated here.
   `CREATE TABLE IF NOT EXISTS "DaySheet" (

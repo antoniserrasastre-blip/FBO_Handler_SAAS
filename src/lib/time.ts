@@ -55,6 +55,51 @@ export function getZuluNow() {
 }
 
 /**
+ * Madrid wall-clock reading of an instant, encoded as a UTC-ms value
+ * (Date.UTC of the local Y-M-D H:M:S). Module-private building block for
+ * palmaMidnightUtc — the encoding makes wall-clock arithmetic exact.
+ */
+function madridWallClockUtcMs(instant: Date): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Europe/Madrid",
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "numeric",
+    second: "numeric",
+    hourCycle: "h23",
+  }).formatToParts(instant);
+  const get = (type: string) => parseInt(parts.find((p) => p.type === type)?.value ?? "0", 10);
+  return Date.UTC(get("year"), get("month") - 1, get("day"), get("hour"), get("minute"), get("second"));
+}
+
+/**
+ * Returns the UTC instant at which the given Palma (Europe/Madrid) civil day
+ * BEGINS — local midnight expressed in UTC. In summer (CEST) civil day D
+ * starts at D-1 22:00Z; in winter (CET) at D-1 23:00Z.
+ *
+ * This is the complement of palmaDayUtc(): palmaDayUtc gives the civil-day
+ * KEY (midnight UTC of the local date, a calendar label); this gives the real
+ * INSTANT the day starts, for windowing timestamp columns. Accepts the same
+ * inputs as palmaDayUtc (undefined = now, Date instant, "YYYY-MM-DD").
+ *
+ * The offset is derived via Intl, never applied by hand: start from the
+ * UTC-midnight guess and subtract the wall-clock delta Intl reports,
+ * iterating once more to absorb DST edges.
+ */
+export function palmaMidnightUtc(input?: Date | string): Date {
+  const civil = palmaDayUtc(input); // canonical Y-M-D of the civil day, as UTC midnight
+  let instant = civil.getTime();
+  for (let i = 0; i < 2; i++) {
+    const diff = madridWallClockUtcMs(new Date(instant)) - civil.getTime();
+    if (diff === 0) break;
+    instant -= diff;
+  }
+  return new Date(instant);
+}
+
+/**
  * Returns the Madrid wall-clock time as total minutes (hour*60 + minute)
  * for the given instant, computed via Intl — independent of the process TZ.
  *

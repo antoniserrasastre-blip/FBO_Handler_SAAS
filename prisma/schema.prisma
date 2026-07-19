@@ -24,6 +24,24 @@ model User {
   servicePresets CustomServicePreset[]
   shifts    Shift[]
   assignedVisits Visit[] @relation("AssignedVisits")
+  agentTokens AgentToken[]
+}
+
+// ============================================================================
+// AgentToken — credencial estática revocable de un agente MCP (rol AGENT).
+// El token en claro solo se muestra al crearlo; aquí vive su hash sha256.
+// Sprint 01 mcp-lectura (19-07-2026).
+// ============================================================================
+
+model AgentToken {
+  id         String    @id @default(cuid())
+  name       String
+  tokenHash  String    @unique
+  userId     String
+  user       User      @relation(fields: [userId], references: [id])
+  createdAt  DateTime  @default(now())
+  revokedAt  DateTime?
+  lastUsedAt DateTime?
 }
 
 // ============================================================================
