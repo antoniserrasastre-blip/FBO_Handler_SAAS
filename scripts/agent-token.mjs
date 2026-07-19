@@ -10,14 +10,16 @@
 //   node scripts/agent-token.mjs list
 import { createHash, randomBytes } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
-import { PrismaLibSql } from "@prisma/adapter-libsql";
 
 const AGENT_EMAIL = "agent-claude@mallorcair.com";
 const AGENT_NAME = "agent-claude";
 
-function makePrisma() {
-  // Mismo criterio que src/lib/db.ts: Turso (Vercel) vía adapter, si no SQLite local.
+async function makePrisma() {
+  // Mismo criterio que src/lib/db.ts: Turso (Vercel) vía adapter, si no SQLite
+  // local. El adapter se importa PEREZOSO (igual que db.ts): sus deps no están
+  // en la imagen standalone de sirvici y un import top-level revienta allí.
   if (process.env.TURSO_DATABASE_URL) {
+    const { PrismaLibSql } = await import("@prisma/adapter-libsql");
     const adapter = new PrismaLibSql({
       url: process.env.TURSO_DATABASE_URL,
       authToken: process.env.TURSO_AUTH_TOKEN,
@@ -100,7 +102,7 @@ async function list(prisma) {
 
 async function main() {
   const [cmd, arg] = process.argv.slice(2);
-  const prisma = makePrisma();
+  const prisma = await makePrisma();
   try {
     switch (cmd) {
       case "create":
