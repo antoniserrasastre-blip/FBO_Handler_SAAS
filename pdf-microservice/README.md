@@ -1,8 +1,9 @@
 # pdf-microservice
 
 Express microservice that receives handler PDFs over HTTP and returns
-structured JSON. Designed to run on a local server (sirvici) and be exposed
-to the Vercel-hosted Next.js app via Cloudflare Tunnel.
+structured JSON. Designed to run on a local server (sirvici), next to the
+self-hosted Next.js app (same host; the Vercel/Turso second deploy target
+reaches it via Cloudflare Tunnel).
 
 ## Endpoints
 

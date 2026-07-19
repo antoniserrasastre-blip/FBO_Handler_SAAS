@@ -189,12 +189,10 @@ Máquina de estados de vuelo (distinta del ciclo de servicio):
 - `PARKED`: si ETD a ≤90 min (y >−60) → `TURNAROUND`.
 - `TURNAROUND`: si `paxDepState === BOARDED` → `BOARDING`.
 
-> NOTA (deuda conocida): la lógica de auto-transición está **duplicada** en
-> `flights/[id]/route.ts` y `services/[id]/route.ts` y ha **divergido**. La de
-> vuelo tiene el guard `rawBody.state === undefined` y reusa una variable
-> `autoTransition` para el EventLog; la de servicio no tiene ese guard (siempre
-> corre tras un cambio de estado de servicio) y escribe el EventLog con
-> `movementId`. Ambas comparten `suggestNextState`, pero el wrapping es distinto.
+> NOTA (deuda RESUELTA el 11-06-2026, commit `1557ee0`): la auto-transición que
+> estaba duplicada y divergida entre `flights/[id]/route.ts` y
+> `services/[id]/route.ts` se unificó en `src/lib/autoTransition.ts` — eventos
+> SSE idénticos en ambos caminos y EventLog con el **código** de estado.
 
 ---
 

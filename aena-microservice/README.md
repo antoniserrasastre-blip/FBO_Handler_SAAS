@@ -1,9 +1,10 @@
 # aena-microservice
 
 Express microservice that computes AENA aerodrome fees for movements
-coming from the FBO Handler SAAS app. Designed to run on `sirvici` and
-be exposed to the Vercel-hosted Next.js app via Cloudflare Tunnel
-(`aena.randomite.space` → `localhost:3002`).
+coming from the FBO Handler SAAS app. Designed to run on `sirvici`, next
+to the self-hosted Next.js app (same host; the Vercel/Turso second deploy
+target reaches it via Cloudflare Tunnel, `aena.randomite.space` →
+`localhost:3002`).
 
 The tariff source is the **Guía de Tarifas AENA, Edición Marzo 2026**.
 Currently scoped to **LEPA (Palma de Mallorca)**.
@@ -102,5 +103,5 @@ See `.env.example`.
   `MAdB_JETS_20260225_.xlsx` (EASA Jet Noise DB, Issue 52).
 - `src/routes/aircraft.js` — GET/PUT `/aircraft/:registration`.
 
-Future folders: `src/calc/`, `src/tariffs/lepa-2026-03.json`,
+Calculation modules (implemented): `src/calc/`, `src/tariffs/lepa-2026-03.json`,
 `src/routes/calculate.js`.

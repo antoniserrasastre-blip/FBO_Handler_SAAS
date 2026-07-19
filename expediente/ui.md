@@ -37,11 +37,12 @@ ruta (ver columna "Tab").
 - `VisitCard.tsx` — Tarjeta central de producción (shape v2: Visit + dos Movements ARRIVAL/DEPARTURE). Usada en `/` y en el prototipo. Compone `MovementRow`, badges helix, `ServiceChipRow`, `StateStepper`, `OpsToggleStrip`, `ChecklistPanel`, `AddServicePicker`, `TurnaroundCountdown`. Delega la edición pesada en `FlightDetailPanel` vía `onOpenDetail`.
 - `CompactFlightGrid.tsx` — Densidad compacta de la Lista: reparte movimientos en zonas 🛬 Llegadas / 🛫 Salidas (clasificación por movimiento, no por estado; desde 11-06-2026 la zona Salidas exige `etd` — una visit sin salida planificada no genera tarjeta — y cada zona ordena por la hora de su propio leg: ARR por eta, DEP por etd). Los banners de zona cuentan con el criterio único de `src/lib/movementCounts.ts` (coinciden con la cabecera). Cada tarjeta muestra, según la dirección del leg de hoy: matrícula + servicios pendientes, aeropuerto (ICAO + ciudad en lenguaje natural resuelta server-side, truncada con tooltip), hora, y pasaje/tripulación (`paxArrivalReal ?? paxArrival` y homólogos de salida; real del handler si existe, si no el estimado del import). Cada tarjeta abre la `VisitCard`.
 - `FlightDetailPanel.tsx` (`app/dia/`) — Panel lateral de detalle/edición completa de un vuelo. Reutilizado por `/dia` y `/timeline`. Aloja inline-edits, servicios, lost items, pax/crew, `PrintLabelsButton` y la sección GenDec (en pausa). Desde 11-06-2026: el header muestra ambos callsigns cuando llegada y salida difieren ("NJE492E → NJE648C") y "Actividad reciente" se alimenta de los `eventLogs` que ahora sí llegan en el GET `/api/flights`.
-- `FlightCard.tsx` — Tarjeta legacy v1. **Huérfana: ya no se importa en ningún sitio** (candidata a borrado).
+
+> Huérfanos legacy borrados el 19-07-2026 (auditoría ICM): `FlightCard.tsx` (tarjeta v1),
+> `ServiceCheckbox.tsx`, `CrewInventory.tsx`, `LiveStatusBadge.tsx` — 0 imports verificados.
 
 ### Servicios y operativa (subcomponentes de VisitCard)
 - `ServiceChipRow.tsx` — Fila de chips de servicio con su estado.
-- `ServiceCheckbox.tsx` — UI de estado de servicio (PENDING→ARRIVED→DELIVERED). Solo lo consume el legacy `FlightCard` (huérfano de facto).
 - `AddServicePicker.tsx` — Selector para añadir servicios a un vuelo.
 - `ChecklistPanel.tsx` — Tareas por movimiento según el puesto activo.
 - `OpsToggleStrip.tsx` — Tira de toggles operativos.
@@ -52,7 +53,6 @@ ruta (ver columna "Tab").
 
 ### Personas (PII)
 - `PassengerCrewModal.tsx` — Modal que carga y muestra pax/crew (datos sensibles) bajo petición. Componente más reutilizado (`/`, `/dia`, `/timeline`, prototipo). Incluye la sección GenDec (en pausa).
-- `CrewInventory.tsx` — Almacén de tripulación (STORED→RETURNED). **Huérfano: no se importa en ningún sitio.**
 
 ### Turno y resumen
 - `ShiftBar.tsx` — Barra del turno activo (puesto, horas). Solo en `/`.
@@ -70,7 +70,7 @@ ruta (ver columna "Tab").
 ### Edición inline y primitivos
 - `InlineTextEdit.tsx`, `InlineNumber.tsx`, `InlineSelect.tsx`, `QuickTimeEdit.tsx` — Edición in situ de campos.
 - `Modal.tsx` — Modal genérico. `Toast.tsx` — Notificaciones. `Icons.tsx` — Iconos locales.
-- `LastModifiedBadge.tsx`; `LiveStatusBadge.tsx` (este último huérfano).
+- `LastModifiedBadge.tsx`.
 - Familia `helix/*`: badges y pills de dominio (`OperatorBadge`, `AircraftBadge`, `CategoryPill`, `RqstChip`, `PetCount`, `PassportField`, `Pill`/`StatePill`, `MovementRow`, `ServicePip`, `Stat`/`StatBand`, `SegmentedControl`, `Button`/`HelixButton`).
 
 ### GenDec — APARCADO

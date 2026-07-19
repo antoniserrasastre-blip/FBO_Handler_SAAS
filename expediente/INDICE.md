@@ -54,6 +54,6 @@ Decisiones técnicas permanentes (no cambian con frecuencia, justifican el "por 
 | Bus de eventos SSE | `src/lib/events.ts` |
 | Encriptación pasaportes | `src/lib/crypto.ts` |
 | Dashboard principal | `src/app/page.tsx` |
-| Tarjeta de vuelo (viva) | `src/components/VisitCard.tsx`. OJO: `FlightCard.tsx` está HUÉRFANO (0 imports), no es la tarjeta de producción |
+| Tarjeta de vuelo (viva) | `src/components/VisitCard.tsx` (la legacy `FlightCard.tsx` se borró el 19-07-2026) |
 | Parser Excel: detección de matrícula | `looksLikeRegistration` / `insertDash` en `src/lib/excelParser.ts` |
 | Auto-transición de estado (duplicada) | `suggestNextState` en `src/lib/flightUrgency.ts`, aplicada en `flights/[id]/route.ts` y `services/[id]/route.ts` |

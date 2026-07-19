@@ -1,6 +1,6 @@
 # Estado — FBO Handler SaaS
 
-_Última actualización: 2026-07-18_
+_Última actualización: 2026-07-19_
 
 > Este fichero se reescribe en cada sesión de trabajo. Refleja el momento presente, no el historial.
 
@@ -10,7 +10,7 @@ Sistema en producción en `sirvici`, expuesto vía Cloudflare Tunnel en `fbo.ran
 
 **QA + fix run multi-agente (2026-06-11):** un bot QA navegó producción como un humano y una run
 de agentes (sondas + causa raíz + verificación adversarial) confirmó **26 bugs**; el informe vive
-en La Bestia: `workspace/coding/projects/fbo-handler-saas/qa-run_11-06-2026.md`. El mismo día se
+en La Bestia: `workspace/coding/projects/fbo-handler-saas/references/_archivo/qa-run_11-06-2026.md`. El mismo día se
 aplicó la fix run (26/26) y se **DESPLEGÓ**: commits `1557ee0` (fixes) + `159ab70` (cierre),
 deploy verde (verify + Build&Deploy + healthcheck). Suite **1137 pass / 0 fail / 53 skip**.
 Piezas nuevas: `src/lib/autoTransition.ts`, `noShowSweep.ts`, `movementCounts.ts`, tests de
@@ -34,6 +34,14 @@ import y quick-add, visitas ya reclamadas excluidas por pasada) y `75df350` (fue
 18-07 **reparado en producción vía API** (visita LUA379W con ATA 12:42Z / ATD 14:30Z; la de
 LUA180Y intacta) — la reparación misma verificó el fix e2e. Reabre el race documentado de
 imports concurrentes (riesgo aceptado: operador único).
+
+**Auditoría ICM (2026-07-19, desde La Bestia):** repo documentalmente sano — el expediente se
+queda como está. Higiene aplicada: borrados los 4 componentes huérfanos legacy (`FlightCard`,
+`ServiceCheckbox`, `CrewInventory`, `LiveStatusBadge`, ~1.900 líneas, 0 imports), corregido el
+drift "Vercel-hosted" de los READMEs de microservicios, nota de auto-transición de `flujos.md`
+marcada resuelta, creado `historial/2026-07.md`. En La Bestia se montó el nodo ICM completo
+(stages + KB de dominio con fichas matching-rotaciones y reglas-TZ) — listo para
+`/design-sprints` del spike MCP.
 
 ## Decisiones de alcance (MVP)
 
@@ -69,6 +77,11 @@ imports concurrentes (riesgo aceptado: operador único).
 
 ### Equipaje de bodega — impresión
 - [ ] Mini-agente ZPL local — sin cambios (bloqueado por IPs/IT).
+
+### Deuda de estructura (auditoría ICM 19-07-2026)
+- [ ] God-component `src/app/page.tsx` (998 l.): extraer `useHomeFilters()` (estado de filtros +
+  persistencia localStorage + migración de clave vieja) y aislar la barra de filtros. No urgente;
+  no mezclar con el sprint MCP.
 
 ### Otros bugs menores
 - [ ] BUG-4 — doble-prefijo `ZZ` en `excelParser.ts`, sigue.
