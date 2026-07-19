@@ -91,6 +91,40 @@ engañoso; (3) estados de servicio (`paxState`…) se aceptan verbatim sin valid
 (contrato pineado, la UI tampoco valida). Playtest de uso real de Toni: próximo turno.
 Proceso completo en La Bestia: `workspace/.../stages/03_sprint/output/02_mcp-escritura-lote/`.
 
+**Sprint MCP 03 `mcp-ciclo-completo` (2026-07-19) — CERRADO y DESPLEGADO. EL SPIKE ESTÁ
+COMPLETO (3/3 sprints del plan, los tres el mismo día):** el agente opera el ciclo de vida
+entero del turno. Commit `1e3ea85` (9 archivos, +2452), deploy verde (verify + Build&Deploy;
+sin migración de schema). Piezas: `cancel_movement`/`uncancel_movement` (soft-cancel
+`flightCategory→CANCELLED` por movement con **guardia de evidencia** — ATA/ATD exige
+`confirmar:true` estricto, sin él error con los datos del vuelo, caso EC-NGX/CS-LTO — y
+**conservación exacta**: el cancel guarda `{motivo, previo}` en EventLog JSON y el uncancel
+restaura ese previo; cancel sobre cancelado / uncancel sin cancel del agente → error sin
+efectos); `create_flight` (rotación fuera del daily vía `upsertVisit` con hint callsign+hora
+— hereda el fix D-ASIM; ≥1 pierna `{hora, origen?/destino?}`, cierra el caso 9H-YOU; horas
+ancladas al día civil de la `fecha`, state EXPECTED solo-create; `operador` solo contra
+Operators existentes); `fix_plan` (allowlist `FIX_PLAN_FIELDS` de campos de PLAN,
+COMPLEMENTARIO al de S2 — disjunción testeada —, atómico pre-BD, direccionalidad eta/origin
+ARRIVAL y etd/destination DEPARTURE, `registration` re-apunta la Visit entera sin tocar
+visitId); `import_daily` (PDF base64 con guardas %PDF+tamaño, **dry-run por defecto** con la
+reconciliación toCancel del POST y CERO escrituras; persistir = `confirmar:true` por el
+camino del PUT atribuido al agente, **SIN cancelIds jamás** — los toCancel vuelven con sus
+movementIds para confirmarlos uno a uno con `cancel_movement`); **pipeline de import
+extraído a `src/lib/v2/import-core.ts`** — el route REST queda como wrapper con
+comportamiento **byte-idéntico verificado** (sonda NEW vs HEAD: bytes+status+efectos).
+`tools/list` = **10**. Proceso: 48 tests rojos (44 por razón correcta) → verde suite
+**1271 pass / 0 fail / 53 skip** sin tocar un test → review adversarial **PASA a la
+primera** (44/44 sondas en `/tmp/probes-s3/`: conservación 500 secuencias, fuzz de guardia,
+dry-run = diff 0 filas en todas las tablas, D-ASIM en umbral/wrap, 112 horas vs oráculo DST,
+33 args malformados → español sin internals). Smoke en prod 7/7 (tools/list=10, get_day
+18-07 = 40 rotaciones, guardias vivas, 401). Rutina del escribano: TODO el ciclo por MCP,
+REST solo emergencia. **Deuda nueva de la review (MENOR, dueño endurecimiento suelto):**
+(1) fechas de calendario imposibles pasan el regex y ruedan ("31-02"→03-03) en
+`create_flight.fecha`/`fix_plan.scheduledDate`; (2) divergencia REST teórica e inalcanzable
+si `file.arrayBuffer()` fallara. **Gate abierto (el único): playtest-demo de Toni** — turno
+completo por MCP (próximo turno con daily real o día histórico si pasa el PDF); su veredicto
+= criterio de éxito y cierre de la ficha `fbo-mcp-spike-demo`. Proceso completo en La
+Bestia: `workspace/.../stages/03_sprint/output/03_mcp-ciclo-completo/`.
+
 ## Decisiones de alcance (MVP)
 
 - **GenDec aparcado (2026-06-02)** — sin cambios, código intacto y dormido.
