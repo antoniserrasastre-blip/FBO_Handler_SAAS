@@ -56,11 +56,40 @@ Turso en `agent-token.mjs`). Suite **1163 pass / 0 fail / 53 skip**, dos deploys
 Token minteado en prod (`claude-code-la-bestia`, CLI `scripts/agent-token.mjs`); playtest real
 OK (initialize/tools/list/get_day/find_flight D-ASIM 2 candidatas/event_log 166 entradas del
 18-07 con filtro `usuario:"CLAUDE"` — el name va en MAYÚSCULAS; 401 sin/mal token). Deuda
-menor de la review (no bloqueante): find_flight acepta horas >23:59 (delta negativo fantasma),
+menor de la review (no bloqueante): ~~find_flight acepta horas >23:59~~ (**m2 CERRADO en S2**),
 substring numérico de matrícula genera candidatos-ruido, "LTM 604" con espacio no matchea el
 callsign LTM604, AgentToken sin cobertura en el drift-test (`MODELS_TO_CHECK`), sin `orderBy`
-determinista en las queries de visits. Dueño: sprint 02/03 del plan o endurecimiento suelto.
+determinista en las queries de visits. Dueño: sprint 03 del plan o endurecimiento suelto.
 Proceso completo en La Bestia: `workspace/.../stages/03_sprint/output/01_mcp-lectura/`.
+
+**Sprint MCP 02 `mcp-escritura-lote` (2026-07-19) — CERRADO y DESPLEGADO:** el agente ya
+ESCRIBE. Commit `edab06a` (16 archivos, +1939), deploy verde (verify + Build&Deploy + db push +
+healthcheck). Piezas: lib `src/lib/mcp/horas.ts` (`normalizarHora`: `{hora,tz}` o string,
+**default LOCAL** — así dicta Toni —, todo vía Intl Europe/Madrid, bordes DST pineados:
+local inexistente 29-03 02:xx → error, ambigua 25-10 02:xx → primera CEST; confirmación dual
+"11:23Z / 13:23 local"); tool `update_movements` (lote, allowlist = EXACTAMENTE
+`MOVEMENT_OPERATIONAL_FIELDS` de upsert.ts ahora exportado, fila ATÓMICA con validación
+pre-BD — estructura/Int32/state/horas —, parcial explícito: fila mala → `{ok:false, motivo}`
+en español sin internals y el lote sigue; EventLog "Actualizado por agente" + SSE por fila;
+`applyAutoTransition` reusada solo sin `state` explícito); tool `log_incident` (modelo
+`Incident` nuevo, append-only, `vuelo` opcional por visitId o texto libre vía findFlight —
+ambiguo → candidatos, jamás adivina; EventLog "Incidencia registrada"); DDL de Incident en
+ambos caminos de migración + drift-guard extendido (`MODELS_TO_CHECK` + `RELATION_FIELDS`);
+endurecimiento m2 en find_flight (horas fuera de 00:00–23:59 = token de texto). Proceso:
+35 tests rojos → verde → review adversarial **NO PASA** (MAYOR: el lote abortaba a mitad
+comiteando el prefijo y filtrando errores Prisma en inglés; +2 MENORES) → 2 loops de
+regresiones (17 tests robustez) → **PASA** (32/32 sondas propias, ~78k puntos TZ contra
+oráculo Intl independiente, 0 desviaciones; E2E con Prisma real sobre BD scratch). Suite
+**1223 pass / 0 fail / 53 skip**. Smoke en prod: tools/list = 5, escritura con rechazo
+por-fila en español (cero datos tocados), get_day 18-07 = 40 rotaciones, m2 vivo, 401 OK,
+tabla Incident aplicada. Rutina del escribano actualizada (escrituras por MCP; REST =
+fallback + import). **Deuda nueva de la review (no bloqueante, dueño S3 o endurecimiento
+suelto):** (1) sin `$transaction` por fila — si eventLog/autoTransition casca TRAS un update
+exitoso, la fila se reporta ko con la escritura ya persistida (no alcanzable por input, solo
+fallo de infra entre escrituras); (2) BD caída → motivo genérico "revisa los valores"
+engañoso; (3) estados de servicio (`paxState`…) se aceptan verbatim sin validar enum
+(contrato pineado, la UI tampoco valida). Playtest de uso real de Toni: próximo turno.
+Proceso completo en La Bestia: `workspace/.../stages/03_sprint/output/02_mcp-escritura-lote/`.
 
 ## Decisiones de alcance (MVP)
 
