@@ -71,11 +71,13 @@ Proceso completo en La Bestia: `workspace/.../stages/03_sprint/output/01_mcp-lec
 
 ## Pendientes activos
 
-- [ ] **Migrar el target Vercel/Turso (18-07, ampliado 19-07)**: el unique de Visit sigue vivo
-  allí (doble rotación → 500) y ahora falta también la tabla `AgentToken` (el MCP da error de
-  BD en ese target hasta migrar). Vía: `POST /api/db/migrate` con header `x-setup-secret`
-  contra la URL de Vercel (o `npm run db:push-turso` con creds `TURSO_*`). Credenciales/URL no
-  están en sirvici — lo tiene Toni. **Límite del plan de sprints: antes del cierre de S2.**
+- **Target Vercel/Turso — RETIRADO (decisión de Toni 19-07-2026)**: target único sirvici; el
+  Turso no se migra (se quedó con el unique viejo y sin AgentToken, da igual: nadie lo sirve
+  como canon). El código tolerante a Turso (`db.ts`, `db:push-turso`, `/api/db/migrate`)
+  queda dormido en el repo, no se extiende ni se testea.
+- [ ] **Apagar el proyecto Vercel** (Toni, dashboard suyo; sin límite de sprint): que el
+  deploy viejo no siga sirviendo código desactualizado en público. Borrar/pausar proyecto y,
+  si se quiere, la BD Turso.
 - [ ] **Migración live tracking a adsb.lol** ← el siguiente bloque — ver plan arriba.
 - [ ] Verificar tras el primer import post-deploy: sweep NO_SHOW ejecutado (484 históricos),
   fantasmas fuera de la hoja, contadores cabecera=banner, y re-pasar el bot QA para confirmar.
