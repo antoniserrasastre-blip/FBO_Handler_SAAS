@@ -40,8 +40,27 @@ queda como está. Higiene aplicada: borrados los 4 componentes huérfanos legacy
 `ServiceCheckbox`, `CrewInventory`, `LiveStatusBadge`, ~1.900 líneas, 0 imports), corregido el
 drift "Vercel-hosted" de los READMEs de microservicios, nota de auto-transición de `flujos.md`
 marcada resuelta, creado `historial/2026-07.md`. En La Bestia se montó el nodo ICM completo
-(stages + KB de dominio con fichas matching-rotaciones y reglas-TZ) — listo para
-`/design-sprints` del spike MCP.
+(stages + KB de dominio con fichas matching-rotaciones y reglas-TZ); el `/design-sprints` se
+corrió el mismo día (plan APROBADO: 3 sprints) y el sprint 01 se ejecutó a continuación (abajo).
+
+**Sprint MCP 01 `mcp-lectura` (2026-07-19) — CERRADO y DESPLEGADO:** la app tiene superficie de
+agente. `POST /api/mcp` (JSON-RPC 2.0 Streamable HTTP stateless, dispatcher propio, cero deps
+nuevas) con auth por `AgentToken` (Bearer, hash sha256, revocable; user `agent-claude` rol
+AGENT — el user `CLAUDE` HANDLER de cookies sigue intacto) y 3 tools de solo-lectura:
+`get_day`, `find_flight` (ancla callsign+hora reusando `timeDelta`/tolerancia de upsert.ts;
+matrícula ambigua devuelve TODOS los candidatos) y `get_event_log` (ventana por día CIVIL de
+Palma vía `palmaMidnightUtc`, nuevo export de `time.ts` — la review adversarial cazó y cerró la
+ventana UTC-naive, hallazgo M1). Commits `aacec17` (sprint, 15 tests nuevos) + `add173f`
+(ajustes de playtest: el middleware NextAuth excluye `/api/mcp`; import perezoso del adapter
+Turso en `agent-token.mjs`). Suite **1163 pass / 0 fail / 53 skip**, dos deploys verdes.
+Token minteado en prod (`claude-code-la-bestia`, CLI `scripts/agent-token.mjs`); playtest real
+OK (initialize/tools/list/get_day/find_flight D-ASIM 2 candidatas/event_log 166 entradas del
+18-07 con filtro `usuario:"CLAUDE"` — el name va en MAYÚSCULAS; 401 sin/mal token). Deuda
+menor de la review (no bloqueante): find_flight acepta horas >23:59 (delta negativo fantasma),
+substring numérico de matrícula genera candidatos-ruido, "LTM 604" con espacio no matchea el
+callsign LTM604, AgentToken sin cobertura en el drift-test (`MODELS_TO_CHECK`), sin `orderBy`
+determinista en las queries de visits. Dueño: sprint 02/03 del plan o endurecimiento suelto.
+Proceso completo en La Bestia: `workspace/.../stages/03_sprint/output/01_mcp-lectura/`.
 
 ## Decisiones de alcance (MVP)
 
@@ -52,10 +71,11 @@ marcada resuelta, creado `historial/2026-07.md`. En La Bestia se montó el nodo 
 
 ## Pendientes activos
 
-- [ ] **Migrar el target Vercel/Turso (18-07)**: el unique de Visit sigue vivo allí — hasta
-  migrarlo, una doble rotación devuelve 500 en ese target. Vía: `POST /api/db/migrate` con
-  header `x-setup-secret` contra la URL de Vercel (o `npm run db:push-turso` con creds
-  `TURSO_*`). Credenciales/URL no están en sirvici — lo tiene Toni.
+- [ ] **Migrar el target Vercel/Turso (18-07, ampliado 19-07)**: el unique de Visit sigue vivo
+  allí (doble rotación → 500) y ahora falta también la tabla `AgentToken` (el MCP da error de
+  BD en ese target hasta migrar). Vía: `POST /api/db/migrate` con header `x-setup-secret`
+  contra la URL de Vercel (o `npm run db:push-turso` con creds `TURSO_*`). Credenciales/URL no
+  están en sirvici — lo tiene Toni. **Límite del plan de sprints: antes del cierre de S2.**
 - [ ] **Migración live tracking a adsb.lol** ← el siguiente bloque — ver plan arriba.
 - [ ] Verificar tras el primer import post-deploy: sweep NO_SHOW ejecutado (484 históricos),
   fantasmas fuera de la hoja, contadores cabecera=banner, y re-pasar el bot QA para confirmar.
