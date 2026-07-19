@@ -135,14 +135,20 @@ afterEach(() => {
 });
 
 // ---------------------------------------------------------------------------
-// T8 — tools/list expone EXACTAMENTE las 5 tools.
+// T8 — tools/list: las 5 tools de S1/S2 siguen presentes.
+// NOTA S3: la regresión CANÓNICA del recuento total de tools/list (= 10) vive
+// ahora en src/app/api/mcp/route.ciclo.test.ts. Aquí ya NO se pinea el recuento
+// exacto (S3 añadió 5 tools de ciclo de vida): sólo se guarda que las 5 de
+// S1/S2 no desaparecieron ni cambiaron de nombre.
 // ---------------------------------------------------------------------------
-describe("tools/list — T8 exactamente 5 tools", () => {
-  it("expone get_day, find_flight, get_event_log, update_movements, log_incident y nada más", async () => {
+describe("tools/list — S2 sigue exponiendo sus 5 tools", () => {
+  it("get_day, find_flight, get_event_log, update_movements y log_incident siguen presentes", async () => {
     const { res, rpc } = await callRpc(toolsList, VALID_TOKEN);
     expect(res.status).toBe(200);
-    const names = (rpc.result?.tools ?? []).map((t) => t.name).sort();
-    expect(names).toEqual(["find_flight", "get_day", "get_event_log", "log_incident", "update_movements"]);
+    const names = (rpc.result?.tools ?? []).map((t) => t.name);
+    for (const n of ["find_flight", "get_day", "get_event_log", "log_incident", "update_movements"]) {
+      expect(names).toContain(n);
+    }
   });
 
   it("no expone NINGUNA tool de editar/borrar incidencias (append-only)", async () => {

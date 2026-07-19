@@ -21,7 +21,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  *   - "YYYY-MM-DD"         → esa fecha civil (directa, sin conversión TZ)
  * Reusa palmaDayUtc de @/lib/time — jamás sumar offsets a mano.
  */
-function resolvePalmaDay(fecha?: string): Date {
+export function resolvePalmaDay(fecha?: string): Date {
   if (!fecha) return palmaDayUtc();
   const trimmed = fecha.trim();
   const ddmmyyyy = /^(\d{2})-(\d{2})-(\d{4})$/.exec(trimmed);

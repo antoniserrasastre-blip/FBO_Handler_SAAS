@@ -2,7 +2,23 @@ import { NextRequest } from "next/server";
 import { verifyAgentToken } from "@/lib/mcp/auth";
 import { getDay, findFlight, getEventLog } from "@/lib/mcp/tools";
 import { updateMovements, logIncident } from "@/lib/mcp/tools-escritura";
-import type { AgentAuth, LogIncidentArgs, UpdateMovementsArgs } from "@/lib/mcp/contract";
+import {
+  cancelMovement,
+  uncancelMovement,
+  createFlight,
+  fixPlan,
+  importDaily,
+} from "@/lib/mcp/tools-ciclo";
+import type {
+  AgentAuth,
+  CancelMovementArgs,
+  CreateFlightArgs,
+  FixPlanArgs,
+  ImportDailyArgs,
+  LogIncidentArgs,
+  UncancelMovementArgs,
+  UpdateMovementsArgs,
+} from "@/lib/mcp/contract";
 
 // Superficie MCP del agente (Streamable HTTP stateless, JSON-RPC 2.0).
 // Contrato pineado: src/lib/mcp/contract.ts
@@ -99,6 +115,95 @@ const TOOLS = [
       required: ["texto"],
     },
   },
+  {
+    name: "cancel_movement",
+    description:
+      "Cancela un movimiento (soft-cancel: flightCategory → CANCELLED) guardando el estado previo en el EventLog para poder deshacerlo con uncancel_movement. GUARDIA DE EVIDENCIA: si el movimiento tiene ATA o ATD, exige confirmar:true explícito; sin él devuelve error con los datos del vuelo para que verifiques contra el eSIA. motivo obligatorio (queda en la auditoría).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        movementId: { type: "string", description: "id del Movement (de get_day / find_flight / import_daily.toCancel)." },
+        motivo: { type: "string", description: "Por qué se cancela (p. ej. 'CNX en eSIA'). Queda en el EventLog." },
+        confirmar: { type: "boolean", description: "Obligatorio true si el movimiento tiene ATA/ATD (ya operó)." },
+      },
+      required: ["movementId", "motivo"],
+    },
+  },
+  {
+    name: "uncancel_movement",
+    description:
+      "Deshace un cancel hecho por el agente: restaura el flightCategory previo EXACTO desde el EventLog del cancel. Sólo funciona sobre movimientos cancelados con cancel_movement (de otros cancels no hay previo fiable).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        movementId: { type: "string", description: "id del Movement cancelado por el agente." },
+      },
+      required: ["movementId"],
+    },
+  },
+  {
+    name: "create_flight",
+    description:
+      "Crea una rotación fuera del daily (Visit + piernas) con su pierna de llegada: matrícula + callsign + al menos una pierna (llegada {hora, origen?} y/o salida {hora, destino?}). Horas en local por defecto, 'HH:MMZ' o {hora, tz}; se guardan en Zulu con confirmación dual. Identidad = callsign + hora: una 2ª rotación del mismo avión y día crea Visit PROPIA (no pisa la 1ª); si la rotación ya existe, añade las piernas que falten.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        registration: { type: "string", description: "Matrícula (p. ej. '9H-YOU')." },
+        callsign: { type: "string", description: "Callsign de la rotación (ambas piernas)." },
+        fecha: { type: "string", description: "Día civil de Palma 'DD-MM-YYYY' o 'YYYY-MM-DD'. Vacío = hoy." },
+        llegada: {
+          type: "object",
+          description: "Pierna de llegada: { hora (obligatoria), origen? }.",
+          properties: {
+            hora: { description: "'HH:MM' (local por defecto), 'HH:MMZ' o { hora, tz }." },
+            origen: { type: "string", description: "Aeropuerto de origen (opcional)." },
+          },
+          required: ["hora"],
+        },
+        salida: {
+          type: "object",
+          description: "Pierna de salida: { hora (obligatoria), destino? }.",
+          properties: {
+            hora: { description: "'HH:MM' (local por defecto), 'HH:MMZ' o { hora, tz }." },
+            destino: { type: "string", description: "Aeropuerto de destino (opcional)." },
+          },
+          required: ["hora"],
+        },
+        operador: { type: "string", description: "Opcional: Operator EXISTENTE por código ICAO o nombre. Omitir para resolverlo del callsign." },
+      },
+      required: ["registration", "callsign"],
+    },
+  },
+  {
+    name: "fix_plan",
+    description:
+      "Corrige campos de PLAN de un movimiento sin re-importar el PDF: callsign, registration (re-apunta la rotación ENTERA a otra matrícula), eta/etd, origin/destination, scheduledDate. NO toca campos operativos (esos van por update_movements) ni la identidad de la Visit. Horas en local por defecto o Zulu, confirmación dual.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        movementId: { type: "string", description: "id del Movement a corregir." },
+        campos: {
+          type: "object",
+          description:
+            "Mapa campo→valor. Sólo campos de plan: callsign, registration, eta (sólo ARRIVAL), etd (sólo DEPARTURE), origin (sólo ARRIVAL), destination (sólo DEPARTURE), scheduledDate. null limpia eta/etd/origin/destination.",
+        },
+      },
+      required: ["movementId", "campos"],
+    },
+  },
+  {
+    name: "import_daily",
+    description:
+      "Importa el daily de Cybermax (PDF en base64). DRY-RUN POR DEFECTO: devuelve el preview (vuelos parseados, avisos y toCancel propuestos) sin escribir NADA en BD ni EventLog. Para persistir, repite la llamada con confirmar:true. Los toCancel NUNCA se aplican en bloque: confírmalos uno a uno contra el eSIA con cancel_movement (el preview incluye sus movementIds).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        pdf_base64: { type: "string", description: "El PDF del daily codificado en base64." },
+        confirmar: { type: "boolean", description: "true = persistir (altas y cambios; toCancel NO se aplica). Ausente/false = sólo preview." },
+      },
+      required: ["pdf_base64"],
+    },
+  },
 ];
 
 interface JsonRpcRequest {
@@ -156,6 +261,21 @@ async function handleToolCall(
         break;
       case "log_incident":
         payload = await logIncident(args as unknown as LogIncidentArgs, auth);
+        break;
+      case "cancel_movement":
+        payload = await cancelMovement(args as unknown as CancelMovementArgs, auth);
+        break;
+      case "uncancel_movement":
+        payload = await uncancelMovement(args as unknown as UncancelMovementArgs, auth);
+        break;
+      case "create_flight":
+        payload = await createFlight(args as unknown as CreateFlightArgs, auth);
+        break;
+      case "fix_plan":
+        payload = await fixPlan(args as unknown as FixPlanArgs, auth);
+        break;
+      case "import_daily":
+        payload = await importDaily(args as unknown as ImportDailyArgs, auth);
         break;
       default:
         return rpcResult(id, {
