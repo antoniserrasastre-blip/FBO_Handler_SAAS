@@ -83,6 +83,13 @@ function bestTimeDelta(queryTime: string, movements: Movement[]): number | null 
   return best;
 }
 
+/** Un token "HH:MM" cuenta como hora sólo si cae en 00:00–23:59 (cierra m2). */
+function isClockTime(token: string): boolean {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(token);
+  if (!m) return false;
+  return Number(m[1]) <= 23 && Number(m[2]) <= 59;
+}
+
 /** Matrícula: exacta o parcial (substring, ≥3 chars), uppercase/trim. */
 function registrationMatches(token: string, registration: string): boolean {
   if (token === registration) return true;
@@ -109,13 +116,15 @@ export async function findFlight(args: {
     include: { movements: true, aircraft: true, operator: true },
   });
 
-  // Tokeniza: la primera "HH:MM" es la hora; el resto son tokens de texto
-  // (candidatos a callsign y/o matrícula), en uppercase/trim.
+  // Tokeniza: la primera "HH:MM" VÁLIDA (00:00–23:59) es la hora; el resto son
+  // tokens de texto (candidatos a callsign y/o matrícula), en uppercase/trim.
+  // Endurecimiento m2 (deuda review S1): un "HH:MM" fuera de rango (25:00,
+  // 12:60, 99:99…) NO es hora — sería un delta fantasma; se trata como texto.
   const rawTokens = args.texto.trim().split(/\s+/).filter(Boolean);
   let queryTime: string | null = null;
   const textTokens: string[] = [];
   for (const tok of rawTokens) {
-    if (queryTime === null && /^\d{1,2}:\d{2}$/.test(tok)) {
+    if (queryTime === null && isClockTime(tok)) {
       queryTime = tok;
     } else {
       textTokens.push(tok.toUpperCase());

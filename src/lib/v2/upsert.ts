@@ -11,7 +11,7 @@ import { palmaDayUtc } from "@/lib/time";
 // initial import.  "Plan" fields (callsign, scheduledDate, origin, destination,
 // eta, etd, crewCount) ARE updated on every reimport.
 // ---------------------------------------------------------------------------
-const MOVEMENT_OPERATIONAL_FIELDS = new Set([
+export const MOVEMENT_OPERATIONAL_FIELDS = new Set([
   "state",
   "paxCount",
   "paxCountReal",

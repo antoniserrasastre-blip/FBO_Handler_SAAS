@@ -25,6 +25,7 @@ model User {
   shifts    Shift[]
   assignedVisits Visit[] @relation("AssignedVisits")
   agentTokens AgentToken[]
+  incidents   Incident[]
 }
 
 // ============================================================================
@@ -42,6 +43,27 @@ model AgentToken {
   createdAt  DateTime  @default(now())
   revokedAt  DateTime?
   lastUsedAt DateTime?
+}
+
+// ============================================================================
+// Incident — incidencia de turno con autor y timestamp, append-only (sin
+// update/delete en ninguna superficie). visitId opcional: incidencia de un
+// vuelo concreto o del turno en general. Sprint 02 mcp-escritura-lote
+// (19-07-2026); las lee /report vía BD, la UI humana no cambia.
+// ============================================================================
+
+model Incident {
+  id        String   @id @default(cuid())
+  visitId   String?
+  visit     Visit?   @relation(fields: [visitId], references: [id], onDelete: SetNull)
+  text      String
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@index([visitId])
+  @@index([authorId])
+  @@index([createdAt])
 }
 
 // ============================================================================
@@ -154,6 +176,7 @@ model Visit {
   lostItems   LostItem[]
   crewItems   CrewItem[]
   eventLogs   EventLog[]
+  incidents   Incident[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

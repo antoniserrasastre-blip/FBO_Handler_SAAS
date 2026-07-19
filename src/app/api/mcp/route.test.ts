@@ -214,14 +214,20 @@ describe("POST /api/mcp — auth", () => {
     expect(rpc.error?.code).toBe(-32001);
   });
 
-  it("200 with exactly the 3 read tools on tools/list for a valid token", async () => {
+  // S2 (mcp-escritura-lote): tools/list pasó de 3 a 5 tools. El EXACTO-5 (y
+  // los inputSchema S1 intactos) viven en route.escritura.test.ts (T8) — un
+  // hecho en un solo sitio. Aquí queda la regresión S1 como SUBSET: las 3
+  // tools de lectura siguen presentes para un token válido.
+  it("200 on tools/list for a valid token — the 3 S1 read tools are present", async () => {
     const { res, rpc } = await callRpc(
       { jsonrpc: "2.0", id: 1, method: "tools/list", params: {} },
       VALID_TOKEN
     );
     expect(res.status).toBe(200);
-    const names = (rpc.result?.tools ?? []).map((t) => t.name).sort();
-    expect(names).toEqual(["find_flight", "get_day", "get_event_log"]);
+    const names = (rpc.result?.tools ?? []).map((t) => t.name);
+    for (const lectura of ["find_flight", "get_day", "get_event_log"]) {
+      expect(names).toContain(lectura);
+    }
   });
 });
 

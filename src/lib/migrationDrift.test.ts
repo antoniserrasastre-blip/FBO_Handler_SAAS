@@ -103,6 +103,9 @@ const RELATION_FIELDS: Record<string, Set<string>> = {
   CrewAssignment: new Set(["movement", "crewMember"]),
   LostItem: new Set(["visit"]),
   EventLog: new Set(["visit", "movement", "user"]),
+  // Sprint 02: `visit`/`author` son relaciones (no columnas SQL); sólo
+  // visitId/text/authorId son columnas reales del DDL de Incident.
+  Incident: new Set(["visit", "author"]),
 };
 
 // Prisma-only meta-fields that don't map to SQL columns
@@ -122,6 +125,9 @@ const MODELS_TO_CHECK: Array<{ prismaModel: string; sqlTable: string }> = [
   { prismaModel: "CrewAssignment", sqlTable: "CrewAssignment" },
   { prismaModel: "LostItem", sqlTable: "LostItem" },
   { prismaModel: "EventLog", sqlTable: "EventLog" },
+  // Sprint 02 mcp-escritura-lote: Incident debe migrarse en ambos caminos.
+  // Nace ROJO hasta que el implementer escriba el DDL en migrate-v2-schema.mjs.
+  { prismaModel: "Incident", sqlTable: "Incident" },
 ];
 
 // ---------------------------------------------------------------------------

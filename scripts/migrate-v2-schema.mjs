@@ -45,6 +45,11 @@ const V2_TABLES = [
     "updatedAt" DATETIME NOT NULL
   )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS "User_email_key" ON "User"("email")`,
+  // Back-relations Prisma de "User" que son RELACIONES, no columnas de la tabla:
+  // "agentTokens" (ver AgentToken) y, desde sprint 02, User."incidents" contra
+  // Incident.authorId. Su cobertura de migración son las tablas AgentToken e
+  // "Incident". El guard de drift necesita ver "incidents" dentro del bloque de
+  // "User", por eso se nombra aquí además de en el DDL de Incident más abajo.
 
   // AgentToken — credencial MCP estática revocable (rol AGENT). Sprint 01
   // mcp-lectura (19-07-2026). El back-relation Prisma User."agentTokens" ⇄
@@ -282,6 +287,24 @@ const V2_TABLES = [
   `CREATE INDEX IF NOT EXISTS "EventLog_visitId_idx" ON "EventLog"("visitId")`,
   `CREATE INDEX IF NOT EXISTS "EventLog_movementId_idx" ON "EventLog"("movementId")`,
   `CREATE INDEX IF NOT EXISTS "EventLog_userId_idx" ON "EventLog"("userId")`,
+
+  // Incident — incidencia de turno append-only (rol AGENT o humano). Sprint 02
+  // mcp-escritura-lote (19-07-2026). Las back-relations Prisma User."incidents"
+  // ⇄ Incident.authorId y Visit."incidents" ⇄ Incident.visitId son RELACIONES,
+  // no columnas en "User"/"Visit": su cobertura de migración es esta tabla (por
+  // eso el guard de drift ve "incidents" aquí, igual que "agentTokens" arriba).
+  `CREATE TABLE IF NOT EXISTS "Incident" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "visitId" TEXT,
+    "text" TEXT NOT NULL,
+    "authorId" TEXT NOT NULL,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "Incident_visitId_fkey" FOREIGN KEY ("visitId") REFERENCES "Visit" ("id") ON DELETE SET NULL ON UPDATE CASCADE,
+    CONSTRAINT "Incident_authorId_fkey" FOREIGN KEY ("authorId") REFERENCES "User" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+  )`,
+  `CREATE INDEX IF NOT EXISTS "Incident_visitId_idx" ON "Incident"("visitId")`,
+  `CREATE INDEX IF NOT EXISTS "Incident_authorId_idx" ON "Incident"("authorId")`,
+  `CREATE INDEX IF NOT EXISTS "Incident_createdAt_idx" ON "Incident"("createdAt")`,
 
   `CREATE TABLE IF NOT EXISTS "CustomServicePreset" (
     "id" TEXT NOT NULL PRIMARY KEY,

@@ -277,6 +277,21 @@ const V2_TABLES = [
   `CREATE INDEX IF NOT EXISTS "EventLog_visitId_idx" ON "EventLog"("visitId")`,
   `CREATE INDEX IF NOT EXISTS "EventLog_movementId_idx" ON "EventLog"("movementId")`,
   `CREATE INDEX IF NOT EXISTS "EventLog_userId_idx" ON "EventLog"("userId")`,
+
+  // Incident — incidencia de turno append-only (sprint 02 mcp-escritura-lote).
+  // Back-relations User.incidents / Visit.incidents (relaciones, no columnas).
+  `CREATE TABLE IF NOT EXISTS "Incident" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "visitId" TEXT,
+    "text" TEXT NOT NULL,
+    "authorId" TEXT NOT NULL,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "Incident_visitId_fkey" FOREIGN KEY ("visitId") REFERENCES "Visit" ("id") ON DELETE SET NULL ON UPDATE CASCADE,
+    CONSTRAINT "Incident_authorId_fkey" FOREIGN KEY ("authorId") REFERENCES "User" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+  )`,
+  `CREATE INDEX IF NOT EXISTS "Incident_visitId_idx" ON "Incident"("visitId")`,
+  `CREATE INDEX IF NOT EXISTS "Incident_authorId_idx" ON "Incident"("authorId")`,
+  `CREATE INDEX IF NOT EXISTS "Incident_createdAt_idx" ON "Incident"("createdAt")`,
 ];
 
 // ---------------------------------------------------------------------------

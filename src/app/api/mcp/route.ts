@@ -1,6 +1,8 @@
 import { NextRequest } from "next/server";
 import { verifyAgentToken } from "@/lib/mcp/auth";
 import { getDay, findFlight, getEventLog } from "@/lib/mcp/tools";
+import { updateMovements, logIncident } from "@/lib/mcp/tools-escritura";
+import type { AgentAuth, LogIncidentArgs, UpdateMovementsArgs } from "@/lib/mcp/contract";
 
 // Superficie MCP del agente (Streamable HTTP stateless, JSON-RPC 2.0).
 // Contrato pineado: src/lib/mcp/contract.ts
@@ -57,6 +59,46 @@ const TOOLS = [
       required: [],
     },
   },
+  {
+    name: "update_movements",
+    description:
+      "Escribe en lote sobre movimientos (Movements) del día: horas reales (ata/atd/tobt dictadas en local o Zulu, se guardan en Zulu con confirmación dual), pax/bags reales, parking, estados de servicio, estado del vuelo. Cada fila es atómica (un campo malo rechaza sólo esa fila) y el lote sigue con las demás; cada escritura deja EventLog. Campos de PLAN (eta/etd/callsign) NO son editables.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        cambios: {
+          type: "array",
+          description: "Una entrada por movimiento a actualizar.",
+          items: {
+            type: "object",
+            properties: {
+              movementId: { type: "string", description: "id del Movement (de get_day / find_flight)." },
+              campos: {
+                type: "object",
+                description:
+                  "Mapa campo→valor. Horas ata/atd/tobt como 'HH:MM' (local por defecto), 'HH:MMZ' o { hora, tz }; null limpia la hora.",
+              },
+            },
+            required: ["movementId", "campos"],
+          },
+        },
+      },
+      required: ["cambios"],
+    },
+  },
+  {
+    name: "log_incident",
+    description:
+      "Registra una incidencia del turno (append-only, persiste en BD con autor y timestamp). 'vuelo' opcional asocia la incidencia a un vuelo por visitId exacto o texto libre (callsign + hora); si es ambiguo devuelve los candidatos y no crea nada. Deja también una entrada en el EventLog.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        texto: { type: "string", description: "Descripción de la incidencia." },
+        vuelo: { type: "string", description: "Opcional: visitId exacto o texto libre (callsign + hora)." },
+      },
+      required: ["texto"],
+    },
+  },
 ];
 
 interface JsonRpcRequest {
@@ -92,7 +134,8 @@ function rpcError(
 
 async function handleToolCall(
   id: string | number | null,
-  params: JsonRpcRequest["params"]
+  params: JsonRpcRequest["params"],
+  auth: AgentAuth
 ): Promise<Response> {
   const name = params?.name;
   const args = params?.arguments ?? {};
@@ -107,6 +150,12 @@ async function handleToolCall(
         break;
       case "get_event_log":
         payload = await getEventLog(args as { fecha?: string; usuario?: string });
+        break;
+      case "update_movements":
+        payload = await updateMovements(args as unknown as UpdateMovementsArgs, auth);
+        break;
+      case "log_incident":
+        payload = await logIncident(args as unknown as LogIncidentArgs, auth);
         break;
       default:
         return rpcResult(id, {
@@ -126,7 +175,7 @@ async function handleToolCall(
   }
 }
 
-async function dispatch(msg: JsonRpcRequest): Promise<Response> {
+async function dispatch(msg: JsonRpcRequest, auth: AgentAuth): Promise<Response> {
   const id = msg?.id ?? null;
   const method = msg?.method;
 
@@ -147,7 +196,7 @@ async function dispatch(msg: JsonRpcRequest): Promise<Response> {
     case "tools/list":
       return rpcResult(id, { tools: TOOLS });
     case "tools/call":
-      return handleToolCall(id, msg.params);
+      return handleToolCall(id, msg.params, auth);
     default:
       return rpcError(id, -32601, `Method not found: ${String(method)}`);
   }
@@ -167,5 +216,5 @@ export async function POST(req: NextRequest): Promise<Response> {
     return rpcError(null, -32700, "Parse error");
   }
 
-  return dispatch(body);
+  return dispatch(body, auth);
 }
