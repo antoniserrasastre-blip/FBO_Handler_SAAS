@@ -1,6 +1,6 @@
 # Estado — FBO Handler SaaS
 
-_Última actualización: 2026-07-19_
+_Última actualización: 2026-07-23_
 
 > Este fichero se reescribe en cada sesión de trabajo. Refleja el momento presente, no el historial.
 
@@ -124,6 +124,48 @@ si `file.arrayBuffer()` fallara. **Gate abierto (el único): playtest-demo de To
 completo por MCP (próximo turno con daily real o día histórico si pasa el PDF); su veredicto
 = criterio de éxito y cierre de la ficha `fbo-mcp-spike-demo`. Proceso completo en La
 Bestia: `workspace/.../stages/03_sprint/output/03_mcp-ciclo-completo/`.
+
+
+**Sprint MCP 04 `board-del-turno` (2026-07-23) — CERRADO y DESPLEGADO. PRIMER SPRINT
+POST-SPIKE (bloque agente embebido + feeds):** el board (web Y MCP) enseña el turno REAL. 3
+commits desplegados en verde (`bfccf66`→`049c148`→`7f64ea7`, `Deploy to Sirvici` success cada
+vez, `/srv` nunca congelado). Cierra las 8 grietas del playtest MCP-nativo del 23-07 (C1-C4 +
+C11-C14):
+- **C1 universo del día compartido** (`src/lib/v2/dayUniverse.ts`, fuente única para
+  `get_day`/`find_flight`/`/api/flights`): `dayUniverseWhere(D)` = `palmaDay==D` ∪
+  `movements.some(scheduledDate==D)` ∪ **arrastre** [D−14,D) — las salidas de aviones llegados
+  días atrás aparecen en el board de hoy (fricción UAG202/JCO007). Arrastre marcado
+  (`arrastre:true`+`palmaDay`). El predicado de arrastre poda **salidas terminales** (OFF_BLOCKS/
+  NO_SHOW en la DEPARTURE) y **rotaciones muertas por no-show** (`movements.none({state:NO_SHOW})`
+  — turnarounds cuya llegada nunca ocurrió no son salidas pendientes).
+- **C2/C3** `estadoRotacion` compuesto (`mostAdvancedState` sobre piernas vivas, reusado de
+  `flightView`); seed del import intacto (DEPARTURE nunca nace >EXPECTED ni con atd).
+- **C4** guardias del matcher (`registrationMatches`): registration vacía/`<3` → solo igualdad
+  exacta (mata el falso ZJONES candidato de cualquier callsign).
+- **C11** `McpMovement+=flightCategory`; `get_day` excluye CANCELLED por defecto + `summary
+  {vivos,cancelados}`; `incluirCancelados` estricto; `find_flight` los marca sin excluir.
+- **C12** `POST /api/mcp/upload` (multipart, token AGENT, guardas %PDF+tamaño, `<uuid>.pdf` TTL
+  1h) → `import_daily` acepta `upload_id` XOR `pdf_base64` (adiós base64 inline). El `upload_id`
+  se valida como UUID ANTES del FS (fix path traversal MAJOR-1 de la review).
+- **C13** kill-switch `LIVE_SEED_TIMES` (default OFF): el feed ya NO siembra ata/atd fantasma;
+  `canSeedTime` puro (guardia para cuando se reactive tras adsb.lol/C9). Snapshot `live*` y
+  EventLog de transición siguen en ambos modos.
+- **C14** huérfanas de EXTRAS (Visits sin movimientos) invisibles en las 3 superficies; siguen
+  en BD para enriquecerse con el PDF.
+Proceso: rojo 65 tests → verde → **review adversarial NO PASA (MAJOR-1 path traversal
+`upload_id`)** → loop (test-writer +6 regresiones → validación UUID) → PASA (0 fugas/15
+vectores). **El smoke prod destapó 2 grietas de C1** que las fixtures no modelaban (arrastre
+inundaba `get_day(hoy)` a 224 vuelos con 103 NO_SHOW + 12 OFF_BLOCKS fantasmas): 2 loops
+rojo→verde→re-review → **board final 109** (40 del día + 69 pernoctas reales PARKED/ON_BLOCKS/
+TURNAROUND/EXPECTED). Suite **1355 pass / 0 fail / 53 skip** · tsc 0 · eslint 0 · build OK.
+**Deuda nueva (MENOR, dueño endurecimiento suelto):** `canSeedTime` no comprueba `atd>=ata`
+(seguro por seenAt monótono + kill-switch OFF); `summary` cuenta piernas de arrastre históricas;
+2-3 salidas de arrastre con pierna NO_SHOW visibles por la rama `scheduledDate==hoy` (artefactos
+de ATD fantasma del feed viejo, C13 los frena). **Gate abierto (el único): playtest-demo de
+Toni** — ahora con el board YA veraz, el siguiente turno MCP-nativo juzga la ficha
+`fbo-mcp-spike-demo`. **Siguiente candidato de la fábrica: S5 `acciones-en-el-board`**
+(cards/Proposal, gate D3). Proceso en La Bestia:
+`workspace/.../stages/03_sprint/output/04_board-del-turno/`.
 
 ## Decisiones de alcance (MVP)
 
