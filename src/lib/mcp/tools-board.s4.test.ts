@@ -476,8 +476,13 @@ function matchArm(v: VisitRow, arm: WhereCond): boolean {
         if (o.lt && v.palmaDay.getTime() >= o.lt.getTime()) return false;
       }
     } else if (k === "movements") {
-      const some = (cond as { some: WhereCond }).some;
-      if (!v.movements.some((m) => matchMovementCond(m, some))) return false;
+      const c = cond as { some?: WhereCond; none?: WhereCond };
+      if (c.some && !v.movements.some((m) => matchMovementCond(m, c.some as WhereCond))) return false;
+      // none: NINGUNA pierna cumple la condición (rotación muerta si alguna hizo NO_SHOW).
+      if (c.none && v.movements.some((m) => matchMovementCond(m, c.none as WhereCond))) return false;
+    } else if (k === "NOT") {
+      // NOT: la sub-condición NO debe cumplirse (equivalente a movements.none aquí).
+      if (matchArm(v, cond as WhereCond)) return false;
     }
   }
   return true;
@@ -555,5 +560,85 @@ describe("get_day / find_flight — el arrastre excluye estados terminales (C1 s
       const shouldAppear = !TERMINAL_STATES.includes(s);
       expect(present.has(`s${i}`)).toBe(shouldAppear);
     });
+  });
+});
+
+// ===========================================================================
+// C1 RE-SMOKE — el arrastre NO debe traer rotaciones MUERTAS por NO_SHOW en
+// CUALQUIER pierna. Re-smoke prod: 103 fantasmas persistían con forma
+// [ARRIVAL NO_SHOW atd/ata null, DEPARTURE EXPECTED atd null etd 09:20]: el
+// avión nunca llegó, así que su salida NO es pendiente real — pero la DEPARTURE
+// "viva" (EXPECTED) burlaba el filtro de estado terminal de la salida.
+// Semántica objetivo: el arrastre trae la visita SÓLO si DEPARTURE viva Y
+// NINGUNA pierna en NO_SHOW → el where suma `movements:{none:{state:NO_SHOW}}`
+// (o `NOT:{movements:{some:{state:NO_SHOW}}}`) SÓLO en la rama de arrastre.
+// ===========================================================================
+
+/** Arrastre con AMBAS piernas (para modelar el turnaround/pernocta muerto). */
+function arrastreRot(id: string, arrState: string, depState: string): VisitRow {
+  return vis({
+    id,
+    palmaDay: new Date(D.getTime() - 3 * DAY_MS), // 20-07-2026, en ventana
+    aircraft: { registration: `REG-${id}` },
+    movements: [
+      mov({ id: `${id}-arr`, direction: "ARRIVAL", callsign: `CS${id}`, eta: "07:00", ata: null, state: arrState, flightCategory: "COMMERCIAL" }),
+      mov({ id: `${id}-dep`, direction: "DEPARTURE", callsign: `CS${id}`, etd: "09:20", atd: null, state: depState, flightCategory: "COMMERCIAL" }),
+    ],
+  });
+}
+
+describe("get_day / find_flight — el arrastre no trae rotaciones muertas por NO_SHOW (C1 re-smoke)", () => {
+  it("arrastre [ARRIVAL NO_SHOW + DEPARTURE EXPECTED atd null] NO aparece en get_day", async () => {
+    universeMock([arrastreRot("dead", "NO_SHOW", "EXPECTED"), arrastreRot("live", "PARKED", "EXPECTED")]);
+    const res = await getDay({ fecha: "2026-07-23" });
+    const ids = res.flights.map((f) => f.visitId);
+    expect(ids).not.toContain("dead");
+    expect(ids).toContain("live");
+  });
+
+  it("arrastre muerto por NO_SHOW tampoco lo propone find_flight", async () => {
+    universeMock([arrastreRot("dead", "NO_SHOW", "EXPECTED")]);
+    const res = await findFlight({ texto: "CSdead", fecha: "2026-07-23" });
+    expect(res.candidates).toHaveLength(0);
+  });
+
+  it("anti-regresión: pernocta VIVA sin pierna NO_SHOW (ARRIVAL PARKED + DEPARTURE EXPECTED) SÍ aparece", async () => {
+    universeMock([arrastreRot("perno", "PARKED", "EXPECTED"), arrastreRot("perno2", "ON_BLOCKS", "EXPECTED")]);
+    const res = await getDay({ fecha: "2026-07-23" });
+    expect(res.flights.map((f) => f.visitId).sort()).toEqual(["perno", "perno2"]);
+  });
+
+  it("BORDE: una visita del PROPIO día (palmaDay==D) con ARRIVAL NO_SHOW SÍ se ve hoy", async () => {
+    // La exclusión de NO_SHOW es SOLO de la rama de arrastre: un no-show de hoy
+    // debe verse en su día (rama 1 palmaDay==D, sin filtro de NO_SHOW).
+    const hoy = vis({
+      id: "hoy-noshow",
+      palmaDay: new Date(D.getTime()),
+      movements: [
+        mov({ id: "h-arr", direction: "ARRIVAL", callsign: "HOY1", eta: "07:00", ata: null, state: "NO_SHOW" }),
+        mov({ id: "h-dep", direction: "DEPARTURE", callsign: "HOY1", etd: "09:20", atd: null, state: "EXPECTED" }),
+      ],
+    });
+    universeMock([hoy]);
+    const res = await getDay({ fecha: "2026-07-23" });
+    expect(res.flights.map((f) => f.visitId)).toContain("hoy-noshow");
+  });
+
+  it("property: un arrastre aparece SII (DEPARTURE viva, atd null, no cancelada) Y ninguna pierna en NO_SHOW", async () => {
+    const combos: Array<{ id: string; arr: string; dep: string }> = [];
+    let i = 0;
+    for (const dep of [...ALIVE_STATES, ...TERMINAL_STATES]) {
+      for (const arr of ["PARKED", "NO_SHOW"]) {
+        combos.push({ id: `c${i++}`, arr, dep });
+      }
+    }
+    universeMock(combos.map((c) => arrastreRot(c.id, c.arr, c.dep)));
+    const res = await getDay({ fecha: "2026-07-23" });
+    const present = new Set(res.flights.map((f) => f.visitId));
+    for (const c of combos) {
+      const depViva = ALIVE_STATES.includes(c.dep); // no terminal
+      const sinNoShow = c.arr !== "NO_SHOW";
+      expect(present.has(c.id)).toBe(depViva && sinNoShow);
+    }
   });
 });

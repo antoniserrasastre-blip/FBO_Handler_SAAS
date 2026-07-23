@@ -61,6 +61,19 @@ describe("dayUniverseWhere — 3 ramas del OR + ventana de arrastre (T1)", () =>
     expect(s).toContain("NO_SHOW");
   });
 
+  it("la rama de ARRASTRE EXCLUYE rotaciones muertas por NO_SHOW en CUALQUIER pierna (none/NOT)", () => {
+    // Re-smoke prod (103 fantasmas persistían): [ARRIVAL NO_SHOW, DEPARTURE
+    // EXPECTED atd null] — la salida "viva" burlaba el filtro de estado terminal
+    // de la DEPARTURE. Un avión que no llegó no tiene salida pendiente real: el
+    // arrastre debe sumar `movements:{none:{state:NO_SHOW}}` (o NOT equivalente).
+    const s = JSON.stringify(dayUniverseWhere(D));
+    // Mecanismo de negación presente en el where.
+    expect(/"none"|"NOT"/.test(s)).toBe(true);
+    // NO_SHOW debe aparecer AL MENOS dos veces: en el notIn de la DEPARTURE y en
+    // la exclusión de rotación muerta (none/NOT) a nivel de visita.
+    expect((s.match(/NO_SHOW/g) ?? []).length).toBeGreaterThanOrEqual(2);
+  });
+
   it("la ventana de arrastre es [D−14, D): gte = D−14, lt = D (calendario sobre la key)", () => {
     const s = JSON.stringify(dayUniverseWhere(D));
     const lowerBound = new Date(D.getTime() - ARRASTRE_WINDOW_DAYS * DAY_MS); // 09-07-2026

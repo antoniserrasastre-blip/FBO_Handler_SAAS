@@ -47,6 +47,11 @@ export function dayUniverseWhere(palmaDay: Date): Prisma.VisitWhereInput {
             // nunca llego) — solo en el arrastre, jamas en el propio dia.
             state: { notIn: [...ARRASTRE_TERMINAL_STATES] },
           },
+          // C1 = "salidas de aviones LLEGADOS": si CUALQUIER pierna hizo
+          // NO_SHOW (el avion nunca llego), la rotacion esta muerta y su
+          // DEPARTURE huerfana (viva pero fantasma) NO es una salida real
+          // pendiente. Excluye la visita entera del arrastre. Solo esta rama.
+          none: { state: NO_SHOW_STATE },
         },
       },
     ],
