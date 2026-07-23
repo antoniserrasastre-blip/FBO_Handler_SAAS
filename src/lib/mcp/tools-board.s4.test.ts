@@ -432,3 +432,128 @@ describe("huérfanas de EXTRAS invisibles en lecturas (T9/C14)", () => {
     expect(res.flights.map((f) => f.visitId)).toContain("v-orphan");
   });
 });
+
+// ===========================================================================
+// C1 SMOKE FIX — el arrastre NO debe traer estados TERMINALES (OFF_BLOCKS /
+// NO_SHOW). Smoke prod: 184/224 arrastre, 115 fantasmas (103 NO_SHOW + 12
+// OFF_BLOCKS) inundaban el board. El fix añade `state NOT IN
+// ("OFF_BLOCKS","NO_SHOW")` a la rama de arrastre de dayUniverseWhere.
+//
+// Como la partición del universo la aplica la BD via el where (findMany está
+// mockeado), aquí el mock RESUELVE el dataset interpretando FIELMENTE el where
+// que produce dayUniverseWhere (la fuente real): así el test es una regresión
+// del CONTENIDO del where, no de una copia. Con el where actual (sin exclusión
+// de state) los fantasmas de arrastre aparecen → ROJO; con el fix, se van.
+// ===========================================================================
+type WhereCond = Record<string, unknown>;
+
+function matchMovementCond(m: MovementRow, cond: WhereCond): boolean {
+  for (const [k, v] of Object.entries(cond)) {
+    const mv = (m as unknown as Record<string, unknown>)[k];
+    if (v === null) {
+      if (mv !== null && mv !== undefined) return false;
+    } else if (v instanceof Date) {
+      if (!(mv instanceof Date) || mv.getTime() !== v.getTime()) return false;
+    } else if (typeof v === "object") {
+      const o = v as Record<string, unknown>;
+      if ("not" in o && mv === o.not) return false;
+      if ("notIn" in o && (o.notIn as unknown[]).includes(mv)) return false;
+    } else if (mv !== v) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function matchArm(v: VisitRow, arm: WhereCond): boolean {
+  for (const [k, cond] of Object.entries(arm)) {
+    if (k === "palmaDay") {
+      if (cond instanceof Date) {
+        if (v.palmaDay.getTime() !== cond.getTime()) return false;
+      } else {
+        const o = cond as { gte?: Date; lt?: Date };
+        if (o.gte && v.palmaDay.getTime() < o.gte.getTime()) return false;
+        if (o.lt && v.palmaDay.getTime() >= o.lt.getTime()) return false;
+      }
+    } else if (k === "movements") {
+      const some = (cond as { some: WhereCond }).some;
+      if (!v.movements.some((m) => matchMovementCond(m, some))) return false;
+    }
+  }
+  return true;
+}
+
+function matchesUniverse(v: VisitRow, where: { OR: WhereCond[] }): boolean {
+  return where.OR.some((arm) => matchArm(v, arm));
+}
+
+/** Mock de findMany que RESUELVE el dataset con el where REAL de dayUniverseWhere. */
+function universeMock(dataset: VisitRow[]) {
+  mocks.visitFindMany.mockImplementation(
+    async (args: { where: { OR: WhereCond[] } }) => dataset.filter((v) => matchesUniverse(v, args.where))
+  );
+}
+
+/** Visita de arrastre (palmaDay dentro de [D−14, D)) con una DEPARTURE dada. */
+function arrastreVisit(id: string, depState: string): VisitRow {
+  return vis({
+    id,
+    palmaDay: new Date(D.getTime() - 3 * DAY_MS), // 20-07-2026, en ventana
+    aircraft: { registration: `REG-${id}` },
+    movements: [
+      mov({
+        id: `${id}-dep`,
+        direction: "DEPARTURE",
+        callsign: `CS${id}`,
+        etd: "20:00",
+        atd: null,
+        state: depState,
+        flightCategory: "COMMERCIAL",
+      }),
+    ],
+  });
+}
+
+const ALIVE_STATES = ["EXPECTED", "ON_BLOCKS", "PARKED", "TURNAROUND", "BOARDING"];
+const TERMINAL_STATES = ["OFF_BLOCKS", "NO_SHOW"];
+
+describe("get_day / find_flight — el arrastre excluye estados terminales (C1 smoke)", () => {
+  it("arrastre con DEPARTURE NO_SHOW (nunca llegó) NO aparece en get_day", async () => {
+    universeMock([arrastreVisit("noshow", "NO_SHOW"), arrastreVisit("vivo", "EXPECTED")]);
+    const res = await getDay({ fecha: "2026-07-23" });
+    const ids = res.flights.map((f) => f.visitId);
+    expect(ids).not.toContain("noshow");
+    expect(ids).toContain("vivo");
+  });
+
+  it("arrastre con DEPARTURE OFF_BLOCKS (ya salió) NO aparece en get_day", async () => {
+    universeMock([arrastreVisit("gone", "OFF_BLOCKS"), arrastreVisit("vivo", "PARKED")]);
+    const res = await getDay({ fecha: "2026-07-23" });
+    const ids = res.flights.map((f) => f.visitId);
+    expect(ids).not.toContain("gone");
+    expect(ids).toContain("vivo");
+  });
+
+  it("arrastre con DEPARTURE NO_SHOW tampoco lo propone find_flight", async () => {
+    universeMock([arrastreVisit("noshow", "NO_SHOW")]);
+    const res = await findFlight({ texto: "CSnoshow", fecha: "2026-07-23" });
+    expect(res.candidates).toHaveLength(0);
+  });
+
+  it("anti-regresión: arrastre VIVO (atd null, no terminal, no cancelado) SÍ aparece", async () => {
+    universeMock(ALIVE_STATES.map((s, i) => arrastreVisit(`alive${i}`, s)));
+    const res = await getDay({ fecha: "2026-07-23" });
+    expect(res.flights).toHaveLength(ALIVE_STATES.length);
+  });
+
+  it("property: un arrastre aparece SII su DEPARTURE está VIVA (no OFF_BLOCKS ni NO_SHOW)", async () => {
+    const all = [...ALIVE_STATES, ...TERMINAL_STATES];
+    universeMock(all.map((s, i) => arrastreVisit(`s${i}`, s)));
+    const res = await getDay({ fecha: "2026-07-23" });
+    const present = new Set(res.flights.map((f) => f.visitId));
+    all.forEach((s, i) => {
+      const shouldAppear = !TERMINAL_STATES.includes(s);
+      expect(present.has(`s${i}`)).toBe(shouldAppear);
+    });
+  });
+});

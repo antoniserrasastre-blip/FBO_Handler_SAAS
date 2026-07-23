@@ -51,6 +51,16 @@ describe("dayUniverseWhere — 3 ramas del OR + ventana de arrastre (T1)", () =>
     expect(s).toContain("CANCELLED"); // como { not: "CANCELLED" }
   });
 
+  it("la rama de ARRASTRE EXCLUYE los estados TERMINALES de la DEPARTURE (OFF_BLOCKS, NO_SHOW)", () => {
+    // Smoke prod (184/224 arrastre, 115 fantasmas): el arrastre debe traer sólo
+    // salidas REALMENTE pendientes (avión en tierra esperando salir). Un
+    // DEPARTURE OFF_BLOCKS ya salió; NO_SHOW nunca llegó — ambos tienen atd null
+    // para siempre e inundan el board. El where debe excluirlos por state.
+    const s = JSON.stringify(dayUniverseWhere(D));
+    expect(s).toContain("OFF_BLOCKS");
+    expect(s).toContain("NO_SHOW");
+  });
+
   it("la ventana de arrastre es [D−14, D): gte = D−14, lt = D (calendario sobre la key)", () => {
     const s = JSON.stringify(dayUniverseWhere(D));
     const lowerBound = new Date(D.getTime() - ARRASTRE_WINDOW_DAYS * DAY_MS); // 09-07-2026
