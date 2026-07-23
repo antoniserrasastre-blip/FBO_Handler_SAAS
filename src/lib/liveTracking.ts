@@ -77,6 +77,30 @@ export function matchFlights(flights: FlightForMatchStub[], states: OpenSkyState
   return results;
 }
 
+// §S4 C13 — guardia de plausibilidad del seeding de ata/atd desde el feed
+// (contrato: src/lib/mcp/contract.ts §S4). Pura y exportada para tests.
+// El seeding entero queda tras el kill-switch process.env.LIVE_SEED_TIMES
+// === "true" (default APAGADO). Stub del orquestador: implementer al verde.
+export function canSeedTime(args: {
+  direction: "ARRIVAL" | "DEPARTURE";
+  scheduledDate: Date;
+  todayPalmaDay: Date;
+  prevLivePhase: string | null;
+  newPhase: LivePhase;
+  existingValue: string | null;
+}): boolean {
+  // Jamás pisar un valor ya escrito (mano del handler o poll previo).
+  if (args.existingValue) return false;
+  // Solo piernas cuyo día civil == hoy (mata matcheos por matrícula de otro día).
+  if (args.scheduledDate.getTime() !== args.todayPalmaDay.getTime()) return false;
+  if (args.direction === "ARRIVAL") {
+    // ata solo si la transición viene DESDE el aire (jamás visto ya parado).
+    return args.prevLivePhase === "APPROACHING" || args.prevLivePhase === "LANDED";
+  }
+  // atd solo si el avión estaba EN TIERRA antes (un crucero jamás siembra atd).
+  return args.prevLivePhase === "LANDED" || args.prevLivePhase === "ON_BLOCKS";
+}
+
 function toZuluHHMM(d: Date): string {
   const hh = String(d.getUTCHours()).padStart(2, "0");
   const mm = String(d.getUTCMinutes()).padStart(2, "0");
@@ -136,11 +160,36 @@ export async function pollOnce(): Promise<{ fetched: number; matched: number; tr
       liveVelocityMs: state.velocityMs,
     };
 
-    if (phaseChanged) {
-      if (phase === "ON_BLOCKS" && m.direction === "ARRIVAL" && !m.ata) {
+    // §S4 C13 — kill-switch: el seeding de ata/atd desde el feed SOLO si
+    // LIVE_SEED_TIMES === "true" (default APAGADO, gate 23-07). El snapshot
+    // live* y el EventLog de transición fluyen SIEMPRE (abajo), en ambos modos.
+    if (phaseChanged && process.env.LIVE_SEED_TIMES === "true") {
+      if (
+        phase === "ON_BLOCKS" &&
+        m.direction === "ARRIVAL" &&
+        canSeedTime({
+          direction: "ARRIVAL",
+          scheduledDate: m.scheduledDate,
+          todayPalmaDay: today,
+          prevLivePhase: m.livePhase,
+          newPhase: phase,
+          existingValue: m.ata,
+        })
+      ) {
         data.ata = toZuluHHMM(seenAt);
       }
-      if (phase === "DEPARTED" && m.direction === "DEPARTURE" && !m.atd) {
+      if (
+        phase === "DEPARTED" &&
+        m.direction === "DEPARTURE" &&
+        canSeedTime({
+          direction: "DEPARTURE",
+          scheduledDate: m.scheduledDate,
+          todayPalmaDay: today,
+          prevLivePhase: m.livePhase,
+          newPhase: phase,
+          existingValue: m.atd,
+        })
+      ) {
         data.atd = toZuluHHMM(seenAt);
       }
     }

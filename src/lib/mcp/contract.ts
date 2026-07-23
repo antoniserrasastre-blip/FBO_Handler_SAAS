@@ -26,6 +26,8 @@ export interface McpMovement {
   ata: string | null;
   atd: string | null;
   state: string | null;
+  /** §S4 C11: SIEMPRE presente desde S4 (opcional solo por compat del scaffold). */
+  flightCategory?: "COMMERCIAL" | "FERRY" | "CANCELLED";
   parking: string | null;
   paxCount: number | null;
   paxCountReal: number | null;
@@ -37,6 +39,14 @@ export interface McpDayFlight {
   visitId: string;
   registration: string | null;
   operator: string | null;
+  /** §S4 C2/C3: estado COMPUESTO de la rotación (mostAdvancedState sobre las
+   *  piernas, reusado de flightView.ts — jamás duplicado). SIEMPRE presente
+   *  desde S4 (opcional solo por compat del scaffold). */
+  estadoRotacion?: string;
+  /** §S4 C1: palmaDay de la Visit "YYYY-MM-DD" (en arrastre != date pedido). */
+  palmaDay?: string;
+  /** §S4 C1: presente (true) SOLO cuando la visita viene arrastrada de un dia previo. */
+  arrastre?: true;
   movements: McpMovement[];
 }
 
@@ -44,6 +54,10 @@ export interface McpDayFlight {
 export interface GetDayResult {
   date: string; // "YYYY-MM-DD" (palmaDay)
   flights: McpDayFlight[];
+  /** §S4 C11: recuento de PIERNAS del universo del dia (vivos + cancelados =
+   *  total, aunque los cancelados esten excluidos del listado). SIEMPRE
+   *  presente desde S4 (opcional solo por compat del scaffold). */
+  summary?: { vivos: number; cancelados: number };
 }
 
 /**
@@ -58,6 +72,12 @@ export interface FindFlightCandidate {
   matchedBy: "callsign" | "time" | "registration";
   /** minutos de delta cuando matchedBy === "time" */
   timeDeltaMin?: number;
+  /** §S4: estado compuesto de la rotacion (ver McpDayFlight). SIEMPRE presente desde S4. */
+  estadoRotacion?: string;
+  /** §S4 C1: palmaDay de la Visit "YYYY-MM-DD". SIEMPRE presente desde S4. */
+  palmaDay?: string;
+  /** §S4 C1: true solo en visitas arrastradas de dias previos. */
+  arrastre?: true;
   movements: McpMovement[];
 }
 export interface FindFlightResult {
@@ -395,7 +415,9 @@ export interface FixPlanResult {
 
 /** import_daily — daily PDF por tool, dry-run por defecto (T7 + d2.4). */
 export interface ImportDailyArgs {
-  pdf_base64: string;
+  /** §S4 C12: pdf_base64 XOR upload_id (ambos o ninguno -> Error). */
+  pdf_base64?: string;
+  upload_id?: string;
   confirmar?: boolean;
 }
 export interface ImportToCancelMovement {
@@ -443,3 +465,92 @@ export type ImportDailyResult = ImportDailyPreviewResult | ImportDailyPersistRes
 // - `date` de import_daily (preview y persist): tal cual lo devuelve el
 //   parser (mismo valor que el REST POST/PUT — sin reformatear).
 // ----------------------------------------------------------------------------
+
+// ============================================================================
+// Sprint 04 board-del-turno — contrato §S4 (C1-C4 + C11-C14).
+// Spec: stages/03_sprint/output/04_board-del-turno/spec.md (workspace).
+// tools/list SIGUE = 10 (S4 no añade tools; añade un endpoint REST de agente).
+//
+// C1 — UNIVERSO DEL DÍA (compartido get_day · find_flight · /api/flights GET;
+// una sola fuente: src/lib/v2/dayUniverse.ts, JAMÁS tres copias):
+// - visitsForDay(D) = visits con palmaDay == D
+//   ∪ visits con algún movement.scheduledDate == D
+//   ∪ ARRASTRE: visits con palmaDay ∈ [D − ARRASTRE_WINDOW_DAYS, D) que tengan
+//     DEPARTURE con atd == null y flightCategory != "CANCELLED".
+//   ARRASTRE_WINDOW_DAYS = 14 (gate 23-07). Dedupe por visitId (una sola
+//   findMany con OR — exactamente una vez por rotación). La aritmética de la
+//   ventana es de CALENDARIO sobre la key palmaDay (UTC midnight), no TZ.
+// - Rotación arrastrada → arrastre: true + su palmaDay real en la respuesta
+//   MCP. /api/flights GET adopta el MISMO where (su include/proyección no
+//   cambian; cero cambio visual — enmienda acotada de R1, gate 23-07).
+// - C14: las visits SIN movimientos (huérfanas de extras) NO se listan en
+//   ninguna de las tres superficies (esVisitaVisible). Siguen en BD y
+//   reaparecen al enriquecerse con el PDF.
+//
+// C11 — CANCELLED en lecturas:
+// - McpMovement.flightCategory SIEMPRE presente (verbatim del schema).
+// - get_day({ fecha?, incluirCancelados? }): por DEFECTO excluye las piernas
+//   CANCELLED del listado; una rotación sin ninguna pierna viva se omite
+//   entera. summary = { vivos, cancelados } cuenta PIERNAS del universo del
+//   día (vivos + cancelados = total real, se excluyan o no del listado).
+//   incluirCancelados: true (booleano ESTRICTO, como confirmar) → las lista
+//   marcadas (flightCategory visible). estadoRotacion se compone SOLO sobre
+//   las piernas vivas (una rotación con salida cancelada no luce "salida").
+// - find_flight NO excluye cancelados: los devuelve MARCADOS (flightCategory
+//   en movements) — hacen falta para desambiguar y para uncancel.
+//
+// C2/C3 — ESTADO DE ROTACIÓN:
+// - estadoRotacion = mostAdvancedState(piernas vivas) EXPORTADO de
+//   src/lib/flightView.ts (jamás duplicado). El state POR PIERNA sigue
+//   verbatim (compat interna; el agente debe leer estadoRotacion).
+// - C2 (regresión 19-07): escribir ata vía update_movements sobre rotación
+//   EXPECTED → estadoRotacion ≥ ON_BLOCKS. El fix se limita a la rama que la
+//   sonda demuestre rota; la semántica del PATCH humano NO cambia.
+// - C3 (property de seed): un import de visita NUEVA jamás siembra DEPARTURE
+//   con state > EXPECTED ni con atd poblado — sobre resolveImportState Y el
+//   pipeline entero de import-core. El re-import conserva lo operativo
+//   (política "plan del PDF, operativo intocable", intacta).
+//
+// C4 — GUARDIAS DEL MATCHER (registrationMatches, tools.ts):
+// - registration null, vacía o < 3 chars → SOLO igualdad exacta (el bug
+//   ZJONES: token.includes("") siempre true). Substring bidireccional SOLO
+//   si AMBOS lados ≥ 3 chars. Callsign exacto SIEMPRE ancla y va primero.
+// - Sondas de regresión (fixtures sobre el universo C1): N546XJ con y sin
+//   guion · N600CK · VJA546 por callsign · ZJONES (registration vacía) JAMÁS
+//   candidata por matrícula.
+//
+// C12 — ENTRADA DEL PDF SIN BASE64 INLINE:
+// - POST /api/mcp/upload (multipart, campo "file"): auth = MISMO Bearer
+//   AGENT que /api/mcp (401 idéntico sin token); guardas REUSADAS de
+//   uploadValidation "pdf" (%PDF + tamaño). Persiste en
+//   process.env.MCP_UPLOAD_DIR || os.tmpdir()+"/fbo-mcp-uploads", nombre
+//   <uploadId>.pdf con uploadId = crypto.randomUUID() (infra, no estado de
+//   dominio). Respuesta 200: { uploadId, bytes, expiresAt } (ISO). TTL 1 h
+//   por mtime del fichero (Date.now es infra aquí, no dominio).
+// - import_daily: upload_id XOR pdf_base64 (ambos o ninguno → Error claro en
+//   español). Con upload_id: lee el fichero, MISMAS guardas y pipeline que
+//   base64 (efectos byte-idénticos). El dry-run NO consume el uploadId; el
+//   confirmar === true con persist OK lo consume (unlink). Expirado,
+//   consumido o inexistente → Error claro en español, jamás internals.
+//
+// C13 — FEED LIVE (liveTracking.ts):
+// - KILL-SWITCH: el seeding de ata/atd desde el feed SOLO si
+//   process.env.LIVE_SEED_TIMES === "true" (default: APAGADO, gate 23-07).
+//   El snapshot live* y el EventLog "live → <phase>" fluyen en AMBOS modos.
+// - GUARDIA (canSeedTime, pura y exportada; vigente cuando se reactive):
+//   · ata: solo pierna ARRIVAL con scheduledDate == día civil de hoy Y
+//     transición observada DESDE aire (livePhase previo APPROACHING|LANDED —
+//     jamás sembrar ata a un avión visto por primera vez ya parado).
+//   · atd: solo pierna DEPARTURE con scheduledDate == día civil de hoy Y
+//     livePhase previo EN TIERRA (LANDED|ON_BLOCKS — un avión en crucero
+//     jamás siembra atd; mata los DEPARTED de llegadas en vuelo y los
+//     matcheos por matrícula de otro día).
+//   · JAMÁS pisar ata/atd existentes (ya vigente, se conserva).
+// ============================================================================
+
+/** POST /api/mcp/upload — respuesta (C12). */
+export interface McpUploadResult {
+  uploadId: string;
+  bytes: number;
+  expiresAt: string; // ISO 8601
+}

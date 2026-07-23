@@ -4,12 +4,17 @@ import { palmaDayUtc, palmaMidnightUtc, dateToSqlString } from "@/lib/time";
 // Ancla temporal REUSADA del matching de importación (jamás duplicar la
 // tolerancia ni el wrap de medianoche): timeDelta = min(diff, 1440-diff).
 import { timeDelta, ROTATION_TIME_TOLERANCE_MIN } from "@/lib/v2/upsert";
+// §S4: estado compuesto de la rotación reusado de flightView (jamás duplicado).
+import { mostAdvancedState } from "@/lib/flightView";
+// §S4 C1/C14: universo del día compartido (fuente única con /api/flights).
+import { dayUniverseWhere, esVisitaVisible, esArrastre } from "@/lib/v2/dayUniverse";
 import type {
   GetDayResult,
   FindFlightResult,
   FindFlightCandidate,
   GetEventLogResult,
   McpMovement,
+  McpDayFlight,
 } from "./contract";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -44,6 +49,8 @@ function mapMovement(m: Movement): McpMovement {
     ata: m.ata ?? null,
     atd: m.atd ?? null,
     state: m.state ?? null,
+    // §S4 C11: flightCategory verbatim del schema (SIEMPRE presente).
+    flightCategory: m.flightCategory as McpMovement["flightCategory"],
     parking: m.parking ?? null,
     paxCount: m.paxCount ?? null,
     paxCountReal: m.paxCountReal ?? null,
@@ -51,22 +58,71 @@ function mapMovement(m: Movement): McpMovement {
   };
 }
 
+/** ¿Es una pierna cancelada? (C11) */
+function esCancelada(m: { flightCategory: string | null }): boolean {
+  return m.flightCategory === "CANCELLED";
+}
+
+/** Estado COMPUESTO de la rotación (C2/C3): mostAdvancedState SOLO sobre las
+ *  piernas vivas (una salida cancelada no debe hacer lucir la rotación como
+ *  "salida"). Reusa flightView, jamás duplica el ranking. */
+function estadoRotacionDe(movements: Array<{ state: string | null; flightCategory: string | null }>): string {
+  return mostAdvancedState(
+    ...movements.filter((m) => !esCancelada(m)).map((m) => m.state ?? undefined)
+  );
+}
+
 /** get_day — el día civil de Palma completo. fecha "DD-MM-YYYY" | "YYYY-MM-DD" | undefined = hoy. */
-export async function getDay(args: { fecha?: string }): Promise<GetDayResult> {
+export async function getDay(args: {
+  fecha?: string;
+  incluirCancelados?: boolean;
+}): Promise<GetDayResult> {
+  // incluirCancelados es booleano ESTRICTO (como confirmar): un "true" NO cuela.
+  if (args.incluirCancelados !== undefined && typeof args.incluirCancelados !== "boolean") {
+    throw new Error("El argumento `incluirCancelados` debe ser booleano (true/false).");
+  }
   const palmaDay = resolvePalmaDay(args.fecha);
   const visits = await prisma.visit.findMany({
-    where: { palmaDay },
+    where: dayUniverseWhere(palmaDay),
     include: { movements: true, aircraft: true, operator: true },
   });
 
-  return {
-    date: dateToSqlString(palmaDay),
-    flights: visits.map((v) => ({
+  let vivos = 0;
+  let cancelados = 0;
+  const flights: McpDayFlight[] = [];
+
+  for (const v of visits) {
+    // C14: las huérfanas de extras (sin movimientos) nunca se listan.
+    if (!esVisitaVisible(v)) continue;
+
+    // summary cuenta PIERNAS del universo (se listen o no): vivos + cancelados.
+    for (const m of v.movements) {
+      if (esCancelada(m)) cancelados++;
+      else vivos++;
+    }
+
+    const vivas = v.movements.filter((m) => !esCancelada(m));
+    // Por defecto: rotación sin ninguna pierna viva se omite entera.
+    if (!args.incluirCancelados && vivas.length === 0) continue;
+
+    const shown = args.incluirCancelados ? v.movements : vivas;
+    const arr = esArrastre(v, palmaDay);
+
+    flights.push({
       visitId: v.id,
       registration: v.aircraft?.registration ?? null,
       operator: v.operator?.name ?? null,
-      movements: v.movements.map(mapMovement),
-    })),
+      estadoRotacion: estadoRotacionDe(v.movements),
+      palmaDay: dateToSqlString(v.palmaDay),
+      ...(arr ? { arrastre: true as const } : {}),
+      movements: shown.map(mapMovement),
+    });
+  }
+
+  return {
+    date: dateToSqlString(palmaDay),
+    flights,
+    summary: { vivos, cancelados },
   };
 }
 
@@ -90,10 +146,14 @@ function isClockTime(token: string): boolean {
   return Number(m[1]) <= 23 && Number(m[2]) <= 59;
 }
 
-/** Matrícula: exacta o parcial (substring, ≥3 chars), uppercase/trim. */
+/**
+ * Matrícula (C4): igualdad exacta SIEMPRE ancla; substring bidireccional SOLO
+ * si AMBOS lados ≥ 3 chars. registration vacía/null/<3 → solo igualdad exacta
+ * (mata el bug ZJONES: token.includes("") === true). uppercase/trim en origen.
+ */
 function registrationMatches(token: string, registration: string): boolean {
   if (token === registration) return true;
-  if (token.length < 3) return false;
+  if (registration.length < 3 || token.length < 3) return false;
   return registration.includes(token) || token.includes(registration);
 }
 
@@ -112,7 +172,7 @@ export async function findFlight(args: {
 }): Promise<FindFlightResult> {
   const palmaDay = resolvePalmaDay(args.fecha);
   const visits = await prisma.visit.findMany({
-    where: { palmaDay },
+    where: dayUniverseWhere(palmaDay),
     include: { movements: true, aircraft: true, operator: true },
   });
 
@@ -136,8 +196,12 @@ export async function findFlight(args: {
   const registrationCands: FindFlightCandidate[] = [];
 
   for (const v of visits) {
+    // C14: las huérfanas de extras (sin movimientos) nunca son candidatas.
+    if (!esVisitaVisible(v)) continue;
+
     const movements = v.movements;
     const registration = v.aircraft?.registration ?? null;
+    const arr = esArrastre(v, palmaDay);
 
     const mkCandidate = (
       matchedBy: FindFlightCandidate["matchedBy"],
@@ -154,6 +218,10 @@ export async function findFlight(args: {
       ],
       matchedBy,
       ...(timeDeltaMin !== undefined ? { timeDeltaMin } : {}),
+      // §S4 C1/C2: estado compuesto + palmaDay + marca de arrastre.
+      estadoRotacion: estadoRotacionDe(movements),
+      palmaDay: dateToSqlString(v.palmaDay),
+      ...(arr ? { arrastre: true as const } : {}),
       movements: movements.map(mapMovement),
     });
 

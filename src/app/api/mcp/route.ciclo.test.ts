@@ -223,11 +223,17 @@ describe("tools/list — S3 expone EXACTAMENTE 10 tools (point 8)", () => {
     const { rpc } = await callRpc(toolsList);
     const tools = rpc.result?.tools ?? [];
     const req = (n: string) => tools.find((t) => t.name === n)?.inputSchema?.required;
+    const props = (n: string) => tools.find((t) => t.name === n)?.inputSchema?.properties;
     expect(req("cancel_movement")).toEqual(["movementId", "motivo"]);
     expect(req("uncancel_movement")).toEqual(["movementId"]);
     expect(req("create_flight")).toEqual(["registration", "callsign"]);
     expect(req("fix_plan")).toEqual(["movementId", "campos"]);
-    expect(req("import_daily")).toEqual(["pdf_base64"]);
+    // §S4 C12: import_daily acepta pdf_base64 XOR upload_id — NINGUNO es
+    // individualmente obligatorio en el schema (el runtime hace cumplir el XOR);
+    // pinear "pdf_base64" como required mentía al cliente MCP.
+    expect(req("import_daily")).toEqual([]);
+    expect(props("import_daily")).toHaveProperty("upload_id");
+    expect(props("import_daily")).toHaveProperty("pdf_base64");
     // las 5 de S1/S2 siguen presentes.
     for (const n of ["get_day", "find_flight", "get_event_log", "update_movements", "log_incident"]) {
       expect(tools.some((t) => t.name === n)).toBe(true);

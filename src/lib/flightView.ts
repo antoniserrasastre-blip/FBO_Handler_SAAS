@@ -32,7 +32,7 @@ type AnyRecord = Record<string, unknown>;
 // already sits at PARKED. Taking the DEPARTURE state verbatim would render a
 // parked overnight as "Esperando llegada" and stall the auto-transition.
 // Compose the visit state as the MOST ADVANCED point reached across both legs.
-function mostAdvancedState(...states: (string | null | undefined)[]): string {
+export function mostAdvancedState(...states: (string | null | undefined)[]): string {
   let best = -1;
   let sawNoShow = false;
   for (const s of states) {

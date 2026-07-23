@@ -10,6 +10,9 @@
 // lib (normalizarHora/formatoDual); errores en español aptos para el agente
 // (jamás internals de Prisma/JS); `confirmar` booleano ESTRICTO.
 
+import { readFile, stat, unlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { prisma } from "@/lib/db";
 import { eventBus } from "@/lib/events";
 import { normalizarHora, formatoDual } from "./horas";
@@ -550,16 +553,66 @@ export async function fixPlan(args: FixPlanArgs, auth: AgentAuth): Promise<FixPl
 // ===========================================================================
 // import_daily — daily PDF por tool, dry-run por defecto (T7 + d2.4).
 // ===========================================================================
+/** Dir de uploads (C12): env pineada en contrato o tmp del server. */
+function mcpUploadDir(): string {
+  return process.env.MCP_UPLOAD_DIR || join(tmpdir(), "fbo-mcp-uploads");
+}
+const UPLOAD_TTL_MS = 60 * 60 * 1000;
+/**
+ * Formato válido de upload_id: UUID (crypto.randomUUID en /api/mcp/upload los
+ * genera así). Se valida ANTES de tocar el filesystem — un id con `../`, `/`,
+ * `\\` o `.` haría path traversal fuera de mcpUploadDir (MAJOR-1, review
+ * adversarial). Un UUID canónico no contiene ninguno de esos caracteres.
+ */
+const UPLOAD_ID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function importDaily(
   args: ImportDailyArgs,
   auth: AgentAuth
 ): Promise<ImportDailyResult> {
-  if (!args || typeof args.pdf_base64 !== "string" || args.pdf_base64.trim() === "") {
-    throw new Error("El argumento `pdf_base64` es obligatorio (el PDF del daily en base64).");
+  // §S4 C12: upload_id XOR pdf_base64 (ambos o ninguno → Error claro).
+  const hasB64 = typeof args.pdf_base64 === "string" && args.pdf_base64.trim() !== "";
+  const uploadId =
+    typeof args.upload_id === "string" && args.upload_id.trim() !== "" ? args.upload_id.trim() : null;
+  if (hasB64 && uploadId) {
+    throw new Error("Pasa `upload_id` O `pdf_base64`, nunca ambos a la vez.");
+  }
+  if (!hasB64 && !uploadId) {
+    throw new Error(
+      "Falta el PDF del daily: pasa `upload_id` (de /api/mcp/upload) o `pdf_base64` en base64."
+    );
   }
   validarConfirmar(args.confirmar);
 
-  const buffer = Buffer.from(args.pdf_base64, "base64");
+  // Ruta del fichero de upload (se consume al confirmar), o null en base64.
+  let uploadPath: string | null = null;
+  let buffer: Buffer;
+  if (uploadId) {
+    // Defensa contra path traversal: rechaza cualquier upload_id que no sea un
+    // UUID ANTES del join (jamás toca el filesystem con un id malicioso).
+    if (!UPLOAD_ID_RE.test(uploadId)) {
+      throw new Error(
+        "El `upload_id` no tiene un formato válido. Debe ser el id que devuelve /api/mcp/upload."
+      );
+    }
+    uploadPath = join(mcpUploadDir(), `${uploadId}.pdf`);
+    let mtimeMs: number;
+    try {
+      mtimeMs = (await stat(uploadPath)).mtimeMs;
+    } catch {
+      throw new Error(
+        "El upload_id no existe o ya se ha consumido. Vuelve a subir el PDF con /api/mcp/upload."
+      );
+    }
+    if (Date.now() - mtimeMs > UPLOAD_TTL_MS) {
+      throw new Error("El upload_id ha caducado (más de 1 hora). Vuelve a subir el PDF.");
+    }
+    buffer = await readFile(uploadPath);
+  } else {
+    buffer = Buffer.from(args.pdf_base64 as string, "base64");
+  }
+
   if (buffer.subarray(0, 4).toString("latin1") !== "%PDF") {
     throw new Error("El contenido no es un PDF (no empieza por %PDF). Revisa el archivo.");
   }
@@ -580,6 +633,9 @@ export async function importDaily(
       userName: auth.userName,
     });
     const toCancel = await computeToCancel(parsed.date, parsed.flights);
+    // Persistió OK → consume el uploadId (unlink). Fallo de unlink no tumba
+    // el import ya aplicado.
+    if (uploadPath) await unlink(uploadPath).catch(() => {});
     return {
       date: parsed.date,
       creados: persisted.created,

@@ -45,6 +45,7 @@ const TOOLS = [
       type: "object",
       properties: {
         fecha: { type: "string", description: "Día civil de Palma: 'DD-MM-YYYY' o 'YYYY-MM-DD'. Vacío = hoy." },
+        incluirCancelados: { type: "boolean", description: "true = incluye también las piernas CANCELLED (marcadas). Ausente/false = solo las vivas." },
       },
       required: [],
     },
@@ -194,14 +195,15 @@ const TOOLS = [
   {
     name: "import_daily",
     description:
-      "Importa el daily de Cybermax (PDF en base64). DRY-RUN POR DEFECTO: devuelve el preview (vuelos parseados, avisos y toCancel propuestos) sin escribir NADA en BD ni EventLog. Para persistir, repite la llamada con confirmar:true. Los toCancel NUNCA se aplican en bloque: confírmalos uno a uno contra el eSIA con cancel_movement (el preview incluye sus movementIds).",
+      "Importa el daily de Cybermax. Pasa el PDF por `upload_id` (recomendado: súbelo antes a POST /api/mcp/upload y usa el id que devuelve) O por `pdf_base64` — uno de los dos, nunca ambos. DRY-RUN POR DEFECTO: devuelve el preview (vuelos parseados, avisos y toCancel propuestos) sin escribir NADA en BD ni EventLog. Para persistir, repite la llamada con confirmar:true. Los toCancel NUNCA se aplican en bloque: confírmalos uno a uno contra el eSIA con cancel_movement (el preview incluye sus movementIds).",
     inputSchema: {
       type: "object",
       properties: {
-        pdf_base64: { type: "string", description: "El PDF del daily codificado en base64." },
+        upload_id: { type: "string", description: "id devuelto por POST /api/mcp/upload (evita el base64 inline). XOR con pdf_base64." },
+        pdf_base64: { type: "string", description: "El PDF del daily codificado en base64. XOR con upload_id." },
         confirmar: { type: "boolean", description: "true = persistir (altas y cambios; toCancel NO se aplica). Ausente/false = sólo preview." },
       },
-      required: ["pdf_base64"],
+      required: [],
     },
   },
 ];
@@ -248,7 +250,7 @@ async function handleToolCall(
     let payload: unknown;
     switch (name) {
       case "get_day":
-        payload = await getDay(args as { fecha?: string });
+        payload = await getDay(args as { fecha?: string; incluirCancelados?: boolean });
         break;
       case "find_flight":
         payload = await findFlight(args as { texto: string; fecha?: string });

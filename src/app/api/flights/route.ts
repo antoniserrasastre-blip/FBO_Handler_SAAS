@@ -13,6 +13,10 @@ import { prisma } from "@/lib/db";
 import { eventBus } from "@/lib/events";
 import { palmaDayUtc, getSpainToday } from "@/lib/time";
 import { upsertAircraft, upsertVisit, upsertMovement, upsertOperator } from "@/lib/v2/upsert";
+// §S4 C1/C14 (enmienda acotada R1): el board web adopta el MISMO universo del
+// día que get_day/find_flight (fuente única, jamás una copia). Solo cambia la
+// query — include/proyección/UI intactos.
+import { dayUniverseWhere, esVisitaVisible } from "@/lib/v2/dayUniverse";
 import { toFlightView } from "@/lib/flightView";
 import { findOperator } from "@/lib/operators";
 import { tryDecrypt } from "@/lib/crypto";
@@ -30,12 +34,7 @@ export async function GET(req: NextRequest) {
   const palmaDay = dateParam ? palmaDayUtc(dateParam) : getSpainToday();
 
   const visits = await prisma.visit.findMany({
-    where: {
-      OR: [
-        { palmaDay },
-        { movements: { some: { scheduledDate: palmaDay } } },
-      ],
-    },
+    where: dayUniverseWhere(palmaDay),
     include: {
       aircraft: true,
       assignedTo: { select: { id: true, name: true } },
@@ -73,6 +72,8 @@ export async function GET(req: NextRequest) {
   //    (ata / livePhase LANDED|ON_BLOCKS) con scheduledDate < día-1.
   const dayMinus1 = new Date(palmaDay.getTime() - 24 * 60 * 60 * 1000);
   const visibleVisits = visits.filter((v) => {
+    // C14: huérfanas de extras (sin movimientos) fuera del board.
+    if (!esVisitaVisible(v)) return false;
     const arr = v.movements.find((m) => m.direction === "ARRIVAL");
     if (!arr) return true;
     if (arr.state !== "EXPECTED" && arr.state !== "NO_SHOW") return true;

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { createHash } from "node:crypto";
 import { palmaDayUtc } from "@/lib/time";
+import { dayUniverseWhere } from "@/lib/v2/dayUniverse";
 import type { GetDayResult, GetEventLogResult } from "@/lib/mcp/contract";
 
 // --- DB mock: exactly the surface the implementation is pinned to use. -------
@@ -273,17 +274,40 @@ describe("POST /api/mcp — get_day", () => {
     const vB = vis({ id: "vB", palmaDay: dayX, aircraft: { registration: "D-EFGH" } });
     const vC = vis({ id: "vC", palmaDay: dayY, aircraft: { registration: "OO-IJKL" } });
     const dataset = [vA, vB, vC];
+    // §S4: get_day consulta con el where del universo del día (dayUniverseWhere),
+    // no un { palmaDay } top-level. El mock resuelve el dataset con la MISMA
+    // semántica de universo, leyendo D de la 1ª rama del OR (palmaDay == D).
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const enUniverso = (v: VisitRow, D: Date): boolean => {
+      const t = D.getTime();
+      if (v.palmaDay.getTime() === t) return true;
+      if (v.movements.some((m) => (m as { scheduledDate?: Date }).scheduledDate?.getTime() === t)) return true;
+      const gte = t - 14 * DAY_MS;
+      return (
+        v.palmaDay.getTime() >= gte &&
+        v.palmaDay.getTime() < t &&
+        v.movements.some(
+          (m) =>
+            m.direction === "DEPARTURE" &&
+            m.atd === null &&
+            (m as { flightCategory?: string }).flightCategory !== "CANCELLED"
+        )
+      );
+    };
     mocks.visitFindMany.mockImplementation(
-      async ({ where }: { where: { palmaDay: Date } }) =>
-        dataset.filter((v) => v.palmaDay.getTime() === where.palmaDay.getTime())
+      async ({ where }: { where: { OR: Array<{ palmaDay?: Date }> } }) => {
+        const D = where.OR[0].palmaDay as Date;
+        return dataset.filter((v) => enUniverso(v, D));
+      }
     );
 
     const { res, rpc } = await callRpc(toolsCall("get_day", { fecha: "2026-07-19" }), VALID_TOKEN);
     expect(res.status).toBe(200);
 
-    // the palmaDay handed to prisma is X (midnight UTC of the Palma civil day)
+    // el where entregado a prisma es EXACTAMENTE el universo del día X
+    // (fuente única dayUniverseWhere; fecha 'YYYY-MM-DD' resuelta a dayX).
     expect(mocks.visitFindMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: expect.objectContaining({ palmaDay: dayX }) })
+      expect.objectContaining({ where: dayUniverseWhere(dayX) })
     );
 
     const payload = toolPayload<GetDayResult>(rpc);
@@ -312,8 +336,9 @@ describe("POST /api/mcp — get_day", () => {
     expect(res.status).toBe(200);
 
     const expectedDay = new Date(Date.UTC(2026, 6, 20, 0, 0, 0, 0));
+    // §S4: mismo universo del día, ahora resuelto desde el reloj (día civil D+1).
     expect(mocks.visitFindMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: expect.objectContaining({ palmaDay: expectedDay }) })
+      expect.objectContaining({ where: dayUniverseWhere(expectedDay) })
     );
   });
 });
